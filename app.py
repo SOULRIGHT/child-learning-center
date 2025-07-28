@@ -1695,4 +1695,11 @@ def grade_point_comparison(grade):
 
 if __name__ == '__main__':
     init_db()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False) 
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
+else:
+    # 배포된 환경에서도 데이터베이스 초기화
+    with app.app_context():
+        db.create_all()
+        # 기본 사용자가 없으면 생성
+        if not User.query.filter_by(username='center_head').first():
+            init_db() 
