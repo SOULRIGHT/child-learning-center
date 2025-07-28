@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block page_title %}기간별 리포트{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 페이지 헤더 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">기간별 리포트</h2>
+            <p class="text-muted mb-0">{{ start_date }} ~ {{ end_date }} 기간 통계</p>
+        </div>
+        <div>
+            <a href="{{ url_for('reports_overview') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> 뒤로가기
+            </a>
+            <button class="btn btn-primary" onclick="window.print()">
+                <i class="bi bi-printer"></i> 인쇄
+            </button>
+        </div>
+    </div>
+
+    <!-- 기간 선택 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">기간 선택</h5>
+                </div>
+                <div class="card-body">
+                    <form method="GET" class="row g-3">
+                        <div class="col-md-4">
+                            <label for="start_date" class="form-label">시작일</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" 
+                                   value="{{ start_date }}" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="end_date" class="form-label">종료일</label>
+                            <input type="date" class="form-control" id="end_date" name="end_date" 
+                                   value="{{ end_date }}" required>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary me-2">
+                                <i class="bi bi-search"></i> 조회
+                            </button>
+                            <a href="{{ url_for('period_report') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-clockwise"></i> 초기화
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 요약 통계 -->
+    <div class="row mb-4">
+        <div class="col-md-2 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4 class="text-primary mb-1">{{ period_stats.total_records }}</h4>
+                    <p class="text-muted mb-0">총 기록 수</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4 class="text-success mb-1">{{ period_stats.total_children }}</h4>
+                    <p class="text-muted mb-0">참여 아동</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4 class="text-warning mb-1">{{ period_stats.korean_count }}</h4>
+                    <p class="text-muted mb-0">국어 기록</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4 class="text-info mb-1">{{ period_stats.math_count }}</h4>
+                    <p class="text-muted mb-0">수학 기록</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4 class="text-secondary mb-1">{{ (period_stats.reading_count / period_stats.total_children * 100) | round(1) if period_stats.total_children > 0 else 0 }}%</h4>
+                    <p class="text-muted mb-0">독서 참여율</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4 class="text-danger mb-1">{{ (period_stats.avg_korean_score + period_stats.avg_math_score) / 2 | round(1) }}</h4>
+                    <p class="text-muted mb-0">국어+수학 평균</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 과목별 평균 점수 -->
+    <div class="row mb-4">
+        <div class="col-lg-4 mb-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">국어 평균 점수</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 class="text-primary mb-2">{{ period_stats.avg_korean_score }}점</h2>
+                    <div class="progress mb-2">
+                        <div class="progress-bar bg-primary" style="width: {{ (period_stats.avg_korean_score / 100) * 100 }}%"></div>
+                    </div>
+                    <small class="text-muted">{{ period_stats.korean_count }}건의 기록</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 mb-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">수학 평균 점수</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 class="text-info mb-2">{{ period_stats.avg_math_score }}점</h2>
+                    <div class="progress mb-2">
+                        <div class="progress-bar bg-info" style="width: {{ (period_stats.avg_math_score / 100) * 100 }}%"></div>
+                    </div>
+                    <small class="text-muted">{{ period_stats.math_count }}건의 기록</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 mb-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">독서 참여율</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 class="text-warning mb-2">{{ (period_stats.reading_count / period_stats.total_children * 100) | round(1) if period_stats.total_children > 0 else 0 }}%</h2>
+                    <div class="progress mb-2">
+                        <div class="progress-bar bg-warning" style="width: {{ (period_stats.reading_count / period_stats.total_children * 100) if period_stats.total_children > 0 else 0 }}%"></div>
+                    </div>
+                    <small class="text-muted">{{ period_stats.reading_count }}명 / {{ period_stats.total_children }}명</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 기간 내 학습 기록 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">기간 내 학습 기록</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if records %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>날짜</th>
+                                    <th>아동명</th>
+                                    <th>학년</th>
+                                    <th>국어</th>
+                                    <th>수학</th>
+                                    <th>독서</th>
+                                    <th>총점</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for record in records[:20] %}
+                                <tr>
+                                    <td>
+                                        <span class="fw-medium">{{ record.date.strftime('%Y-%m-%d') }}</span>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('child_detail', child_id=record.child.id) }}" class="text-decoration-none">
+                                            {{ record.child.name }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ record.child.grade }}학년</span>
+                                    </td>
+                                    <td>
+                                        {% if record.korean_score > 0 %}
+                                        <span class="badge bg-primary">{{ record.korean_score }}점</span>
+                                        <small class="text-muted d-block">{{ record.korean_last_page }}p</small>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if record.math_score > 0 %}
+                                        <span class="badge bg-info">{{ record.math_score }}점</span>
+                                        <small class="text-muted d-block">{{ record.math_last_page }}p</small>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if record.reading_score > 0 %}
+                                        <span class="badge bg-warning">{{ record.reading_score }}점</span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="fw-bold text-primary">{{ record.total_score }}점</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% if records|length > 20 %}
+                    <div class="card-footer text-center">
+                        <small class="text-muted">상위 20건만 표시됩니다. 전체 {{ records|length }}건의 기록이 있습니다.</small>
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-calendar-x text-muted" style="font-size: 3rem;"></i>
+                        <h5 class="mt-3 text-muted">해당 기간에 학습 기록이 없습니다</h5>
+                        <p class="text-muted">다른 기간을 선택해보세요.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+@media print {
+    .btn, .nav-item, .sidebar, .top-navbar {
+        display: none !important;
+    }
+    .main-content {
+        margin-left: 0 !important;
+        width: 100% !important;
+    }
+    .card {
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+    }
+}
+</style>
+{% endblock %} 

@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if child %}아동 정보 수정{% else %}새 아동 등록{% endif %} - 지역아동센터 학습관리
+{% endblock %}
+
+{% block page_title %}
+{% if child %}아동 정보 수정{% else %}새 아동 등록{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <!-- 헤더 -->
+        <div class="d-flex align-items-center mb-4">
+            <a href="{{ url_for('children_list') }}" class="btn btn-outline-secondary me-3">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+            <div>
+                <h4 class="fw-bold text-dark mb-1">
+                    {% if child %}
+                        {{ child.name }} 정보 수정
+                    {% else %}
+                        새 아동 등록
+                    {% endif %}
+                </h4>
+                <p class="text-muted mb-0">
+                    {% if child %}
+                        아동의 이름과 학년을 수정할 수 있습니다.
+                    {% else %}
+                        새로운 아동을 등록해주세요.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <!-- 폼 카드 -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-{% if child %}pencil-square{% else %}person-plus{% endif %} me-2"></i>
+                    {% if child %}정보 수정{% else %}아동 등록{% endif %}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" novalidate>
+                    <div class="row">
+                        <!-- 이름 입력 -->
+                        <div class="col-md-8 mb-4">
+                            <label for="name" class="form-label fw-bold">
+                                <i class="bi bi-person me-1"></i>아동 이름
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" 
+                                   class="form-control form-control-lg" 
+                                   id="name" 
+                                   name="name" 
+                                   value="{{ child.name if child else '' }}"
+                                   placeholder="아동의 이름을 입력하세요"
+                                   required
+                                   maxlength="100">
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>
+                                한글 이름을 정확히 입력해주세요.
+                            </div>
+                        </div>
+
+                        <!-- 학년 선택 -->
+                        <div class="col-md-4 mb-4">
+                            <label for="grade" class="form-label fw-bold">
+                                <i class="bi bi-mortarboard me-1"></i>학년
+                                <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select form-select-lg" id="grade" name="grade" required>
+                                <option value="">학년 선택</option>
+                                {% for grade_num in range(1, 7) %}
+                                <option value="{{ grade_num }}" 
+                                        {% if child and child.grade == grade_num %}selected{% endif %}>
+                                    {{ grade_num }}학년
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>
+                                현재 학년을 선택하세요.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 안내 정보 -->
+                    {% if not child %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-lightbulb me-2"></i>
+                        <strong>등록 후 가능한 작업:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>국어, 수학, 독서 점수 입력</li>
+                            <li>학습 진도 및 특이사항 기록</li>
+                            <li>성적 통계 및 분석 확인</li>
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    <!-- 버튼 그룹 -->
+                    <div class="d-flex gap-3 pt-3">
+                        <button type="submit" class="btn btn-primary btn-lg flex-fill">
+                            <i class="bi bi-{% if child %}check-circle{% else %}plus-circle{% endif %} me-2"></i>
+                            {% if child %}수정 완료{% else %}등록하기{% endif %}
+                        </button>
+                        <a href="{{ url_for('children_list') }}" class="btn btn-outline-secondary btn-lg">
+                            <i class="bi bi-x-circle me-2"></i>취소
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 추가 정보 (수정 시에만) -->
+        {% if child %}
+        <div class="card mt-4">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-info-circle me-2"></i>등록 정보
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row text-sm">
+                    <div class="col-sm-6">
+                        <strong>등록일:</strong><br>
+                        <span class="text-muted">{{ child.created_at.strftime('%Y년 %m월 %d일') }}</span>
+                    </div>
+                    <div class="col-sm-6">
+                        <strong>아동 ID:</strong><br>
+                        <span class="text-muted">#{{ child.id }}</span>
+                    </div>
+                </div>
+                
+                {% if child.learning_records %}
+                <hr>
+                <div class="text-sm">
+                    <strong>학습 기록:</strong><br>
+                    <span class="text-success">{{ child.learning_records|length }}개의 기록</span>
+                    <a href="{{ url_for('child_detail', child_id=child.id) }}" class="btn btn-sm btn-outline-primary ms-2">
+                        <i class="bi bi-eye me-1"></i>상세보기
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 폼 유효성 검사
+    const form = document.querySelector('form');
+    const nameInput = document.getElementById('name');
+    const gradeSelect = document.getElementById('grade');
+    
+    // 실시간 유효성 검사
+    nameInput.addEventListener('input', function() {
+        const value = this.value.trim();
+        if (value.length < 2) {
+            this.classList.add('is-invalid');
+            this.classList.remove('is-valid');
+        } else {
+            this.classList.add('is-valid');
+            this.classList.remove('is-invalid');
+        }
+    });
+    
+    gradeSelect.addEventListener('change', function() {
+        if (this.value) {
+            this.classList.add('is-valid');
+            this.classList.remove('is-invalid');
+        } else {
+            this.classList.add('is-invalid');
+            this.classList.remove('is-valid');
+        }
+    });
+    
+    // 폼 제출 시 유효성 검사
+    form.addEventListener('submit', function(e) {
+        let isValid = true;
+        
+        // 이름 검사
+        if (nameInput.value.trim().length < 2) {
+            nameInput.classList.add('is-invalid');
+            isValid = false;
+        }
+        
+        // 학년 검사
+        if (!gradeSelect.value) {
+            gradeSelect.classList.add('is-invalid');
+            isValid = false;
+        }
+        
+        if (!isValid) {
+            e.preventDefault();
+            
+            // 첫 번째 오류 필드로 스크롤
+            const firstInvalid = form.querySelector('.is-invalid');
+            if (firstInvalid) {
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                firstInvalid.focus();
+            }
+        }
+    });
+    
+    // 이름 입력 필드에 포커스
+    nameInput.focus();
+});
+</script>
+{% endblock %} 

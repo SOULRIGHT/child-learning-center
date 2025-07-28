@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}포인트 기록{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-star"></i> 포인트 기록</h2>
+        <div>
+            <a href="{{ url_for('points_analysis') }}" class="btn btn-outline-info me-2">
+                <i class="fas fa-chart-line"></i> 포인트 분석
+            </a>
+            <a href="{{ url_for('points_visualization') }}" class="btn btn-outline-success">
+                <i class="bi bi-graph-up"></i> 포인트 시각화
+            </a>
+            <a href="{{ url_for('children_list') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> 포인트 입력하기
+            </a>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4><i class="fas fa-star"></i> 포인트 기록</h4>
+                    <div>
+                        <a href="{{ url_for('points_analysis') }}" class="btn btn-outline-info me-2">
+                            <i class="fas fa-chart-line"></i> 포인트 분석
+                        </a>
+                        <a href="{{ url_for('children_list') }}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> 포인트 입력하기
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if points_records %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>날짜</th>
+                                    <th>아동명</th>
+                                    <th>학년</th>
+                                    <th>국어</th>
+                                    <th>수학</th>
+                                    <th>쎈수학</th>
+                                    <th>독서</th>
+                                    <th>총점</th>
+                                    <th>입력자</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for record in points_records %}
+                                <tr>
+                                    <td>{{ record.date.strftime('%m/%d') }}</td>
+                                    <td>
+                                        <a href="{{ url_for('child_detail', child_id=record.child.id) }}" class="text-decoration-none">
+                                            {{ record.child.name }}
+                                        </a>
+                                    </td>
+                                    <td>{{ record.child.grade }}학년</td>
+                                    <td>
+                                        {% if record.korean_points == 200 %}
+                                            <span class="badge bg-success">200</span>
+                                        {% elif record.korean_points == 100 %}
+                                            <span class="badge bg-warning">100</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if record.math_points == 200 %}
+                                            <span class="badge bg-success">200</span>
+                                        {% elif record.math_points == 100 %}
+                                            <span class="badge bg-warning">100</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if record.ssen_points == 200 %}
+                                            <span class="badge bg-success">200</span>
+                                        {% elif record.ssen_points == 100 %}
+                                            <span class="badge bg-warning">100</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if record.reading_points == 200 %}
+                                            <span class="badge bg-success">200</span>
+                                        {% elif record.reading_points == 100 %}
+                                            <span class="badge bg-warning">100</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <strong class="text-primary">{{ record.total_points }}</strong>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ record.creator.name }}</small>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-star fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">아직 포인트 기록이 없습니다.</h5>
+                        <p class="text-muted">아동 목록에서 포인트를 입력해보세요!</p>
+                        <a href="{{ url_for('children_list') }}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> 포인트 입력하기
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

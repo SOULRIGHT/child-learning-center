@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+
+{% block page_title %}{{ grade }}학년 포인트 비교{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 헤더 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">{{ grade }}학년 포인트 비교</h2>
+            <p class="text-muted mb-0">총 {{ children_data | length }}명의 아동</p>
+        </div>
+        <div>
+            <a href="{{ url_for('points_visualization') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> 포인트 시각화
+            </a>
+            <a href="{{ url_for('points_analysis') }}" class="btn btn-outline-info">
+                <i class="bi bi-chart-line"></i> 포인트 분석
+            </a>
+        </div>
+    </div>
+
+    <!-- 요약 카드 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-primary">1위</h5>
+                    <h3 class="mb-1">{{ children_data[0].name if children_data else '-' }}</h3>
+                    <small class="text-muted">{{ children_data[0].total_points if children_data else 0 }}점</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-success">평균 포인트</h5>
+                    <h3 class="mb-1">{{ (children_data | map(attribute='total_points') | sum) // (children_data | length) if children_data else 0 }}점</h3>
+                    <small class="text-muted">전체 아동</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-warning">최고 이번 주</h5>
+                    <h3 class="mb-1">{{ (children_data | sort(attribute='this_week') | last).name if children_data else '-' }}</h3>
+                    <small class="text-muted">{{ (children_data | sort(attribute='this_week') | last).this_week if children_data else 0 }}점</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-info">최고 이번 달</h5>
+                    <h3 class="mb-1">{{ (children_data | sort(attribute='this_month') | last).name if children_data else '-' }}</h3>
+                    <small class="text-muted">{{ (children_data | sort(attribute='this_month') | last).this_month if children_data else 0 }}점</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 차트 섹션 -->
+    <div class="row mb-4">
+        <!-- 총 포인트 비교 -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-trophy text-warning"></i>
+                        총 포인트 비교
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="totalPointsChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 이번 주 포인트 비교 -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-calendar-week text-primary"></i>
+                        이번 주 포인트 비교
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="weeklyPointsChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <!-- 이번 달 포인트 비교 -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-calendar-month text-success"></i>
+                        이번 달 포인트 비교
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="monthlyPointsChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 평균 포인트 비교 -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-graph-up text-info"></i>
+                        평균 포인트 비교
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="avgPointsChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 상세 테이블 -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="bi bi-table text-secondary"></i>
+                {{ grade }}학년 상세 비교
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>순위</th>
+                            <th>이름</th>
+                            <th>총 포인트</th>
+                            <th>이번 주</th>
+                            <th>이번 달</th>
+                            <th>평균 포인트</th>
+                            <th>기록 수</th>
+                            <th>상태</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for child in children_data %}
+                        <tr>
+                            <td>
+                                {% if loop.index == 1 %}
+                                    <span class="badge bg-warning">🥇</span>
+                                {% elif loop.index == 2 %}
+                                    <span class="badge bg-secondary">🥈</span>
+                                {% elif loop.index == 3 %}
+                                    <span class="badge bg-danger">🥉</span>
+                                {% else %}
+                                    <span class="badge bg-light text-dark">{{ loop.index }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('child_point_analysis', child_id=child.id) }}" class="text-decoration-none">
+                                    {{ child.name }}
+                                </a>
+                            </td>
+                            <td>
+                                <span class="fw-bold">{{ child.total_points }}점</span>
+                            </td>
+                            <td>
+                                <span class="text-primary">{{ child.this_week }}점</span>
+                            </td>
+                            <td>
+                                <span class="text-success">{{ child.this_month }}점</span>
+                            </td>
+                            <td>{{ child.avg_points }}점</td>
+                            <td>{{ child.record_count }}회</td>
+                            <td>
+                                {% if child.total_points > children_data[0].total_points * 0.8 %}
+                                    <span class="badge bg-success">상위권</span>
+                                {% elif child.total_points > children_data[0].total_points * 0.5 %}
+                                    <span class="badge bg-warning">중위권</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">하위권</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 총 포인트 차트
+    const totalCtx = document.getElementById('totalPointsChart');
+    if (totalCtx) {
+        new Chart(totalCtx, {
+            type: 'bar',
+            data: {
+                labels: {{ chart_labels | tojson }},
+                datasets: [{
+                    label: '총 포인트',
+                    data: {{ chart_total_points | tojson }},
+                    backgroundColor: 'rgba(255, 193, 7, 0.8)',
+                    borderColor: 'rgb(255, 193, 7)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '포인트'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 이번 주 포인트 차트
+    const weeklyCtx = document.getElementById('weeklyPointsChart');
+    if (weeklyCtx) {
+        new Chart(weeklyCtx, {
+            type: 'bar',
+            data: {
+                labels: {{ chart_labels | tojson }},
+                datasets: [{
+                    label: '이번 주 포인트',
+                    data: {{ chart_weekly_points | tojson }},
+                    backgroundColor: 'rgba(13, 110, 253, 0.8)',
+                    borderColor: 'rgb(13, 110, 253)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '포인트'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 이번 달 포인트 차트
+    const monthlyCtx = document.getElementById('monthlyPointsChart');
+    if (monthlyCtx) {
+        new Chart(monthlyCtx, {
+            type: 'bar',
+            data: {
+                labels: {{ chart_labels | tojson }},
+                datasets: [{
+                    label: '이번 달 포인트',
+                    data: {{ chart_monthly_points | tojson }},
+                    backgroundColor: 'rgba(25, 135, 84, 0.8)',
+                    borderColor: 'rgb(25, 135, 84)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '포인트'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 평균 포인트 차트
+    const avgCtx = document.getElementById('avgPointsChart');
+    if (avgCtx) {
+        new Chart(avgCtx, {
+            type: 'bar',
+            data: {
+                labels: {{ chart_labels | tojson }},
+                datasets: [{
+                    label: '평균 포인트',
+                    data: {{ chart_avg_points | tojson }},
+                    backgroundColor: 'rgba(13, 202, 240, 0.8)',
+                    borderColor: 'rgb(13, 202, 240)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '평균 포인트'
+                        }
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %} 

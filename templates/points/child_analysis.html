@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block page_title %}{{ child.name }} 포인트 분석{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 헤더 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">{{ child.name }} 포인트 분석</h2>
+            <p class="text-muted mb-0">{{ child.grade }}학년</p>
+        </div>
+        <div>
+            <a href="{{ url_for('points_analysis') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> 포인트 분석
+            </a>
+            <a href="{{ url_for('points_visualization') }}" class="btn btn-outline-info">
+                <i class="bi bi-graph-up"></i> 포인트 시각화
+            </a>
+        </div>
+    </div>
+
+    <!-- 요약 카드 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-primary">이번 주</h5>
+                    <h3 class="mb-1">{{ this_week_total }}점</h3>
+                    <small class="text-muted">
+                        {% if weekly_change > 0 %}
+                            <span class="text-success">+{{ weekly_change }}%</span>
+                        {% elif weekly_change < 0 %}
+                            <span class="text-danger">{{ weekly_change }}%</span>
+                        {% else %}
+                            <span class="text-muted">변화 없음</span>
+                        {% endif %}
+                        지난 주 대비
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-success">이번 달</h5>
+                    <h3 class="mb-1">{{ this_month_total }}점</h3>
+                    <small class="text-muted">
+                        {% if monthly_change > 0 %}
+                            <span class="text-success">+{{ monthly_change }}%</span>
+                        {% elif monthly_change < 0 %}
+                            <span class="text-danger">{{ monthly_change }}%</span>
+                        {% else %}
+                            <span class="text-muted">변화 없음</span>
+                        {% endif %}
+                        지난 달 대비
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-warning">학년 순위</h5>
+                    <h3 class="mb-1">{{ current_rank }}위</h3>
+                    <small class="text-muted">총 {{ total_children_in_grade }}명 중</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-info">총 포인트</h5>
+                    <h3 class="mb-1">{{ grade_comparison[0].total_points if grade_comparison else 0 }}점</h3>
+                    <small class="text-muted">전체 기간</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 차트 섹션 -->
+    <div class="row mb-4">
+        <!-- 주간 트렌드 -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-graph-up text-primary"></i>
+                        주간 포인트 트렌드 (최근 8주)
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="weeklyTrendChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 월간 합계 -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-bar-chart text-success"></i>
+                        월간 포인트 합계 (최근 6개월)
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="monthlySumChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 학년 비교 테이블 -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="bi bi-people text-warning"></i>
+                {{ child.grade }}학년 포인트 비교
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>순위</th>
+                            <th>이름</th>
+                            <th>총 포인트</th>
+                            <th>기록 수</th>
+                            <th>평균 포인트</th>
+                            <th>상태</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in grade_comparison %}
+                        <tr {% if student.id == child.id %}class="table-primary"{% endif %}>
+                            <td>
+                                {% if loop.index == 1 %}
+                                    <span class="badge bg-warning">🥇</span>
+                                {% elif loop.index == 2 %}
+                                    <span class="badge bg-secondary">🥈</span>
+                                {% elif loop.index == 3 %}
+                                    <span class="badge bg-danger">🥉</span>
+                                {% else %}
+                                    <span class="badge bg-light text-dark">{{ loop.index }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if student.id == child.id %}
+                                    <strong>{{ student.name }}</strong>
+                                {% else %}
+                                    {{ student.name }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="fw-bold">{{ student.total_points }}점</span>
+                            </td>
+                            <td>{{ student.record_count }}회</td>
+                            <td>{{ student.avg_points }}점</td>
+                            <td>
+                                {% if student.id == child.id %}
+                                    <span class="badge bg-primary">나</span>
+                                {% else %}
+                                    {% if student.total_points > grade_comparison[0].total_points * 0.8 %}
+                                        <span class="badge bg-success">상위권</span>
+                                    {% elif student.total_points > grade_comparison[0].total_points * 0.5 %}
+                                        <span class="badge bg-warning">중위권</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">하위권</span>
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 주간 트렌드 차트
+    const weeklyCtx = document.getElementById('weeklyTrendChart');
+    if (weeklyCtx) {
+        new Chart(weeklyCtx, {
+            type: 'line',
+            data: {
+                labels: {{ weekly_data | map(attribute='date') | list | tojson }},
+                datasets: [{
+                    label: '일일 포인트',
+                    data: {{ weekly_data | map(attribute='points') | list | tojson }},
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '포인트'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: '날짜'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 월간 합계 차트
+    const monthlyCtx = document.getElementById('monthlySumChart');
+    if (monthlyCtx) {
+        new Chart(monthlyCtx, {
+            type: 'bar',
+            data: {
+                labels: {{ monthly_data | map(attribute='month') | list | tojson }},
+                datasets: [{
+                    label: '월별 총 포인트',
+                    data: {{ monthly_data | map(attribute='points') | list | tojson }},
+                    backgroundColor: 'rgba(54, 162, 235, 0.8)',
+                    borderColor: 'rgb(54, 162, 235)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '포인트'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: '월'
+                        }
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %} 

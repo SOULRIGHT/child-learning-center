@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+
+{% block title %}아동 관리 - 지역아동센터 학습관리{% endblock %}
+{% block page_title %}아동 관리{% endblock %}
+
+{% block content %}
+<!-- 헤더 섹션 -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold text-dark mb-1">아동 관리</h4>
+        <p class="text-muted mb-0">전체 {{ children.total }}명의 아동이 등록되어 있습니다.</p>
+    </div>
+    <a href="{{ url_for('add_child') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-2"></i>새 아동 등록
+    </a>
+</div>
+
+<!-- 검색 및 필터 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-4">
+                <label for="search" class="form-label">이름 검색</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" id="search" name="search" 
+                           value="{{ search }}" placeholder="아동 이름을 입력하세요">
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label for="grade" class="form-label">학년 필터</label>
+                <select class="form-select" id="grade" name="grade">
+                    <option value="">전체 학년</option>
+                    {% for grade in grade_list %}
+                    <option value="{{ grade }}" {% if grade|string == grade_filter %}selected{% endif %}>
+                        {{ grade }}학년
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-5 d-flex align-items-end">
+                <button type="submit" class="btn btn-outline-primary me-2">
+                    <i class="bi bi-funnel me-1"></i>검색
+                </button>
+                <a href="{{ url_for('children_list') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle me-1"></i>초기화
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 아동 목록 -->
+{% if children.items %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-people me-2"></i>아동 목록
+            <span class="badge bg-primary ms-2">{{ children.total }}명</span>
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th width="5%">#</th>
+                        <th width="20%">이름</th>
+                        <th width="10%">학년</th>
+                        <th width="15%">등록일</th>
+                        <th width="15%">최근 활동</th>
+                        <th width="10%">통계</th>
+                        <th width="25%">관리</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for child in children.items %}
+                    <tr>
+                        <td class="align-middle">{{ loop.index + (children.page - 1) * children.per_page }}</td>
+                        <td class="align-middle">
+                            <div class="d-flex align-items-center">
+                                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-3"
+                                     style="width: 40px; height: 40px; font-weight: 600;">
+                                    {{ child.name[0] }}
+                                </div>
+                                <div>
+                                    <div class="fw-bold">{{ child.name }}</div>
+                                    <small class="text-muted">ID: {{ child.id }}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="align-middle">
+                            <span class="badge bg-info">{{ child.grade }}학년</span>
+                        </td>
+                        <td class="align-middle">
+                            <small class="text-muted">{{ child.created_at.strftime('%Y-%m-%d') }}</small>
+                        </td>
+                        <td class="align-middle">
+                            {% set latest_record = child.learning_records|selectattr('date')|list|sort(attribute='date', reverse=true)|first %}
+                            {% if latest_record %}
+                                <small class="text-success">
+                                    <i class="bi bi-check-circle me-1"></i>
+                                    {{ latest_record.date.strftime('%m/%d') }} 기록
+                                </small>
+                            {% else %}
+                                <small class="text-muted">
+                                    <i class="bi bi-dash-circle me-1"></i>
+                                    기록 없음
+                                </small>
+                            {% endif %}
+                        </td>
+                        <td class="align-middle text-center">
+                            {% if child.include_in_stats %}
+                                <span class="badge bg-success">포함</span>
+                            {% else %}
+                                <span class="badge bg-secondary">제외</span>
+                            {% endif %}
+                        </td>
+                        <td class="align-middle">
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('child_detail', child_id=child.id) }}" 
+                                   class="btn btn-sm btn-outline-primary" title="상세보기">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                                            <a href="{{ url_for('points_input', child_id=child.id) }}" 
+                               class="btn btn-sm btn-outline-warning me-1" title="포인트 입력">
+                                <i class="bi bi-star"></i>
+                            </a>
+                            <a href="{{ url_for('child_point_analysis', child_id=child.id) }}" 
+                               class="btn btn-sm btn-outline-info" title="포인트 분석">
+                                <i class="bi bi-graph-up"></i>
+                            </a>
+                                <a href="{{ url_for('edit_child', child_id=child.id) }}" 
+                                   class="btn btn-sm btn-outline-success" title="수정">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form method="POST" action="{{ url_for('toggle_child_stats', child_id=child.id) }}" class="d-inline">
+                                    <button type="submit" class="btn btn-sm {% if child.include_in_stats %}btn-outline-warning{% else %}btn-outline-info{% endif %}" 
+                                            title="{% if child.include_in_stats %}통계에서 제외{% else %}통계에 포함{% endif %}">
+                                        <i class="bi {% if child.include_in_stats %}bi-graph-down{% else %}bi-graph-up{% endif %}"></i>
+                                    </button>
+                                </form>
+                                {% if current_user.role in ['센터장', '돌봄선생님'] %}
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-btn" 
+                                        data-child-id="{{ child.id }}" data-child-name="{{ child.name }}" title="삭제">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- 페이지네이션 -->
+    {% if children.pages > 1 %}
+    <div class="card-footer">
+        <nav aria-label="아동 목록 페이지네이션">
+            <ul class="pagination justify-content-center mb-0">
+                {% if children.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('children_list', page=children.prev_num, search=search, grade=grade_filter) }}">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+                {% endif %}
+                
+                {% for page_num in children.iter_pages() %}
+                    {% if page_num %}
+                        {% if page_num != children.page %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('children_list', page=page_num, search=search, grade=grade_filter) }}">
+                                {{ page_num }}
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                        {% endif %}
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">…</span>
+                    </li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if children.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('children_list', page=children.next_num, search=search, grade=grade_filter) }}">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<!-- 빈 상태 -->
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-people" style="font-size: 4rem; color: #dee2e6;"></i>
+        <h5 class="mt-3 text-muted">
+            {% if search or grade_filter %}
+                검색 결과가 없습니다
+            {% else %}
+                등록된 아동이 없습니다
+            {% endif %}
+        </h5>
+        <p class="text-muted mb-4">
+            {% if search or grade_filter %}
+                다른 검색 조건으로 시도해보세요.
+            {% else %}
+                새로운 아동을 등록해보세요.
+            {% endif %}
+        </p>
+        {% if not search and not grade_filter %}
+        <a href="{{ url_for('add_child') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-2"></i>첫 번째 아동 등록하기
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- 삭제 확인 모달 -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">아동 삭제 확인</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>주의:</strong> 이 작업은 되돌릴 수 없습니다.
+                </div>
+                <p><strong id="deleteChildName"></strong> 아동과 관련된 <strong>모든 학습 기록</strong>이 함께 삭제됩니다.</p>
+                <p class="text-muted mb-0">정말로 삭제하시겠습니까?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-2"></i>삭제
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 삭제 버튼 이벤트 리스너
+document.addEventListener('DOMContentLoaded', function() {
+    const deleteButtons = document.querySelectorAll('.delete-btn');
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const childId = this.getAttribute('data-child-id');
+            const childName = this.getAttribute('data-child-name');
+            
+            document.getElementById('deleteChildName').textContent = childName;
+            document.getElementById('deleteForm').action = `/children/${childId}/delete`;
+            
+            const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+            modal.show();
+        });
+    });
+    
+    // 검색 폼 자동 제출 (엔터키)
+    const searchInput = document.getElementById('search');
+    if (searchInput) {
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.target.closest('form').submit();
+            }
+        });
+    }
+});
+</script>
+{% endblock %} 

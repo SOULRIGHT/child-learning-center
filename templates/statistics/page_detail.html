@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}{{ grade }}학년 {{ subject|title }} {{ page }}페이지 통계{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 헤더 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('statistics_overview') }}">통계</a></li>
+                    <li class="breadcrumb-item active">{{ grade }}학년 {{ '국어' if subject == 'korean' else '수학' }} {{ page }}페이지</li>
+                </ol>
+            </nav>
+            <h1 class="h3">
+                <i class="bi bi-{% if subject == 'korean' %}book{% else %}calculator{% endif %} me-2"></i>
+                {{ grade }}학년 {{ '국어' if subject == 'korean' else '수학' }} {{ page }}페이지 통계
+            </h1>
+        </div>
+        <a href="{{ url_for('statistics_overview') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>목록으로
+        </a>
+    </div>
+
+    <!-- 전체 현황 -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">전체 아이들</h6>
+                            <h2 class="mb-0">{{ total_children }}명</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-people" style="font-size: 2rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">완료한 아이들</h6>
+                            <h2 class="mb-0">{{ records_with_scores|length }}명</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-check-circle" style="font-size: 2rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">미완료 아이들</h6>
+                            <h2 class="mb-0">{{ pending_children|length }}명</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-clock" style="font-size: 2rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 완료 순위 -->
+        {% if records_with_scores %}
+        <div class="col-md-8 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-trophy me-2"></i>성적 순위
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th width="10%">순위</th>
+                                    <th width="30%">이름</th>
+                                    <th width="20%">점수</th>
+                                    <th width="20%">정답률</th>
+                                    <th width="20%">완료일</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in records_with_scores %}
+                                <tr>
+                                    <td>
+                                        {% if loop.index == 1 %}
+                                        <span class="badge bg-warning">🥇 1위</span>
+                                        {% elif loop.index == 2 %}
+                                        <span class="badge bg-secondary">🥈 2위</span>
+                                        {% elif loop.index == 3 %}
+                                        <span class="badge bg-dark">🥉 3위</span>
+                                        {% else %}
+                                        <span class="badge bg-light text-dark">{{ loop.index }}위</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <strong>{{ item.child_name }}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="fw-bold text-{% if item.score >= 90 %}success{% elif item.score >= 70 %}warning{% else %}danger{% endif %}">
+                                            {{ "%.1f"|format(item.score) }}점
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if subject == 'korean' %}
+                                        {{ item.record.korean_problems_correct }}/{{ item.record.korean_problems_solved }}
+                                        {% else %}
+                                        {{ item.record.math_problems_correct }}/{{ item.record.math_problems_solved }}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ item.record.date.strftime('%m/%d') }}</small>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 미완료 아이들 -->
+        {% if pending_children %}
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-clock me-2"></i>미완료 아이들
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% for child in pending_children %}
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <strong>{{ child.name }}</strong>
+                            {% if not child.include_in_stats %}
+                            <span class="badge bg-secondary ms-2">통계제외</span>
+                            {% endif %}
+                        </div>
+                        <a href="{{ url_for('add_score', child_id=child.id) }}" 
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-plus-circle"></i>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- 통계 분석 -->
+    {% if records_with_scores|length >= 2 %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="bi bi-graph-up me-2"></i>통계 분석
+            </h5>
+        </div>
+        <div class="card-body">
+            {% set scores = records_with_scores | map(attribute='score') | list %}
+            {% set avg_score = (scores | sum) / (scores | length) %}
+            {% set max_score = scores | max %}
+            {% set min_score = scores | min %}
+            
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h4 class="text-primary">{{ "%.1f"|format(avg_score) }}점</h4>
+                        <small class="text-muted">평균 점수</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h4 class="text-success">{{ "%.1f"|format(max_score) }}점</h4>
+                        <small class="text-muted">최고 점수</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h4 class="text-danger">{{ "%.1f"|format(min_score) }}점</h4>
+                        <small class="text-muted">최저 점수</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h4 class="text-info">{{ "%.1f"|format(max_score - min_score) }}점</h4>
+                        <small class="text-muted">점수 차이</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %} 

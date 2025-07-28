@@ -1,0 +1,504 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if record %}점수 수정{% else %}점수 입력{% endif %} - 지역아동센터 학습관리
+{% endblock %}
+
+{% block page_title %}
+{% if record %}점수 수정{% else %}점수 입력{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <!-- 헤더 -->
+        <div class="d-flex align-items-center mb-4">
+            <a href="{{ url_for('scores_list') if not record else url_for('child_detail', child_id=record.child_id) }}" class="btn btn-outline-secondary me-3">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+            <div>
+                <h4 class="fw-bold text-dark mb-1">
+                    {% if record %}
+                        {{ record.child.name }} - {{ record.date.strftime('%Y년 %m월 %d일') }} 점수 수정
+                    {% else %}
+                        학습 점수 입력
+                    {% endif %}
+                </h4>
+                <p class="text-muted mb-0">
+                    {% if record %}
+                        기존 점수를 수정할 수 있습니다.
+                    {% else %}
+                        국어, 쎈 수학, 독서 점수를 입력해주세요.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <!-- 폼 -->
+        <form method="POST" id="scoreForm" novalidate>
+            <div class="row">
+                <!-- 기본 정보 -->
+                <div class="col-lg-4 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-calendar-event me-2"></i>기본 정보
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- 아동 선택 -->
+                            {% if not record %}
+                            <div class="mb-3">
+                                <label for="child_id" class="form-label fw-bold">
+                                    <i class="bi bi-person me-1"></i>아동 선택
+                                    <span class="text-danger">*</span>
+                                </label>
+                                <select class="form-select form-select-lg" id="child_id" name="child_id" required>
+                                    <option value="">아동을 선택하세요</option>
+                                    {% for child in children %}
+                                    <option value="{{ child.id }}" {% if preselected_child_id == child.id %}selected{% endif %}>
+                                        {{ child.name }} ({{ child.grade }}학년)
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    점수를 입력할 아동을 선택하세요.
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">아동</label>
+                                <div class="d-flex align-items-center p-3 bg-light rounded">
+                                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-3"
+                                         style="width: 40px; height: 40px; font-weight: 600;">
+                                        {{ record.child.name[0] }}
+                                    </div>
+                                    <div>
+                                        <div class="fw-bold">{{ record.child.name }}</div>
+                                        <small class="text-muted">{{ record.child.grade }}학년</small>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- 날짜 입력 -->
+                            <div class="mb-3">
+                                <label for="date" class="form-label fw-bold">
+                                    <i class="bi bi-calendar me-1"></i>학습 날짜
+                                    <span class="text-danger">*</span>
+                                </label>
+                                <input type="date" 
+                                       class="form-control form-control-lg" 
+                                       id="date" 
+                                       name="date" 
+                                       value="{{ record.date.strftime('%Y-%m-%d') if record else '' }}"
+                                       required>
+                                <div class="form-text">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    학습한 날짜를 선택하세요.
+                                </div>
+                            </div>
+
+                            <!-- 점수 계산 안내 -->
+                            <div class="alert alert-info">
+                                <i class="bi bi-calculator me-2"></i>
+                                <strong>점수 계산 방식:</strong>
+                                <div class="mt-2 small">
+                                    • 국어/수학: (맞은 문제 ÷ 푼 문제) × 100점<br>
+                                    • 독서: 완독 200점, 부분독서 100점, 미실시 0점<br>
+                                    • 총점: 국어 + 수학 + 독서 (최대 400점)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 국어 점수 -->
+                <div class="col-lg-4 mb-4">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-book me-2"></i>국어
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6 mb-3">
+                                    <label for="korean_problems_solved" class="form-label fw-bold">푼 문제 수</label>
+                                    <input type="number" 
+                                           class="form-control" 
+                                           id="korean_problems_solved" 
+                                           name="korean_problems_solved" 
+                                           value="{{ record.korean_problems_solved if record else '' }}"
+                                           min="0" 
+                                           max="200"
+                                           placeholder="0">
+                                </div>
+                                <div class="col-6 mb-3">
+                                    <label for="korean_problems_correct" class="form-label fw-bold">맞은 문제 수</label>
+                                    <input type="number" 
+                                           class="form-control" 
+                                           id="korean_problems_correct" 
+                                           name="korean_problems_correct" 
+                                           value="{{ record.korean_problems_correct if record else '' }}"
+                                           min="0" 
+                                           max="200"
+                                           placeholder="0">
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="korean_last_page" class="form-label fw-bold">마지막 페이지</label>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="korean_last_page" 
+                                       name="korean_last_page" 
+                                       value="{{ record.korean_last_page if record else '' }}"
+                                       min="0" 
+                                       max="1000"
+                                       placeholder="0">
+                            </div>
+
+                            <!-- 점수 미리보기 -->
+                            <div class="alert alert-light border">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold">예상 점수:</span>
+                                    <span id="korean_score_preview" class="badge bg-primary fs-6">0점</span>
+                                </div>
+                                <div class="progress mt-2" style="height: 8px;">
+                                    <div id="korean_progress" class="progress-bar bg-primary" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 쎈 수학 점수 -->
+                <div class="col-lg-4 mb-4">
+                    <div class="card">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-calculator me-2"></i>쎈 수학
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6 mb-3">
+                                    <label for="math_problems_solved" class="form-label fw-bold">푼 문제 수</label>
+                                    <input type="number" 
+                                           class="form-control" 
+                                           id="math_problems_solved" 
+                                           name="math_problems_solved" 
+                                           value="{{ record.math_problems_solved if record else '' }}"
+                                           min="0" 
+                                           max="200"
+                                           placeholder="0">
+                                </div>
+                                <div class="col-6 mb-3">
+                                    <label for="math_problems_correct" class="form-label fw-bold">맞은 문제 수</label>
+                                    <input type="number" 
+                                           class="form-control" 
+                                           id="math_problems_correct" 
+                                           name="math_problems_correct" 
+                                           value="{{ record.math_problems_correct if record else '' }}"
+                                           min="0" 
+                                           max="200"
+                                           placeholder="0">
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="math_last_page" class="form-label fw-bold">마지막 페이지</label>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="math_last_page" 
+                                       name="math_last_page" 
+                                       value="{{ record.math_last_page if record else '' }}"
+                                       min="0" 
+                                       max="1000"
+                                       placeholder="0">
+                            </div>
+
+                            <!-- 점수 미리보기 -->
+                            <div class="alert alert-light border">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold">예상 점수:</span>
+                                    <span id="math_score_preview" class="badge bg-success fs-6">0점</span>
+                                </div>
+                                <div class="progress mt-2" style="height: 8px;">
+                                    <div id="math_progress" class="progress-bar bg-success" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 독서 점수 -->
+            <div class="row">
+                <div class="col-lg-6 mb-4">
+                    <div class="card">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-journal-text me-2"></i>독서
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold mb-3">독서 상태</label>
+                                <div class="d-grid gap-2">
+                                    <button type="button" 
+                                            class="btn btn-lg reading-status-btn {% if record and record.reading_score == 200 %}btn-success active{% else %}btn-outline-success{% endif %}" 
+                                            data-value="complete" 
+                                            onclick="selectReadingStatus(this, 'complete')">
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <div class="text-start">
+                                                <div class="fw-bold">🟢 완독</div>
+                                                <small>다 읽었을 때</small>
+                                            </div>
+                                            <div>
+                                                <span class="badge bg-white text-success fs-6">200점</span>
+                                            </div>
+                                        </div>
+                                    </button>
+                                    
+                                    <button type="button" 
+                                            class="btn btn-lg reading-status-btn {% if record and record.reading_score == 100 %}btn-warning active{% else %}btn-outline-warning{% endif %}" 
+                                            data-value="partial" 
+                                            onclick="selectReadingStatus(this, 'partial')">
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <div class="text-start">
+                                                <div class="fw-bold">🟡 부분독서</div>
+                                                <small>시작했지만 미완료/태도불량</small>
+                                            </div>
+                                            <div>
+                                                <span class="badge bg-white text-warning fs-6">100점</span>
+                                            </div>
+                                        </div>
+                                    </button>
+                                    
+                                    <button type="button" 
+                                            class="btn btn-lg reading-status-btn {% if not record or record.reading_score == 0 %}btn-secondary active{% else %}btn-outline-secondary{% endif %}" 
+                                            data-value="none" 
+                                            onclick="selectReadingStatus(this, 'none')">
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <div class="text-start">
+                                                <div class="fw-bold">⚫ 미실시</div>
+                                                <small>안 함</small>
+                                            </div>
+                                            <div>
+                                                <span class="badge {% if not record or record.reading_score == 0 %}bg-white text-dark{% else %}bg-white text-secondary{% endif %} fs-6">0점</span>
+                                            </div>
+                                        </div>
+                                    </button>
+                                </div>
+                                
+                                <input type="hidden" id="reading_status" name="reading_status" value="{% if record and record.reading_score == 200 %}complete{% elif record and record.reading_score == 100 %}partial{% else %}none{% endif %}">
+                                <input type="hidden" id="reading_score" name="reading_score" value="{{ record.reading_score if record else 0 }}">
+                                <input type="hidden" id="reading_completed" name="reading_completed" value="{{ 'true' if record and record.reading_completed else 'false' }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 총점 미리보기 -->
+                <div class="col-lg-6 mb-4">
+                    <div class="card">
+                        <div class="card-header bg-dark text-white">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-trophy me-2"></i>총점 미리보기
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center">
+                                <div class="display-4 fw-bold text-primary mb-3" id="total_score_preview">0점</div>
+                                <div class="progress mb-3" style="height: 20px;">
+                                    <div id="total_progress" class="progress-bar bg-gradient" style="width: 0%"></div>
+                                </div>
+                                <div id="score_rating" class="badge bg-secondary fs-6">점수를 입력해주세요</div>
+                            </div>
+
+                            <hr>
+
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <div class="text-primary fw-bold" id="korean_contribution">0점</div>
+                                    <small class="text-muted">국어</small>
+                                </div>
+                                <div class="col-4">
+                                    <div class="text-success fw-bold" id="math_contribution">0점</div>
+                                    <small class="text-muted">수학</small>
+                                </div>
+                                <div class="col-4">
+                                    <div class="text-info fw-bold" id="reading_contribution">0점</div>
+                                    <small class="text-muted">독서</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 제출 버튼 -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="d-flex gap-3">
+                                <button type="submit" class="btn btn-primary btn-lg flex-fill">
+                                    <i class="bi bi-{% if record %}check-circle{% else %}plus-circle{% endif %} me-2"></i>
+                                    {% if record %}점수 수정 완료{% else %}점수 저장하기{% endif %}
+                                </button>
+                                <a href="{{ url_for('scores_list') if not record else url_for('child_detail', child_id=record.child_id) }}" 
+                                   class="btn btn-outline-secondary btn-lg">
+                                    <i class="bi bi-x-circle me-2"></i>취소
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/reading-test.js') }}"></script>
+<script>
+// 점수 계산 함수 (전역)
+function calculateScore(correct, total) {
+    if (total === 0 || correct === 0) return 0;
+    return (correct / total) * 100;
+}
+// 독서 함수는 별도 JS 파일에서 로드됨
+
+document.addEventListener('DOMContentLoaded', function() {
+
+    // 실시간 점수 계산 및 미리보기 업데이트
+    function updatePreviews() {
+        // 국어 점수 계산
+        var koreanSolved = parseInt(document.getElementById('korean_problems_solved').value) || 0;
+        var koreanCorrect = parseInt(document.getElementById('korean_problems_correct').value) || 0;
+        var koreanScore = calculateScore(koreanCorrect, koreanSolved);
+        
+        // 수학 점수 계산
+        var mathSolved = parseInt(document.getElementById('math_problems_solved').value) || 0;
+        var mathCorrect = parseInt(document.getElementById('math_problems_correct').value) || 0;
+        var mathScore = calculateScore(mathCorrect, mathSolved);
+        
+        // 독서 점수
+        var readingScore = parseFloat(document.getElementById('reading_score').value) || 0;
+        
+        // 총점 계산
+        var totalScore = koreanScore + mathScore + readingScore;
+        
+        // UI 업데이트
+        document.getElementById('korean_score_preview').textContent = koreanScore.toFixed(1) + '점';
+        document.getElementById('math_score_preview').textContent = mathScore.toFixed(1) + '점';
+        document.getElementById('total_score_preview').textContent = totalScore.toFixed(1) + '점';
+        
+        // 기여도 표시
+        document.getElementById('korean_contribution').textContent = koreanScore.toFixed(1) + '점';
+        document.getElementById('math_contribution').textContent = mathScore.toFixed(1) + '점';
+        document.getElementById('reading_contribution').textContent = readingScore.toFixed(1) + '점';
+        
+        // 진행률 바 업데이트
+        document.getElementById('korean_progress').style.width = koreanScore + '%';
+        document.getElementById('math_progress').style.width = mathScore + '%';
+        document.getElementById('total_progress').style.width = Math.min((totalScore / 4), 100) + '%';
+        
+        // 등급 표시
+        var ratingElement = document.getElementById('score_rating');
+        var progressElement = document.getElementById('total_progress');
+        
+        if (totalScore >= 370) {
+            ratingElement.textContent = '최우수';
+            ratingElement.className = 'badge bg-warning fs-6';
+            progressElement.className = 'progress-bar bg-warning';
+        } else if (totalScore >= 320) {
+            ratingElement.textContent = '우수';
+            ratingElement.className = 'badge bg-success fs-6';
+            progressElement.className = 'progress-bar bg-success';
+        } else if (totalScore >= 250) {
+            ratingElement.textContent = '보통';
+            ratingElement.className = 'badge bg-info fs-6';
+            progressElement.className = 'progress-bar bg-info';
+        } else if (totalScore > 0) {
+            ratingElement.textContent = '주의';
+            ratingElement.className = 'badge bg-danger fs-6';
+            progressElement.className = 'progress-bar bg-danger';
+        } else {
+            ratingElement.textContent = '점수를 입력해주세요';
+            ratingElement.className = 'badge bg-secondary fs-6';
+            progressElement.className = 'progress-bar bg-secondary';
+        }
+    }
+
+    // 입력 필드에 이벤트 리스너 추가
+    var scoreInputs = [
+        'korean_problems_solved', 'korean_problems_correct',
+        'math_problems_solved', 'math_problems_correct'
+    ];
+    
+    for (var i = 0; i < scoreInputs.length; i++) {
+        var element = document.getElementById(scoreInputs[i]);
+        element.addEventListener('input', updatePreviews);
+        element.addEventListener('change', updatePreviews);
+    }
+    
+    // 페이지 로드 시 초기 점수 계산
+    updatePreviews();
+
+    // 유효성 검사
+    function validateInput(input, max) {
+        const value = parseInt(input.value);
+        const maxValue = parseInt(input.getAttribute(max)) || 200;
+        
+        if (value > maxValue) {
+            input.value = maxValue;
+        }
+        if (value < 0) {
+            input.value = 0;
+        }
+    }
+
+    // 문제 수 유효성 검사 (맞은 문제가 푼 문제보다 많을 수 없음)
+    function validateCorrectAnswers() {
+        const koreanSolved = parseInt(document.getElementById('korean_problems_solved').value) || 0;
+        const koreanCorrect = document.getElementById('korean_problems_correct');
+        const koreanCorrectValue = parseInt(koreanCorrect.value) || 0;
+        
+        if (koreanCorrectValue > koreanSolved) {
+            koreanCorrect.value = koreanSolved;
+        }
+        
+        const mathSolved = parseInt(document.getElementById('math_problems_solved').value) || 0;
+        const mathCorrect = document.getElementById('math_problems_correct');
+        const mathCorrectValue = parseInt(mathCorrect.value) || 0;
+        
+        if (mathCorrectValue > mathSolved) {
+            mathCorrect.value = mathSolved;
+        }
+    }
+
+    // 유효성 검사 이벤트 리스너
+    ['korean_problems_solved', 'korean_problems_correct', 'math_problems_solved', 'math_problems_correct'].forEach(id => {
+        document.getElementById(id).addEventListener('input', validateCorrectAnswers);
+    });
+
+    // 오늘 날짜 기본값 설정 (새 입력 시에만)
+    {% if not record %}
+    const dateInput = document.getElementById('date');
+    if (!dateInput.value) {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.value = today;
+    }
+    {% endif %}
+
+    // 초기 미리보기 업데이트
+    updatePreviews();
+});
+</script>
+{% endblock %} 

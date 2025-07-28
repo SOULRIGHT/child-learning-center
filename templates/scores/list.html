@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}점수 관리 - 지역아동센터 학습관리{% endblock %}
+{% block page_title %}점수 관리{% endblock %}
+
+{% block content %}
+<!-- 헤더 섹션 -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold text-dark mb-1">점수 관리</h4>
+        <p class="text-muted mb-0">최근 입력된 학습 점수들을 확인할 수 있습니다.</p>
+    </div>
+    <a href="{{ url_for('add_score') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-2"></i>새 점수 입력
+    </a>
+</div>
+
+<!-- 빠른 통계 -->
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-content">
+                <div>
+                    <div class="stat-number">{{ recent_records|length }}</div>
+                    <div class="stat-label">최근 기록</div>
+                </div>
+                <div class="stat-icon">
+                    <i class="bi bi-clipboard-data"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-content">
+                <div>
+                    <div class="stat-number">
+                        {% if recent_records %}
+                            {{ "%.1f"|format(recent_records|map(attribute='0.total_score')|sum / recent_records|length) }}
+                        {% else %}
+                            0
+                        {% endif %}
+                    </div>
+                    <div class="stat-label">평균 점수</div>
+                </div>
+                <div class="stat-icon">
+                    <i class="bi bi-graph-up"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-content">
+                <div>
+                                            <div class="stat-number">
+                            {% set high_scores = recent_records|selectattr('0.total_score', '>=', 240)|list %}
+                            {{ high_scores|length }}
+                        </div>
+                    <div class="stat-label">우수 기록</div>
+                </div>
+                <div class="stat-icon">
+                    <i class="bi bi-trophy"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-content">
+                <div>
+                    <div class="stat-number">
+                        {% if recent_records %}
+                            {{ recent_records[0][0].date.strftime('%m/%d') }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </div>
+                    <div class="stat-label">최근 입력일</div>
+                </div>
+                <div class="stat-icon">
+                    <i class="bi bi-calendar-check"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 최근 점수 기록 -->
+{% if recent_records %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-clock-history me-2"></i>최근 점수 기록
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th width="15%">날짜</th>
+                        <th width="15%">아동</th>
+                        <th width="15%">국어</th>
+                        <th width="15%">수학</th>
+                        <th width="10%">독서</th>
+                        <th width="15%">총점</th>
+                        <th width="10%">상태</th>
+                        <th width="5%">관리</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record, child in recent_records %}
+                    <tr>
+                        <td class="align-middle">
+                            <div class="fw-bold">{{ record.date.strftime('%Y-%m-%d') }}</div>
+                            <small class="text-muted">{{ record.date.strftime('%A') }}</small>
+                        </td>
+                        <td class="align-middle">
+                            <div class="d-flex align-items-center">
+                                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2"
+                                     style="width: 32px; height: 32px; font-size: 0.8rem; font-weight: 600;">
+                                    {{ child.name[0] }}
+                                </div>
+                                <div>
+                                    <div class="fw-bold">{{ child.name }}</div>
+                                    <small class="text-muted">{{ child.grade }}학년</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="align-middle">
+                            {% if record.korean_problems_solved > 0 %}
+                                <div>
+                                    <span class="fw-bold text-primary">{{ "%.1f"|format(record.korean_score) }}점</span>
+                                    <div class="small text-muted">{{ record.korean_problems_correct }}/{{ record.korean_problems_solved }}문제</div>
+                                    {% if record.korean_last_page > 0 %}
+                                    <div class="small text-info">{{ record.korean_last_page }}쪽</div>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="align-middle">
+                            {% if record.math_problems_solved > 0 %}
+                                <div>
+                                    <span class="fw-bold text-success">{{ "%.1f"|format(record.math_score) }}점</span>
+                                    <div class="small text-muted">{{ record.math_problems_correct }}/{{ record.math_problems_solved }}문제</div>
+                                    {% if record.math_last_page > 0 %}
+                                    <div class="small text-info">{{ record.math_last_page }}쪽</div>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="align-middle">
+                            {% if record.reading_completed %}
+                                <div>
+                                    <span class="badge badge-success">완료</span>
+                                    {% if record.reading_score > 0 %}
+                                    <div class="small fw-bold text-info">{{ "%.1f"|format(record.reading_score) }}점</div>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="align-middle">
+                            <div class="fw-bold fs-5 text-dark">{{ "%.1f"|format(record.total_score) }}점</div>
+                            <div class="progress mt-1" style="height: 4px;">
+                                <div class="progress-bar bg-primary" style="width: {{ (record.total_score / 3)|round(1) }}%"></div>
+                            </div>
+                        </td>
+                        <td class="align-middle">
+                            {% if record.total_score >= 270 %}
+                                <span class="badge badge-warning">최우수</span>
+                            {% elif record.total_score >= 240 %}
+                                <span class="badge badge-success">우수</span>
+                            {% elif record.total_score >= 180 %}
+                                <span class="badge bg-info">보통</span>
+                            {% elif record.total_score > 0 %}
+                                <span class="badge badge-danger">주의</span>
+                            {% else %}
+                                <span class="badge bg-secondary">미입력</span>
+                            {% endif %}
+                        </td>
+                        <td class="align-middle">
+                            <div class="btn-group-vertical btn-group-sm">
+                                <a href="{{ url_for('edit_score', record_id=record.id) }}" 
+                                   class="btn btn-outline-primary btn-sm" title="수정">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% if current_user.role in ['센터장', '돌봄선생님'] %}
+                                <button type="button" class="btn btn-outline-danger btn-sm delete-btn" 
+                                        data-record-id="{{ record.id }}" 
+                                        data-child-name="{{ child.name }}"
+                                        data-date="{{ record.date.strftime('%Y-%m-%d') }}" 
+                                        title="삭제">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<!-- 빈 상태 -->
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-clipboard-x" style="font-size: 4rem; color: #dee2e6;"></i>
+        <h5 class="mt-3 text-muted">입력된 점수가 없습니다</h5>
+        <p class="text-muted mb-4">첫 번째 학습 점수를 입력해보세요.</p>
+        <a href="{{ url_for('add_score') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-2"></i>첫 점수 입력하기
+        </a>
+    </div>
+</div>
+{% endif %}
+
+<!-- 삭제 확인 모달 -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">점수 기록 삭제 확인</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>주의:</strong> 이 작업은 되돌릴 수 없습니다.
+                </div>
+                <p><strong id="deleteChildName"></strong> 아동의 <strong id="deleteDate"></strong> 학습 기록이 삭제됩니다.</p>
+                <p class="text-muted mb-0">정말로 삭제하시겠습니까?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-2"></i>삭제
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 삭제 버튼 이벤트 리스너
+    const deleteButtons = document.querySelectorAll('.delete-btn');
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const recordId = this.getAttribute('data-record-id');
+            const childName = this.getAttribute('data-child-name');
+            const date = this.getAttribute('data-date');
+            
+            document.getElementById('deleteChildName').textContent = childName;
+            document.getElementById('deleteDate').textContent = date;
+            document.getElementById('deleteForm').action = `/scores/${recordId}/delete`;
+            
+            const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+            modal.show();
+        });
+    });
+});
+</script>
+{% endblock %} 

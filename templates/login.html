@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로그인 - 지역아동센터 학습관리</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <!-- 커스텀 CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- 플래시 메시지 -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="position-fixed top-0 start-50 translate-middle-x" style="z-index: 1050; margin-top: 20px;">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- 로그인 컨테이너 -->
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-brand">
+                <i class="bi bi-house-heart-fill"></i>
+                <h2>지역아동센터</h2>
+                <p>학습관리 시스템</p>
+                    </div>
+
+                    <form method="POST">
+                <div class="form-group">
+                            <label for="username" class="form-label">아이디</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-person"></i></span>
+                        <input type="text" class="form-control" id="username" name="username" placeholder="아이디를 입력하세요" required>
+                            </div>
+                        </div>
+
+                <div class="form-group">
+                            <label for="password" class="form-label">비밀번호</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                        <input type="password" class="form-control" id="password" name="password" placeholder="비밀번호를 입력하세요" required>
+                            </div>
+                        </div>
+
+                <button type="submit" class="btn btn-primary w-100 mb-4">
+                            <i class="bi bi-box-arrow-in-right me-2"></i>로그인
+                        </button>
+                    </form>
+
+                    <div class="mt-4">
+                <div class="text-center mb-3">
+                    <small class="text-muted">개발 환경 테스트 계정</small>
+                </div>
+                
+                <div class="accordion" id="testAccountsAccordion">
+                    <div class="accordion-item border-0">
+                        <h2 class="accordion-header">
+                            <button class="btn btn-outline-primary btn-sm w-100" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAccounts">
+                                <i class="bi bi-info-circle me-2"></i>테스트 계정 보기
+                            </button>
+                        </h2>
+                        <div id="collapseAccounts" class="accordion-collapse collapse" data-bs-parent="#testAccountsAccordion">
+                            <div class="accordion-body p-3">
+                                <div class="row g-2">
+                                    <div class="col-12">
+                                        <div class="border rounded p-2 bg-light small">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong class="text-primary">센터장</strong>
+                                                    <br>
+                                                    <code class="text-muted small">center_head / center123!</code>
+                                                </div>
+                                                <button class="btn btn-outline-primary btn-sm" onclick="fillLogin('center_head', 'center123!')">
+                                                    <i class="bi bi-arrow-right"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-12">
+                                        <div class="border rounded p-2 bg-light small">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong class="text-success">돌봄선생님</strong>
+                                                    <br>
+                                                    <code class="text-muted small">care_teacher / care123!</code>
+                                                </div>
+                                                <button class="btn btn-outline-success btn-sm" onclick="fillLogin('care_teacher', 'care123!')">
+                                                    <i class="bi bi-arrow-right"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-12">
+                                        <div class="border rounded p-2 bg-light small">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong class="text-info">사회복무요원1</strong>
+                                                    <br>
+                                                    <code class="text-muted small">social_worker1 / social123!</code>
+                                                </div>
+                                                <button class="btn btn-outline-info btn-sm" onclick="fillLogin('social_worker1', 'social123!')">
+                                                    <i class="bi bi-arrow-right"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-12">
+                                        <div class="border rounded p-2 bg-light small">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong class="text-warning">사회복무요원2</strong>
+                                                    <br>
+                                                    <code class="text-muted small">social_worker2 / social456!</code>
+                                                </div>
+                                                <button class="btn btn-outline-warning btn-sm" onclick="fillLogin('social_worker2', 'social456!')">
+                                                    <i class="bi bi-arrow-right"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-12">
+                                        <div class="border rounded p-2 bg-light small">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong class="text-secondary">보조교사</strong>
+                                                    <br>
+                                                    <code class="text-muted small">assistant / assist123!</code>
+                                                </div>
+                                                <button class="btn btn-outline-secondary btn-sm" onclick="fillLogin('assistant', 'assist123!')">
+                                                    <i class="bi bi-arrow-right"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-center mt-4">
+                <small class="text-muted">
+                    <i class="bi bi-shield-check me-1"></i>
+                    안전한 학습 데이터 관리 시스템
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+    function fillLogin(username, password) {
+        document.getElementById('username').value = username;
+        document.getElementById('password').value = password;
+        
+        // 시각적 피드백
+        const usernameField = document.getElementById('username');
+        const passwordField = document.getElementById('password');
+        
+        usernameField.classList.add('is-valid');
+        passwordField.classList.add('is-valid');
+        
+        setTimeout(() => {
+            usernameField.classList.remove('is-valid');
+            passwordField.classList.remove('is-valid');
+        }, 1500);
+    }
+
+    // 엔터키로 로그인
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.querySelector('form');
+        const inputs = form.querySelectorAll('input');
+        
+        inputs.forEach(input => {
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    form.submit();
+                }
+            });
+        });
+    });
+    </script>
+</body>
+</html> 

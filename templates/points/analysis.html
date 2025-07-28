@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block title %}포인트 분석{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-chart-line"></i> 포인트 분석</h2>
+        <div>
+            <a href="{{ url_for('points_list') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-list"></i> 포인트 목록
+            </a>
+            <a href="{{ url_for('points_visualization') }}" class="btn btn-outline-success">
+                <i class="bi bi-graph-up"></i> 포인트 시각화
+            </a>
+        </div>
+    </div>
+
+    {% if child %}
+    <!-- 특정 아동 분석 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4><i class="fas fa-chart-line"></i> {{ child.name }} 포인트 분석</h4>
+                    <a href="{{ url_for('points_analysis') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> 다른 아동 선택
+                    </a>
+                </div>
+                <div class="card-body">
+                    <!-- 아동 정보 -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h6 class="text-muted">총 포인트</h6>
+                                <h2 class="text-primary">{{ total_points }}</h2>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h6 class="text-muted">기록 횟수</h6>
+                                <h2 class="text-success">{{ child_points|length }}</h2>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h6 class="text-muted">학년</h6>
+                                <h2 class="text-info">{{ child.grade }}학년</h2>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h6 class="text-muted">평균 포인트</h6>
+                                <h2 class="text-warning">{{ (total_points / child_points|length) | round(0) if child_points else 0 }}</h2>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 포인트 기록 -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5><i class="fas fa-history"></i> 최근 포인트 기록</h5>
+                            {% if child_points %}
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>날짜</th>
+                                            <th>국어</th>
+                                            <th>수학</th>
+                                            <th>쎈수학</th>
+                                            <th>독서</th>
+                                            <th>총점</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for record in child_points[:10] %}
+                                        <tr>
+                                            <td>{{ record.date.strftime('%m/%d') }}</td>
+                                            <td>
+                                                {% if record.korean_points == 200 %}
+                                                    <span class="badge bg-success">200</span>
+                                                {% elif record.korean_points == 100 %}
+                                                    <span class="badge bg-warning">100</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">0</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if record.math_points == 200 %}
+                                                    <span class="badge bg-success">200</span>
+                                                {% elif record.math_points == 100 %}
+                                                    <span class="badge bg-warning">100</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">0</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if record.ssen_points == 200 %}
+                                                    <span class="badge bg-success">200</span>
+                                                {% elif record.ssen_points == 100 %}
+                                                    <span class="badge bg-warning">100</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">0</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if record.reading_points == 200 %}
+                                                    <span class="badge bg-success">200</span>
+                                                {% elif record.reading_points == 100 %}
+                                                    <span class="badge bg-warning">100</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">0</span>
+                                                {% endif %}
+                                            </td>
+                                            <td><strong>{{ record.total_points }}</strong></td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-center py-3">
+                                <p class="text-muted">아직 포인트 기록이 없습니다.</p>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-6">
+                            <h5><i class="fas fa-users"></i> {{ child.grade }}학년 내 비교</h5>
+                            {% if grade_comparison %}
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>순위</th>
+                                            <th>이름</th>
+                                            <th>총 포인트</th>
+                                            <th>기록 횟수</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for student in grade_comparison %}
+                                        {% set rank = loop.index %}
+                                        <tr {% if student.name == child.name %}class="table-primary"{% endif %}>
+                                            <td>
+                                                {% if rank == 1 %}
+                                                    <span class="badge bg-warning">🥇</span>
+                                                {% elif rank == 2 %}
+                                                    <span class="badge bg-secondary">🥈</span>
+                                                {% elif rank == 3 %}
+                                                    <span class="badge bg-bronze">🥉</span>
+                                                {% else %}
+                                                    {{ rank }}
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if student.name == child.name %}
+                                                    <strong>{{ student.name }}</strong>
+                                                {% else %}
+                                                    {{ student.name }}
+                                                {% endif %}
+                                            </td>
+                                            <td><strong>{{ student.total_points }}</strong></td>
+                                            <td>{{ student.record_count }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-center py-3">
+                                <p class="text-muted">같은 학년에 다른 아동이 없습니다.</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 전체 순위 -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-trophy"></i> 전체 학년 순위</h5>
+                </div>
+                <div class="card-body">
+                    {% if overall_ranking %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>순위</th>
+                                    <th>이름</th>
+                                    <th>학년</th>
+                                    <th>총 포인트</th>
+                                    <th>기록 횟수</th>
+                                    <th>평균</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for student in overall_ranking %}
+                                {% set rank = loop.index %}
+                                <tr {% if student.name == child.name %}class="table-primary"{% endif %}>
+                                    <td>
+                                        {% if rank == 1 %}
+                                            <span class="badge bg-warning">🥇</span>
+                                        {% elif rank == 2 %}
+                                            <span class="badge bg-secondary">🥈</span>
+                                        {% elif rank == 3 %}
+                                            <span class="badge bg-bronze">🥉</span>
+                                        {% else %}
+                                            {{ rank }}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if student.name == child.name %}
+                                            <strong>{{ student.name }}</strong>
+                                        {% else %}
+                                                                        <a href="{{ url_for('child_point_analysis', child_id=student.id) }}" class="text-decoration-none">
+                                {{ student.name }}
+                            </a>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ student.grade }}학년</td>
+                                    <td><strong>{{ student.total_points }}</strong></td>
+                                    <td>{{ student.record_count }}</td>
+                                    <td>{{ "%.1f"|format(student.total_points / student.record_count) if student.record_count > 0 else 0 }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-3">
+                        <p class="text-muted">아직 포인트 기록이 없습니다.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- 아동 선택 페이지 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4><i class="fas fa-chart-line"></i> 포인트 분석</h4>
+                    <p class="text-muted mb-0">분석할 아동을 선택하세요</p>
+                </div>
+                <div class="card-body">
+                    {% if children %}
+                    <div class="row">
+                        {% for child in children %}
+                        <div class="col-md-4 col-lg-3 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center mx-auto mb-3"
+                                         style="width: 60px; height: 60px; font-weight: 600; font-size: 1.5rem;">
+                                        {{ child.name[0] }}
+                                    </div>
+                                    <h6 class="card-title">{{ child.name }}</h6>
+                                    <p class="text-muted">{{ child.grade }}학년</p>
+                                    <a href="{{ url_for('points_analysis', child_id=child.id) }}" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-chart-line"></i> 분석하기
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">분석할 아동이 없습니다.</h5>
+                        <p class="text-muted">아동을 등록하고 포인트를 입력해보세요!</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.bg-bronze {
+    background-color: #cd7f32 !important;
+}
+</style>
+{% endblock %} 
