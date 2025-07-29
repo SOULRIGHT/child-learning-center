@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}UI/UX 설정 - 설정{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 페이지 헤더 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold text-dark mb-1">UI/UX 설정</h4>
+            <p class="text-muted mb-0">테마 및 인터페이스 설정을 관리합니다.</p>
+        </div>
+        <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>설정으로 돌아가기
+        </a>
+    </div>
+
+    <!-- 테마 설정 -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="bi bi-palette me-2"></i>테마 설정
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">테마 선택</h6>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="radio" name="theme" id="lightTheme" checked>
+                        <label class="form-check-label" for="lightTheme">
+                            <i class="bi bi-sun me-2"></i>라이트 테마 (기본)
+                        </label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="radio" name="theme" id="darkTheme">
+                        <label class="form-check-label" for="darkTheme">
+                            <i class="bi bi-moon me-2"></i>다크 테마
+                        </label>
+                    </div>
+                    <button class="btn btn-primary">
+                        <i class="bi bi-check-circle me-2"></i>테마 적용
+                    </button>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">미리보기</h6>
+                    <div class="border rounded p-3 bg-light">
+                        <div class="d-flex align-items-center mb-2">
+                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2"
+                                 style="width: 30px; height: 30px; font-weight: 600;">
+                                김
+                            </div>
+                            <span class="fw-bold">김철수</span>
+                            <span class="badge bg-info ms-2">3학년</span>
+                        </div>
+                        <small class="text-muted">라이트 테마 미리보기</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 인터페이스 설정 -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="bi bi-gear me-2"></i>인터페이스 설정
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">테이블 설정</h6>
+                    <div class="mb-3">
+                        <label class="form-label">페이지당 표시 개수</label>
+                        <select class="form-select">
+                            <option value="10">10개</option>
+                            <option value="20" selected>20개</option>
+                            <option value="50">50개</option>
+                        </select>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="showSearchBar" checked>
+                        <label class="form-check-label" for="showSearchBar">
+                            검색바 표시
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">대시보드 설정</h6>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="showNotifications" checked>
+                        <label class="form-check-label" for="showNotifications">
+                            알림 표시
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="showQuickActions" checked>
+                        <label class="form-check-label" for="showQuickActions">
+                            빠른 작업 버튼
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="showStatistics" checked>
+                        <label class="form-check-label" for="showStatistics">
+                            통계 요약
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-success">
+                <i class="bi bi-check-circle me-2"></i>설정 저장
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %} 

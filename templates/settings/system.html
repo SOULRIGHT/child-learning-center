@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}시스템 정보 - 설정{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 페이지 헤더 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold text-dark mb-1">시스템 정보</h4>
+            <p class="text-muted mb-0">시스템 상태 및 정보를 확인합니다.</p>
+        </div>
+        <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>설정으로 돌아가기
+        </a>
+    </div>
+
+    <!-- 시스템 상태 -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="bi bi-activity me-2"></i>시스템 상태
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">서비스 상태</h6>
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle me-2"></i>
+                        <strong>정상 운영 중</strong>
+                    </div>
+                    <div class="mb-3">
+                        <strong>데이터베이스:</strong> 
+                        <span class="badge bg-success">연결됨</span>
+                    </div>
+                    <div class="mb-3">
+                        <strong>웹 서버:</strong> 
+                        <span class="badge bg-success">실행 중</span>
+                    </div>
+                    <div class="mb-3">
+                        <strong>마지막 업데이트:</strong> 
+                        <span class="text-muted">2025-07-30 00:15:30</span>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">성능 정보</h6>
+                    <div class="mb-3">
+                        <strong>메모리 사용량:</strong> 
+                        <div class="progress mt-1">
+                            <div class="progress-bar" style="width: 45%">45%</div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <strong>디스크 사용량:</strong> 
+                        <div class="progress mt-1">
+                            <div class="progress-bar bg-warning" style="width: 78%">78%</div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <strong>CPU 사용량:</strong> 
+                        <div class="progress mt-1">
+                            <div class="progress-bar bg-info" style="width: 23%">23%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 시스템 정보 -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="bi bi-info-circle me-2"></i>시스템 정보
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">애플리케이션 정보</h6>
+                    <table class="table table-sm">
+                        <tr>
+                            <td><strong>버전:</strong></td>
+                            <td>1.0.0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Flask 버전:</strong></td>
+                            <td>2.3.3</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Python 버전:</strong></td>
+                            <td>3.11.0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>데이터베이스:</strong></td>
+                            <td>SQLite 3.42.0</td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">데이터 통계</h6>
+                    <table class="table table-sm">
+                        <tr>
+                            <td><strong>등록된 아동:</strong></td>
+                            <td>4명</td>
+                        </tr>
+                        <tr>
+                            <td><strong>총 포인트 기록:</strong></td>
+                            <td>1,234개</td>
+                        </tr>
+                        <tr>
+                            <td><strong>등록된 사용자:</strong></td>
+                            <td>5명</td>
+                        </tr>
+                        <tr>
+                            <td><strong>시스템 시작:</strong></td>
+                            <td>2025-07-30 00:00:00</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 로그 확인 -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="bi bi-file-text me-2"></i>시스템 로그
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">로그 레벨</label>
+                <select class="form-select">
+                    <option value="error">오류만</option>
+                    <option value="warning">경고 이상</option>
+                    <option value="info" selected>정보 이상</option>
+                    <option value="debug">모든 로그</option>
+                </select>
+            </div>
+            <div class="border rounded p-3 bg-light" style="max-height: 200px; overflow-y: auto;">
+                <small class="text-muted">
+                    [2025-07-30 00:15:30] INFO: 서버가 정상적으로 시작되었습니다.<br>
+                    [2025-07-30 00:15:25] INFO: 데이터베이스 연결 성공<br>
+                    [2025-07-30 00:15:20] INFO: 설정 파일 로드 완료<br>
+                    [2025-07-30 00:15:15] INFO: 시스템 초기화 시작
+                </small>
+            </div>
+            <button class="btn btn-outline-primary mt-2">
+                <i class="bi bi-download me-2"></i>로그 다운로드
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %} 

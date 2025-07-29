@@ -11,9 +11,6 @@
         <p class="text-muted mb-0">전체 {{ children.total }}명의 아동이 등록되어 있습니다.</p>
     </div>
     <div class="d-flex gap-2">
-        <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#helpModal">
-            <i class="bi bi-question-circle me-2"></i>도움말
-        </button>
         <a href="{{ url_for('add_child') }}" class="btn btn-primary">
             <i class="bi bi-plus-circle me-2"></i>새 아동 등록
         </a>
@@ -29,7 +26,7 @@
                 <div class="input-group">
                     <span class="input-group-text"><i class="bi bi-search"></i></span>
                     <input type="text" class="form-control" id="search" name="search" 
-                           value="{{ search }}" placeholder="아동 이름을 입력하세요">
+                           value="{{ search }}" placeholder="    아동 이름을 입력하세요">
                 </div>
             </div>
             <div class="col-md-3">
@@ -55,6 +52,26 @@
     </div>
 </div>
 
+<!-- 검색창 placeholder 기능 -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('search');
+    const originalPlaceholder = searchInput.placeholder;
+    
+    searchInput.addEventListener('focus', function() {
+        if (this.value === '') {
+            this.placeholder = '';
+        }
+    });
+    
+    searchInput.addEventListener('blur', function() {
+        if (this.value === '') {
+            this.placeholder = originalPlaceholder;
+        }
+    });
+});
+</script>
+
 <!-- 아동 목록 -->
 {% if children.items %}
 <div class="card">
@@ -70,12 +87,11 @@
                 <thead class="table-light">
                     <tr>
                         <th width="5%">#</th>
-                        <th width="20%">이름</th>
-                        <th width="10%">학년</th>
-                        <th width="15%">등록일</th>
+                        <th width="30%">이름</th>
+                        <th width="15%">학년</th>
+                        <th width="20%">등록일</th>
                         <th width="15%">최근 활동</th>
-                        <th width="10%">통계</th>
-                        <th width="25%">관리</th>
+                        <th width="15%" class="text-center">관리</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -114,14 +130,7 @@
                                 </small>
                             {% endif %}
                         </td>
-                        <td class="align-middle text-center">
-                            {% if child.include_in_stats %}
-                                <span class="badge bg-success">포함</span>
-                            {% else %}
-                                <span class="badge bg-secondary">제외</span>
-                            {% endif %}
-                        </td>
-                        <td class="align-middle">
+                        <td class="align-middle text-center" style="padding-right: 30px;">
                             <div class="btn-group" role="group">
                                 <a href="{{ url_for('child_detail', child_id=child.id) }}" 
                                    class="btn btn-sm btn-outline-primary" title="상세보기">
@@ -229,6 +238,98 @@
 </div>
 {% endif %}
 
+<!-- 시스템 가이드 섹션 -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-info-circle me-2"></i>① 시스템 가이드
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h6 class="fw-bold text-primary mb-3">주요 기능</h6>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="bi bi-check-circle text-success me-2"></i>
+                        <span>아동 관리 및 등록</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="bi bi-check-circle text-success me-2"></i>
+                        <span>포인트 시스템 (국어, 수학, 쎈, 독서)</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="bi bi-check-circle text-success me-2"></i>
+                        <span>포인트 기반 분석 및 시각화</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="bi bi-check-circle text-success me-2"></i>
+                        <span>모바일 반응형 지원</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <h6 class="fw-bold text-primary mb-3">관리 버튼 설명</h6>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="bi bi-eye text-primary me-2"></i>
+                        <span><strong>상세보기:</strong> 아동의 상세 정보 확인</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="bi bi-star text-warning me-2"></i>
+                        <span><strong>포인트 입력:</strong> 일일 포인트 입력</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="bi bi-pencil text-success me-2"></i>
+                        <span><strong>수정:</strong> 아동 정보 수정</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="bi bi-trash text-danger me-2"></i>
+                        <span><strong>삭제:</strong> 아동 삭제 (주의!)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <hr class="my-4">
+        
+        <div class="row">
+            <div class="col-md-6">
+                <h6 class="fw-bold text-primary mb-3">사용자 권한</h6>
+                <div class="mb-3">
+                    <span><strong>센터장:</strong> 전체 데이터 조회 및 관리, 사용자 관리</span>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="bi bi-check-circle text-success me-2"></i>
+                        <span>보안이 적용된 안전한 데이터 관리</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <h6 class="fw-bold text-primary mb-3">사용 팁</h6>
+                <ul class="text-muted" style="font-size: 15px;">
+                    <li>마우스를 버튼 위에 올리면 툴팁으로 기능 설명을 확인할 수 있습니다.</li>
+                    <li>포인트 입력은 매일 한 번씩 정기적으로 입력하는 것을 권장합니다.</li>
+                    <li>아동 삭제 시 모든 학습 기록이 함께 삭제되므로 신중하게 진행하세요.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 삭제 확인 모달 -->
 <div class="modal fade" id="deleteModal" tabindex="-1">
     <div class="modal-dialog">
@@ -252,91 +353,6 @@
                         <i class="bi bi-trash me-2"></i>삭제
                     </button>
                 </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- 도움말 모달 -->
-<div class="modal fade" id="helpModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="bi bi-question-circle me-2"></i>아동 관리 도움말
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <h6 class="fw-bold text-primary mb-3">
-                            <i class="bi bi-eye me-2"></i>관리 버튼 설명
-                        </h6>
-                        <div class="mb-3">
-                            <div class="d-flex align-items-center mb-2">
-                                <button class="btn btn-sm btn-outline-primary me-3" disabled>
-                                    <i class="bi bi-eye"></i>
-                                </button>
-                                <span class="fw-bold">상세보기</span>
-                            </div>
-                            <p class="text-muted small mb-0">아동의 상세 정보와 학습 기록을 확인합니다.</p>
-                        </div>
-                        <div class="mb-3">
-                            <div class="d-flex align-items-center mb-2">
-                                <button class="btn btn-sm btn-outline-warning me-3" disabled>
-                                    <i class="bi bi-star"></i>
-                                </button>
-                                <span class="fw-bold">포인트 입력</span>
-                            </div>
-                            <p class="text-muted small mb-0">해당 아동의 일일 포인트를 입력합니다. (국어, 수학, 쎈, 독서)</p>
-                        </div>
-                        <div class="mb-3">
-                            <div class="d-flex align-items-center mb-2">
-                                <button class="btn btn-sm btn-outline-success me-3" disabled>
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-                                <span class="fw-bold">수정</span>
-                            </div>
-                            <p class="text-muted small mb-0">아동의 이름과 학년 정보를 수정합니다.</p>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <div class="d-flex align-items-center mb-2">
-                                <button class="btn btn-sm btn-outline-info me-3" disabled>
-                                    <i class="bi bi-graph-up"></i>
-                                </button>
-                                <span class="fw-bold">통계 포함/제외</span>
-                            </div>
-                            <p class="text-muted small mb-0">해당 아동을 통계 분석에 포함하거나 제외합니다.</p>
-                        </div>
-                        <div class="mb-3">
-                            <div class="d-flex align-items-center mb-2">
-                                <button class="btn btn-sm btn-outline-danger me-3" disabled>
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                                <span class="fw-bold">삭제</span>
-                            </div>
-                            <p class="text-muted small mb-0">아동과 관련된 모든 데이터를 삭제합니다. (되돌릴 수 없음)</p>
-                        </div>
-                        
-                        <hr class="my-4">
-                        
-                        <h6 class="fw-bold text-success mb-3">
-                            <i class="bi bi-lightbulb me-2"></i>사용 팁
-                        </h6>
-                        <ul class="text-muted small">
-                            <li>마우스를 버튼 위에 올리면 툴팁으로 기능 설명을 확인할 수 있습니다.</li>
-                            <li>포인트 입력은 매일 한 번씩 정기적으로 입력하는 것을 권장합니다.</li>
-                            <li>통계에서 제외된 아동은 분석 및 리포트에 포함되지 않습니다.</li>
-                            <li>아동 삭제 시 모든 학습 기록이 함께 삭제되므로 신중하게 진행하세요.</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
             </div>
         </div>
     </div>

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}설정 - 아동 학습 관리 시스템{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 페이지 헤더 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold text-dark mb-1">시스템 설정</h4>
+            <p class="text-muted mb-0">시스템 전반적인 설정을 관리합니다.</p>
+        </div>
+    </div>
+
+    <!-- 설정 카드들 -->
+    <div class="row">
+        <!-- 사용자 관리 -->
+        <div class="col-lg-6 col-xl-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-people me-2"></i>사용자 관리
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">사용자 계정 및 권한을 관리합니다.</p>
+                    <div class="d-grid">
+                        <a href="{{ url_for('settings_users') }}" class="btn btn-primary">
+                            <i class="bi bi-gear me-2"></i>사용자 관리
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 포인트 시스템 설정 -->
+        <div class="col-lg-6 col-xl-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-star me-2"></i>포인트 시스템
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">포인트 기준 및 과목 설정을 관리합니다.</p>
+                    <div class="d-grid">
+                        <a href="{{ url_for('settings_points') }}" class="btn btn-success">
+                            <i class="bi bi-gear me-2"></i>포인트 설정
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 데이터 관리 -->
+        <div class="col-lg-6 col-xl-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-database me-2"></i>데이터 관리
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">데이터 백업, 복원 및 정리를 관리합니다.</p>
+                    <div class="d-grid">
+                        <a href="{{ url_for('settings_data') }}" class="btn btn-info">
+                            <i class="bi bi-gear me-2"></i>데이터 관리
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- UI/UX 설정 -->
+        <div class="col-lg-6 col-xl-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-palette me-2"></i>UI/UX 설정
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">테마 및 인터페이스 설정을 관리합니다.</p>
+                    <div class="d-grid">
+                        <a href="{{ url_for('settings_ui') }}" class="btn btn-warning">
+                            <i class="bi bi-gear me-2"></i>UI 설정
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 시스템 정보 -->
+        <div class="col-lg-6 col-xl-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-info-circle me-2"></i>시스템 정보
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">시스템 상태 및 정보를 확인합니다.</p>
+                    <div class="d-grid">
+                        <a href="{{ url_for('settings_system') }}" class="btn btn-secondary">
+                            <i class="bi bi-gear me-2"></i>시스템 정보
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

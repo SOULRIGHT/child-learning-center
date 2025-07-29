@@ -4,7 +4,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from sqlalchemy import func # Added for func.date
 
@@ -307,36 +307,79 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    today = datetime.utcnow().date()
-    today_records_count = LearningRecord.query.filter_by(date=today).count()
-    total_children = Child.query.count()
-    recent_records = db.session.query(LearningRecord, Child).join(Child).order_by(LearningRecord.created_at.desc()).limit(10).all()
-
-    # ====== [독서 통계 계산] ======
-    # 전체 독서 기록에서 완료율과 평균 점수 계산
-    all_reading_records = LearningRecord.query.filter(LearningRecord.reading_score.isnot(None)).all()
+    today = datetime.now(timezone.utc).date()
     
-    if all_reading_records:
-        total_reading_records = len(all_reading_records)
-        completed_reading = len([r for r in all_reading_records if r.reading_score == 200])
-        reading_completion_rate = round((completed_reading / total_reading_records) * 100, 1)
-        avg_reading_score = round(sum(r.reading_score for r in all_reading_records) / total_reading_records, 1)
+    # ====== [포인트 시스템 통계 계산] ======
+    # 오늘 포인트를 입력한 아동 수
+    today_points_children = db.session.query(DailyPoints.child_id).filter_by(date=today).distinct().count()
+    
+    # 전체 등록 아동 수
+    total_children = Child.query.count()
+    
+    # 이번 주 평균 포인트 계산
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+    
+    weekly_points = DailyPoints.query.filter(
+        DailyPoints.date >= week_start,
+        DailyPoints.date <= week_end
+    ).all()
+    
+    if weekly_points:
+        total_weekly_points = sum(record.total_points for record in weekly_points)
+        weekly_avg_points = round(total_weekly_points / len(weekly_points), 1)
     else:
-        reading_completion_rate = 0
-        avg_reading_score = 0
-
+        weekly_avg_points = 0
+    
+    # 이번 주 포인트 참여율 계산
+    weekly_participants = db.session.query(DailyPoints.child_id).filter(
+        DailyPoints.date >= week_start,
+        DailyPoints.date <= week_end
+    ).distinct().count()
+    
+    if total_children > 0:
+        participation_rate = round((weekly_participants / total_children) * 100, 1)
+    else:
+        participation_rate = 0
+    
+    # 최근 포인트 기록 (최근 10개)
+    recent_records = db.session.query(DailyPoints, Child).join(Child).order_by(DailyPoints.created_at.desc()).limit(10).all()
+    
+    # ====== [과목별 주간 평균 포인트 계산] ======
+    weekly_korean_avg = 0
+    weekly_math_avg = 0
+    weekly_reading_avg = 0
+    weekly_total_points = 0
+    
+    if weekly_points:
+        # 과목별 평균 계산
+        korean_points = [record.korean_points for record in weekly_points if record.korean_points > 0]
+        math_points = [record.math_points for record in weekly_points if record.math_points > 0]
+        reading_points = [record.reading_points for record in weekly_points if record.reading_points > 0]
+        
+        weekly_korean_avg = round(sum(korean_points) / len(korean_points), 1) if korean_points else 0
+        weekly_math_avg = round(sum(math_points) / len(math_points), 1) if math_points else 0
+        weekly_reading_avg = round(sum(reading_points) / len(reading_points), 1) if reading_points else 0
+        
+        # 주간 총 포인트
+        weekly_total_points = sum(record.total_points for record in weekly_points)
+    
     # ====== [알림 시스템 임시 비활성화] ======
     notifications = []
     # TODO: 나중에 알림 로직 재구현
     # 현재는 빈 리스트 반환
     
     return render_template('dashboard.html', 
-                         today_records=today_records_count,
+                         today_points_children=today_points_children,
                          total_children=total_children,
+                         weekly_avg_points=weekly_avg_points,
+                         participation_rate=participation_rate,
                          recent_records=recent_records,
                          notifications=notifications,
-                         reading_completion_rate=reading_completion_rate,
-                         avg_reading_score=avg_reading_score)
+                         weekly_korean_avg=weekly_korean_avg,
+                         weekly_math_avg=weekly_math_avg,
+                         weekly_reading_avg=weekly_reading_avg,
+                         weekly_total_points=weekly_total_points)
 
 # 아동 관리 라우트
 @app.route('/children')
@@ -1692,14 +1735,114 @@ def grade_point_comparison(grade):
                          chart_monthly_points=chart_monthly_points,
                          chart_avg_points=chart_avg_points)
 
+# 설정 라우트들
+@app.route('/settings')
+@login_required
+def settings():
+    """설정 메인 페이지"""
+    return render_template('settings/index.html')
+
+@app.route('/settings/users', methods=['GET', 'POST'])
+@login_required
+def settings_users():
+    """사용자 관리 페이지"""
+    if request.method == 'POST':
+        action = request.form.get('action')
+        
+        if action == 'update_info':
+            # 사용자 정보 업데이트
+            new_username = request.form.get('username')
+            new_name = request.form.get('name')
+            
+            # 중복 확인
+            existing_user = User.query.filter_by(username=new_username).first()
+            if existing_user and existing_user.id != current_user.id:
+                flash('이미 사용 중인 아이디입니다.', 'error')
+                return redirect(url_for('settings_users'))
+            
+            current_user.username = new_username
+            current_user.name = new_name
+            db.session.commit()
+            flash('사용자 정보가 업데이트되었습니다.', 'success')
+            
+        elif action == 'change_password':
+            # 비밀번호 변경
+            current_password = request.form.get('current_password')
+            new_password = request.form.get('new_password')
+            confirm_password = request.form.get('confirm_password')
+            
+            if not check_password_hash(current_user.password_hash, current_password):
+                flash('현재 비밀번호가 올바르지 않습니다.', 'error')
+                return redirect(url_for('settings_users'))
+            
+            if new_password != confirm_password:
+                flash('새 비밀번호가 일치하지 않습니다.', 'error')
+                return redirect(url_for('settings_users'))
+            
+            current_user.password_hash = generate_password_hash(new_password)
+            db.session.commit()
+            flash('비밀번호가 변경되었습니다.', 'success')
+            
+        elif action == 'add_user':
+            # 새 사용자 추가 (개발자만 가능)
+            if current_user.role != '개발자':
+                flash('새 사용자 추가 권한이 없습니다.', 'error')
+                return redirect(url_for('settings_users'))
+            
+            new_username = request.form.get('new_username')
+            new_name = request.form.get('new_name')
+            new_role = request.form.get('new_role')
+            new_password = request.form.get('new_password')
+            
+            # 중복 확인
+            if User.query.filter_by(username=new_username).first():
+                flash('이미 사용 중인 아이디입니다.', 'error')
+                return redirect(url_for('settings_users'))
+            
+            new_user = User(
+                username=new_username,
+                name=new_name,
+                role=new_role,
+                password_hash=generate_password_hash(new_password)
+            )
+            db.session.add(new_user)
+            db.session.commit()
+            flash(f'{new_name} 사용자가 추가되었습니다.', 'success')
+    
+    return render_template('settings/users.html')
+
+@app.route('/settings/points')
+@login_required
+def settings_points():
+    """포인트 시스템 설정 페이지"""
+    return render_template('settings/points.html')
+
+@app.route('/settings/data')
+@login_required
+def settings_data():
+    """데이터 관리 페이지"""
+    return render_template('settings/data.html')
+
+@app.route('/settings/ui')
+@login_required
+def settings_ui():
+    """UI/UX 설정 페이지"""
+    return render_template('settings/ui.html')
+
+@app.route('/settings/system')
+@login_required
+def settings_system():
+    """시스템 정보 페이지"""
+    return render_template('settings/system.html')
+
 
 if __name__ == '__main__':
     init_db()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
 else:
     # 배포된 환경에서도 데이터베이스 초기화
     with app.app_context():
         db.create_all()
         # 기본 사용자가 없으면 생성
         if not User.query.filter_by(username='center_head').first():
-            init_db() 
+            init_db()

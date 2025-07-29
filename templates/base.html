@@ -57,7 +57,7 @@
                 </div>
                 <div class="nav-item">
                     <a href="{{ url_for('points_analysis') }}" class="nav-link {% if request.endpoint and 'points_analysis' in request.endpoint %}active{% endif %}">
-                        <i class="bi bi-chart-line"></i>
+                        <i class="bi bi-bar-chart"></i>
                         포인트 분석
                     </a>
                 </div>
@@ -81,14 +81,16 @@
                     </a>
                 </div>
                 -->
+                
                 <div class="nav-item">
                     <a href="{{ url_for('reports_overview') }}" class="nav-link {% if request.endpoint and 'reports' in request.endpoint %}active{% endif %}">
                         <i class="bi bi-clipboard-data"></i>
                         리포트
                     </a>
                 </div>
+                <!-- 설정 -->
                 <div class="nav-item">
-                    <a href="#" class="nav-link" onclick="alert('곧 구현됩니다!')">
+                    <a href="{{ url_for('settings') }}" class="nav-link {% if request.endpoint and 'settings' in request.endpoint %}active{% endif %}">
                         <i class="bi bi-gear"></i>
                         설정
                     </a>
