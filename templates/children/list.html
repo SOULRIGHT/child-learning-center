@@ -10,9 +10,14 @@
         <h4 class="fw-bold text-dark mb-1">아동 관리</h4>
         <p class="text-muted mb-0">전체 {{ children.total }}명의 아동이 등록되어 있습니다.</p>
     </div>
-    <a href="{{ url_for('add_child') }}" class="btn btn-primary">
-        <i class="bi bi-plus-circle me-2"></i>새 아동 등록
-    </a>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#helpModal">
+            <i class="bi bi-question-circle me-2"></i>도움말
+        </button>
+        <a href="{{ url_for('add_child') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-2"></i>새 아동 등록
+        </a>
+    </div>
 </div>
 
 <!-- 검색 및 필터 -->
@@ -122,14 +127,10 @@
                                    class="btn btn-sm btn-outline-primary" title="상세보기">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                                            <a href="{{ url_for('points_input', child_id=child.id) }}" 
-                               class="btn btn-sm btn-outline-warning me-1" title="포인트 입력">
-                                <i class="bi bi-star"></i>
-                            </a>
-                            <a href="{{ url_for('child_point_analysis', child_id=child.id) }}" 
-                               class="btn btn-sm btn-outline-info" title="포인트 분석">
-                                <i class="bi bi-graph-up"></i>
-                            </a>
+                                <a href="{{ url_for('points_input', child_id=child.id) }}" 
+                                   class="btn btn-sm btn-outline-warning me-1" title="포인트 입력">
+                                    <i class="bi bi-star"></i>
+                                </a>
                                 <a href="{{ url_for('edit_child', child_id=child.id) }}" 
                                    class="btn btn-sm btn-outline-success" title="수정">
                                     <i class="bi bi-pencil"></i>
@@ -251,6 +252,91 @@
                         <i class="bi bi-trash me-2"></i>삭제
                     </button>
                 </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 도움말 모달 -->
+<div class="modal fade" id="helpModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-question-circle me-2"></i>아동 관리 도움말
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-primary mb-3">
+                            <i class="bi bi-eye me-2"></i>관리 버튼 설명
+                        </h6>
+                        <div class="mb-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <button class="btn btn-sm btn-outline-primary me-3" disabled>
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <span class="fw-bold">상세보기</span>
+                            </div>
+                            <p class="text-muted small mb-0">아동의 상세 정보와 학습 기록을 확인합니다.</p>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <button class="btn btn-sm btn-outline-warning me-3" disabled>
+                                    <i class="bi bi-star"></i>
+                                </button>
+                                <span class="fw-bold">포인트 입력</span>
+                            </div>
+                            <p class="text-muted small mb-0">해당 아동의 일일 포인트를 입력합니다. (국어, 수학, 쎈, 독서)</p>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <button class="btn btn-sm btn-outline-success me-3" disabled>
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <span class="fw-bold">수정</span>
+                            </div>
+                            <p class="text-muted small mb-0">아동의 이름과 학년 정보를 수정합니다.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <button class="btn btn-sm btn-outline-info me-3" disabled>
+                                    <i class="bi bi-graph-up"></i>
+                                </button>
+                                <span class="fw-bold">통계 포함/제외</span>
+                            </div>
+                            <p class="text-muted small mb-0">해당 아동을 통계 분석에 포함하거나 제외합니다.</p>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <button class="btn btn-sm btn-outline-danger me-3" disabled>
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                <span class="fw-bold">삭제</span>
+                            </div>
+                            <p class="text-muted small mb-0">아동과 관련된 모든 데이터를 삭제합니다. (되돌릴 수 없음)</p>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <h6 class="fw-bold text-success mb-3">
+                            <i class="bi bi-lightbulb me-2"></i>사용 팁
+                        </h6>
+                        <ul class="text-muted small">
+                            <li>마우스를 버튼 위에 올리면 툴팁으로 기능 설명을 확인할 수 있습니다.</li>
+                            <li>포인트 입력은 매일 한 번씩 정기적으로 입력하는 것을 권장합니다.</li>
+                            <li>통계에서 제외된 아동은 분석 및 리포트에 포함되지 않습니다.</li>
+                            <li>아동 삭제 시 모든 학습 기록이 함께 삭제되므로 신중하게 진행하세요.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
             </div>
         </div>
     </div>

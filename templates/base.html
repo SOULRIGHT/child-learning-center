@@ -41,12 +41,14 @@
                         아동 관리
                     </a>
                 </div>
+                <!-- 임시 비활성화: 기존 점수 시스템
                 <div class="nav-item">
                     <a href="{{ url_for('scores_list') }}" class="nav-link {% if request.endpoint and 'scores' in request.endpoint %}active{% endif %}">
                         <i class="bi bi-pencil-square"></i>
                         점수 입력
                     </a>
                 </div>
+                -->
                 <div class="nav-item">
                     <a href="{{ url_for('points_list') }}" class="nav-link {% if request.endpoint and 'points' in request.endpoint and 'analysis' not in request.endpoint %}active{% endif %}">
                         <i class="bi bi-star"></i>
@@ -71,12 +73,14 @@
                         독서 기록
                     </a>
                 </div>
+                <!-- 임시 비활성화: 기존 통계 분석
                 <div class="nav-item">
                     <a href="{{ url_for('statistics_overview') }}" class="nav-link {% if request.endpoint and 'statistics' in request.endpoint %}active{% endif %}">
                         <i class="bi bi-bar-chart"></i>
                         통계 분석
                     </a>
                 </div>
+                -->
                 <div class="nav-item">
                     <a href="{{ url_for('reports_overview') }}" class="nav-link {% if request.endpoint and 'reports' in request.endpoint %}active{% endif %}">
                         <i class="bi bi-clipboard-data"></i>
