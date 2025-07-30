@@ -4,20 +4,7 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="bi bi-star"></i> 포인트 기록</h2>
-        <div>
-            <a href="{{ url_for('points_analysis') }}" class="btn btn-outline-info me-2">
-                <i class="fas fa-chart-line"></i> 포인트 분석
-            </a>
-            <a href="{{ url_for('points_visualization') }}" class="btn btn-outline-success">
-                <i class="bi bi-graph-up"></i> 포인트 시각화
-            </a>
-            <a href="{{ url_for('children_list') }}" class="btn btn-primary">
-                <i class="fas fa-plus"></i> 포인트 입력하기
-            </a>
-        </div>
-    </div>
+    <!-- 상단 버튼/탭 영역 삭제 -->
     <div class="row">
         <div class="col-12">
             <div class="card">
@@ -98,23 +85,14 @@
                                     <td>
                                         <strong class="text-primary">{{ record.total_points }}</strong>
                                     </td>
-                                    <td>
-                                        <small class="text-muted">{{ record.creator.name }}</small>
-                                    </td>
+                                    <td>{{ record.creator.name if record.creator else '-' }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
                     {% else %}
-                    <div class="text-center py-5">
-                        <i class="fas fa-star fa-3x text-muted mb-3"></i>
-                        <h5 class="text-muted">아직 포인트 기록이 없습니다.</h5>
-                        <p class="text-muted">아동 목록에서 포인트를 입력해보세요!</p>
-                        <a href="{{ url_for('children_list') }}" class="btn btn-primary">
-                            <i class="fas fa-plus"></i> 포인트 입력하기
-                        </a>
-                    </div>
+                    <div class="alert alert-info">포인트 기록이 없습니다.</div>
                     {% endif %}
                 </div>
             </div>

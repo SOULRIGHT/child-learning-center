@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}프로필{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title mb-0">
+                        <i class="bi bi-person-circle me-2"></i>프로필
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>사용자 정보</h5>
+                            <table class="table table-borderless">
+                                <tr>
+                                    <td><strong>아이디:</strong></td>
+                                    <td>{{ current_user.username }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>이름:</strong></td>
+                                    <td>{{ current_user.name }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>역할:</strong></td>
+                                    <td>{{ current_user.role }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>가입일:</strong></td>
+                                    <td>{{ current_user.created_at.strftime('%Y년 %m월 %d일') }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>시스템 정보</h5>
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle me-2"></i>
+                                <strong>현재 상태:</strong> 정상
+                            </div>
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle me-2"></i>
+                                <strong>마지막 로그인:</strong> {{ current_user.created_at.strftime('%Y년 %m월 %d일 %H:%M') }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -128,6 +128,22 @@ def calculate_score(correct, total):
         return 0
     return (correct / total) * 100
 
+# 권한 확인 함수
+def check_permission(required_roles=None, excluded_roles=None):
+    """권한 확인 함수"""
+    if not current_user.is_authenticated:
+        return False
+    
+    # 제외된 역할 확인
+    if excluded_roles and current_user.role in excluded_roles:
+        return False
+    
+    # 필요한 역할 확인
+    if required_roles and current_user.role not in required_roles:
+        return False
+    
+    return True
+
 # 데이터베이스 초기화 함수
 def init_db():
     with app.app_context():
@@ -142,7 +158,8 @@ def init_db():
             {'username': 'care_teacher', 'name': '돌봄선생님', 'role': '돌봄선생님', 'password': 'care123!'},
             {'username': 'social_worker1', 'name': '사회복무요원1', 'role': '사회복무요원', 'password': 'social123!'},
             {'username': 'social_worker2', 'name': '사회복무요원2', 'role': '사회복무요원', 'password': 'social456!'},
-            {'username': 'assistant', 'name': '보조교사', 'role': '보조교사', 'password': 'assist123!'}
+            {'username': 'assistant', 'name': '보조교사', 'role': '보조교사', 'password': 'assist123!'},
+            {'username': 'test_user', 'name': '테스트사용자', 'role': '테스트사용자', 'password': 'test_kohi'}
         ]
         
         for user_data in default_users:
@@ -1046,6 +1063,10 @@ def statistics_charts():
 @login_required
 def reports_overview():
     """리포트 메인 페이지"""
+    # 테스트사용자는 접근 불가
+    if current_user.role == '테스트사용자':
+        flash('리포트 페이지에 접근할 권한이 없습니다.', 'error')
+        return redirect(url_for('dashboard'))
     from datetime import datetime, timedelta
     today = datetime.utcnow().date()
     return render_template('reports/overview.html', today=today, timedelta=timedelta)
@@ -1741,6 +1762,10 @@ def grade_point_comparison(grade):
 @login_required
 def settings():
     """설정 메인 페이지"""
+    # 테스트사용자는 접근 불가
+    if current_user.role == '테스트사용자':
+        flash('설정 페이지에 접근할 권한이 없습니다.', 'error')
+        return redirect(url_for('dashboard'))
     return render_template('settings/index.html')
 
 @app.route('/settings/users', methods=['GET', 'POST'])
@@ -1829,6 +1854,16 @@ def settings_data():
 def settings_ui():
     """UI/UX 설정 페이지"""
     return render_template('settings/ui.html')
+
+@app.route('/profile')
+@login_required
+def profile():
+    """프로필 페이지"""
+    # 테스트사용자는 접근 불가
+    if current_user.role == '테스트사용자':
+        flash('프로필 페이지에 접근할 권한이 없습니다.', 'error')
+        return redirect(url_for('dashboard'))
+    return render_template('profile.html')
 
 @app.route('/settings/system')
 @login_required
