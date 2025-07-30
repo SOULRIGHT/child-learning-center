@@ -137,6 +137,7 @@ def init_db():
         
         # 기본 사용자 계정 생성
         default_users = [
+            {'username': 'developer', 'name': '개발자', 'role': '개발자', 'password': 'dev123'},
             {'username': 'center_head', 'name': '센터장', 'role': '센터장', 'password': 'center123!'},
             {'username': 'care_teacher', 'name': '돌봄선생님', 'role': '돌봄선생님', 'password': 'care123!'},
             {'username': 'social_worker1', 'name': '사회복무요원1', 'role': '사회복무요원', 'password': 'social123!'},
