@@ -6,4 +6,12 @@ services:
     startCommand: gunicorn app:app
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0 
+        value: 3.11.0
+      - key: SECRET_KEY
+        value: f454244dd79d991bca7218b0bc7674d3520c77003ce609d7f08de49d9432188e
+      - key: DATABASE_URL
+        value: sqlite:///child_center.db
+      - key: FLASK_ENV
+        value: production
+      - key: FLASK_DEBUG
+        value: false 
