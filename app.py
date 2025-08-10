@@ -51,6 +51,9 @@ class Child(db.Model):
     grade = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # 누적 포인트 (전체 과목 합계)
+    cumulative_points = db.Column(db.Integer, default=0)
+    
     # 관계 설정
     learning_records = db.relationship('LearningRecord', backref='child', lazy=True, cascade='all, delete-orphan')
     notes = db.relationship('ChildNote', backref='child', lazy=True, cascade='all, delete-orphan')
@@ -1849,7 +1852,75 @@ def settings_points():
 @login_required
 def settings_data():
     """데이터 관리 페이지"""
-    return render_template('settings/data.html')
+    if request.method == 'POST':
+        action = request.form.get('action')
+        
+        if action == 'seed_data':
+            # 시드 데이터 실행
+            try:
+                from seed_data import main as seed_main
+                seed_main()
+                flash('데이터베이스 시드가 성공적으로 실행되었습니다.', 'success')
+            except Exception as e:
+                flash(f'시드 데이터 실행 중 오류가 발생했습니다: {e}', 'error')
+        
+        elif action == 'reset_data':
+            # 데이터 초기화 (개발자만)
+            if current_user.role != '개발자':
+                flash('데이터 초기화 권한이 없습니다.', 'error')
+                return redirect(url_for('settings_data'))
+            
+            try:
+                # 모든 데이터 삭제
+                DailyPoints.query.delete()
+                LearningRecord.query.delete()
+                Child.query.delete()
+                User.query.delete()
+                db.session.commit()
+                flash('모든 데이터가 초기화되었습니다.', 'success')
+            except Exception as e:
+                flash(f'데이터 초기화 중 오류가 발생했습니다: {e}', 'error')
+        
+        elif action == 'export_data':
+            # 데이터 내보내기 (개발자만)
+            if current_user.role != '개발자':
+                flash('데이터 내보내기 권한이 없습니다.', 'error')
+                return redirect(url_for('settings_data'))
+            
+            try:
+                # 간단한 데이터 요약 내보내기
+                children_count = Child.query.count()
+                users_count = User.query.count()
+                records_count = LearningRecord.query.count()
+                points_count = DailyPoints.query.count()
+                
+                export_data = {
+                    'children_count': children_count,
+                    'users_count': users_count,
+                    'records_count': records_count,
+                    'points_count': points_count,
+                    'export_date': datetime.now().isoformat()
+                }
+                
+                # JSON 파일로 다운로드
+                response = jsonify(export_data)
+                response.headers['Content-Disposition'] = 'attachment; filename=data_export.json'
+                return response
+                
+            except Exception as e:
+                flash(f'데이터 내보내기 중 오류가 발생했습니다: {e}', 'error')
+    
+    # 현재 데이터베이스 현황
+    children_count = Child.query.count()
+    users_count = User.query.count()
+    records_count = LearningRecord.query.count()
+    points_count = DailyPoints.query.count()
+    
+    return render_template('settings/data.html', 
+                         children_count=children_count,
+                         users_count=users_count,
+                         records_count=records_count,
+                         points_count=points_count)
 
 @app.route('/settings/ui')
 @login_required
@@ -1873,14 +1944,120 @@ def settings_system():
     """시스템 정보 페이지"""
     return render_template('settings/system.html')
 
+@app.route('/cumulative-points')
+@login_required
+def cumulative_points():
+    """누적 포인트 입력 및 관리 페이지"""
+    children = Child.query.order_by(Child.grade, Child.name).all()
+    return render_template('cumulative_points.html', children=children)
+
+@app.route('/cumulative-points/input', methods=['POST'])
+@login_required
+def input_cumulative_points():
+    """누적 포인트 입력 처리"""
+    try:
+        data = request.get_json()
+        child_id = data.get('child_id')
+        cumulative_points = data.get('cumulative_points')
+        
+        if not child_id or cumulative_points is None:
+            return jsonify({'success': False, 'message': '필수 정보가 누락되었습니다.'}), 400
+        
+        # 포인트 값 검증
+        try:
+            cumulative_points = int(cumulative_points)
+            if cumulative_points < 0:
+                return jsonify({'success': False, 'message': '포인트는 0 이상이어야 합니다.'}), 400
+        except ValueError:
+            return jsonify({'success': False, 'message': '올바른 숫자를 입력해주세요.'}), 400
+        
+        # 아동 정보 업데이트
+        child = Child.query.get(child_id)
+        if not child:
+            return jsonify({'success': False, 'message': '아동을 찾을 수 없습니다.'}), 404
+        
+        child.cumulative_points = cumulative_points
+        db.session.commit()
+        
+        return jsonify({
+            'success': True, 
+            'message': f'{child.name}의 누적 포인트가 {cumulative_points}점으로 설정되었습니다.',
+            'child_name': child.name,
+            'cumulative_points': cumulative_points
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'오류가 발생했습니다: {str(e)}'}), 500
+
+@app.route('/cumulative-points/bulk-input', methods=['POST'])
+@login_required
+def bulk_input_cumulative_points():
+    """일괄 누적 포인트 입력 처리"""
+    try:
+        data = request.get_json()
+        points_data = data.get('points_data', [])
+        
+        if not points_data:
+            return jsonify({'success': False, 'message': '입력할 데이터가 없습니다.'}), 400
+        
+        updated_count = 0
+        errors = []
+        
+        for item in points_data:
+            child_id = item.get('child_id')
+            cumulative_points = item.get('cumulative_points')
+            
+            if not child_id or cumulative_points is None:
+                errors.append(f'아동 ID {child_id}: 포인트 정보 누락')
+                continue
+            
+            try:
+                cumulative_points = int(cumulative_points)
+                if cumulative_points < 0:
+                    errors.append(f'아동 ID {child_id}: 포인트는 0 이상이어야 합니다.')
+                    continue
+            except ValueError:
+                errors.append(f'아동 ID {child_id}: 올바른 숫자가 아닙니다.')
+                continue
+            
+            child = Child.query.get(child_id)
+            if not child:
+                errors.append(f'아동 ID {child_id}: 아동을 찾을 수 없습니다.')
+                continue
+            
+            child.cumulative_points = cumulative_points
+            updated_count += 1
+        
+        if errors:
+            db.session.rollback()
+            return jsonify({
+                'success': False, 
+                'message': f'{len(errors)}건의 오류가 발생했습니다.',
+                'errors': errors
+            }), 400
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'{updated_count}명의 아동 누적 포인트가 성공적으로 업데이트되었습니다.',
+            'updated_count': updated_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'오류가 발생했습니다: {str(e)}'}), 500
+
 
 if __name__ == '__main__':
-    init_db()
+    # init_db() 제거 - 서버 재시작 시 데이터 초기화 방지
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
 else:
     # 배포된 환경에서도 데이터베이스 초기화
     with app.app_context():
         db.create_all()
-        # 기본 사용자가 없으면 생성
+        # 기본 사용자가 없으면 생성 (한 번만)
         if not User.query.filter_by(username='center_head').first():
-            init_db()
+            # init_db() 제거 - 실제 데이터 보호
+            pass
