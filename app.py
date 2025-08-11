@@ -151,6 +151,16 @@ def check_permission(required_roles=None, excluded_roles=None):
 
 # 데이터베이스 초기화 함수
 def init_db():
+    """⚠️ 주의: 이 함수는 개발/테스트 환경에서만 사용하세요!"""
+    print("경고: init_db() 함수가 호출되었습니다!")
+    print("현재 데이터베이스의 모든 데이터가 삭제됩니다!")
+    
+    # 사용자 확인 (안전장치)
+    confirm = input("정말로 모든 데이터를 삭제하시겠습니까? (yes/no): ")
+    if confirm.lower() != 'yes':
+        print("데이터 삭제가 취소되었습니다.")
+        return
+    
     with app.app_context():
         # 기존 테이블 삭제 후 재생성 (스키마 변경 반영)
         db.drop_all()
