@@ -40,54 +40,45 @@ def seed_users():
         print("ℹ️ 사용자 계정이 이미 존재합니다")
 
 def seed_sample_children():
-    """샘플 아동 데이터 생성 (실제 운영 시 이름만 수정)"""
+    """샘플 아동 데이터 생성 (환경변수에서 읽어옴)"""
     print("👶 샘플 아동 데이터 생성 중...")
     
     # 기존 아동이 없을 때만 생성
     if Child.query.count() == 0:
-        sample_children = [
-            # 1학년
-            {'name': '김철수', 'grade': 1, 'include_in_stats': True},
-            {'name': '박영희', 'grade': 1, 'include_in_stats': True},
-            {'name': '이민수', 'grade': 1, 'include_in_stats': True},
-            {'name': '최지영', 'grade': 1, 'include_in_stats': True},
-            {'name': '정현우', 'grade': 1, 'include_in_stats': True},
+        # 환경변수에서 아동 데이터 읽기
+        import os
+        from dotenv import load_dotenv
+        
+        # 환경변수 로드
+        load_dotenv()
+        
+        # 학년별 아동 이름들을 환경변수에서 읽기
+        children_data = []
+        
+        for grade in range(1, 7):
+            env_key = f'CHILDREN_GRADE{grade}'
+            children_names = os.environ.get(env_key, '').split(',')
             
-            # 2학년
-            {'name': '강서진', 'grade': 2, 'include_in_stats': True},
-            {'name': '윤하은', 'grade': 2, 'include_in_stats': True},
-            {'name': '임준호', 'grade': 2, 'include_in_stats': True},
-            {'name': '한소희', 'grade': 2, 'include_in_stats': True},
-            {'name': '조민재', 'grade': 2, 'include_in_stats': True},
-            
-            # 3학년
-            {'name': '신동현', 'grade': 3, 'include_in_stats': True},
-            {'name': '오유진', 'grade': 3, 'include_in_stats': True},
-            {'name': '권태현', 'grade': 3, 'include_in_stats': True},
-            {'name': '배수빈', 'grade': 3, 'include_in_stats': True},
-            {'name': '남준영', 'grade': 3, 'include_in_stats': True},
-            
-            # 4학년
-            {'name': '김지원', 'grade': 4, 'include_in_stats': True},
-            {'name': '이승우', 'grade': 4, 'include_in_stats': True},
-            {'name': '박소연', 'grade': 4, 'include_in_stats': True},
-            {'name': '최민석', 'grade': 4, 'include_in_stats': True},
-            {'name': '정하나', 'grade': 4, 'include_in_stats': True},
-            
-            # 5학년
-            {'name': '강현준', 'grade': 5, 'include_in_stats': True},
-            {'name': '윤지민', 'grade': 5, 'include_in_stats': True},
-            {'name': '임서연', 'grade': 5, 'include_in_stats': True},
-            {'name': '한도현', 'grade': 5, 'include_in_stats': True},
-            {'name': '조유진', 'grade': 5, 'include_in_stats': True},
-            
-            # 6학년
-            {'name': '신태현', 'grade': 6, 'include_in_stats': True},
-            {'name': '오준호', 'grade': 6, 'include_in_stats': True},
-            {'name': '권소희', 'grade': 6, 'include_in_stats': True},
-            {'name': '배민재', 'grade': 6, 'include_in_stats': True},
-            {'name': '남수빈', 'grade': 6, 'include_in_stats': True},
-        ]
+            for name in children_names:
+                name = name.strip()
+                if name:  # 빈 문자열이 아닌 경우만
+                    children_data.append({
+                        'name': name,
+                        'grade': grade,
+                        'include_in_stats': True
+                    })
+        
+        if not children_data:
+            print("⚠️ 환경변수에서 아동 데이터를 읽을 수 없습니다. 기본 데이터를 사용합니다.")
+            # 기본 데이터 (fallback)
+            children_data = [
+                {'name': '김철수', 'grade': 1, 'include_in_stats': True},
+                {'name': '박영희', 'grade': 2, 'include_in_stats': True},
+                {'name': '이민수', 'grade': 3, 'include_in_stats': True},
+                {'name': '최지영', 'grade': 4, 'include_in_stats': True},
+            ]
+        
+        sample_children = children_data
         
         children = []
         for child_data in sample_children:

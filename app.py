@@ -34,6 +34,18 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = '로그인이 필요합니다.'
 
+# 컨텍스트 프로세서: 모든 템플릿에서 센터 정보 사용 가능
+@app.context_processor
+def inject_center_info():
+    """모든 템플릿에서 센터 정보를 사용할 수 있도록 컨텍스트에 추가"""
+    return {
+        'center_name': os.environ.get('CENTER_NAME', '지역아동센터'),
+        'center_description': os.environ.get('CENTER_DESCRIPTION', '학습관리 시스템'),
+        'center_location': os.environ.get('CENTER_LOCATION', '서울시'),
+        'theme_color': os.environ.get('THEME_COLOR', '#ff6b35'),
+        'branch_indicator_enabled': os.environ.get('BRANCH_INDICATOR_ENABLED', 'true').lower() == 'true'
+    }
+
 # 데이터베이스 모델
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -166,16 +178,37 @@ def init_db():
         db.drop_all()
         db.create_all()
         
-        # 기본 사용자 계정 생성
-        default_users = [
-            {'username': 'developer', 'name': '개발자', 'role': '개발자', 'password': 'dev123'},
-            {'username': 'center_head', 'name': '센터장', 'role': '센터장', 'password': 'center123!'},
-            {'username': 'care_teacher', 'name': '돌봄선생님', 'role': '돌봄선생님', 'password': 'care123!'},
-            {'username': 'social_worker1', 'name': '사회복무요원1', 'role': '사회복무요원', 'password': 'social123!'},
-            {'username': 'social_worker2', 'name': '사회복무요원2', 'role': '사회복무요원', 'password': 'social456!'},
-            {'username': 'assistant', 'name': '보조교사', 'role': '보조교사', 'password': 'assist123!'},
-            {'username': 'test_user', 'name': '테스트사용자', 'role': '테스트사용자', 'password': 'test_kohi'}
-        ]
+        # 기본 사용자 계정 생성 (환경변수에서 읽어옴)
+        import os
+        from dotenv import load_dotenv
+        
+        # 환경변수 로드
+        load_dotenv()
+        
+        # 환경변수에서 사용자 정보 읽기
+        usernames = os.environ.get('DEFAULT_USERS', 'developer,center_head,care_teacher').split(',')
+        passwords = os.environ.get('DEFAULT_PASSWORDS', 'dev123,center123!,care123!').split(',')
+        roles = os.environ.get('DEFAULT_USER_ROLES', '개발자,센터장,돌봄선생님').split(',')
+        
+        # 사용자 데이터 생성
+        default_users = []
+        for i, username in enumerate(usernames):
+            if i < len(passwords) and i < len(roles):
+                default_users.append({
+                    'username': username.strip(),
+                    'name': roles[i].strip(),
+                    'role': roles[i].strip(),
+                    'password': passwords[i].strip()
+                })
+        
+        # 환경변수에서 읽을 수 없는 경우 기본값 사용
+        if not default_users:
+            print("⚠️ 환경변수에서 사용자 데이터를 읽을 수 없습니다. 기본 데이터를 사용합니다.")
+            default_users = [
+                {'username': 'developer', 'name': '개발자', 'role': '개발자', 'password': 'dev123'},
+                {'username': 'center_head', 'name': '센터장', 'role': '센터장', 'password': 'center123!'},
+                {'username': 'care_teacher', 'name': '돌봄선생님', 'role': '돌봄선생님', 'password': 'care123!'}
+            ]
         
         for user_data in default_users:
                 password_hash = generate_password_hash(user_data['password'])
@@ -187,13 +220,39 @@ def init_db():
                 )
                 db.session.add(user)
         
-        # 테스트용 아동 데이터 추가
-        test_children = [
-            Child(name='김철수', grade=3, include_in_stats=True),
-            Child(name='박영희', grade=3, include_in_stats=True),
-            Child(name='이민수', grade=4, include_in_stats=True),
-            Child(name='최지영', grade=4, include_in_stats=False),  # 통계 제외 예시
-        ]
+        # 테스트용 아동 데이터 추가 (환경변수에서 읽어옴)
+        test_children_data = []
+        
+        # 환경변수에서 테스트 아동 데이터 읽기
+        test_children_count = int(os.environ.get('TEST_CHILDREN_COUNT', 4))
+        
+        # 1학년부터 시작해서 테스트 아동 생성
+        for i in range(test_children_count):
+            grade = (i % 4) + 1  # 1-4학년 순환
+            env_key = f'CHILDREN_GRADE{grade}'
+            children_names = os.environ.get(env_key, '').split(',')
+            
+            if children_names and len(children_names) > 0:
+                name = children_names[0].strip()  # 첫 번째 아동 사용
+                include_in_stats = (i < test_children_count - 1)  # 마지막 아동만 통계 제외
+                
+                test_children_data.append(Child(
+                    name=name,
+                    grade=grade,
+                    include_in_stats=include_in_stats
+                ))
+        
+        # 환경변수에서 읽을 수 없는 경우 기본값 사용
+        if not test_children_data:
+            print("⚠️ 환경변수에서 테스트 아동 데이터를 읽을 수 없습니다. 기본 데이터를 사용합니다.")
+            test_children_data = [
+                Child(name='김철수', grade=3, include_in_stats=True),
+                Child(name='박영희', grade=3, include_in_stats=True),
+                Child(name='이민수', grade=4, include_in_stats=True),
+                Child(name='최지영', grade=4, include_in_stats=False),  # 통계 제외 예시
+            ]
+        
+        test_children = test_children_data
         
         for child in test_children:
             db.session.add(child)
