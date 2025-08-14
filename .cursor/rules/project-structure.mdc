@@ -13,7 +13,9 @@
 
 ### 데이터베이스 관련
 - [migrations/](mdc:migrations/) - Alembic 마이그레이션 파일들
-- [scripts/seed_data.py](mdc:scripts/seed_data.py) - 초기 데이터 시딩 스크립트
+- [seed_basic.py](mdc:seed_basic.py) - 기본 개발/테스트용 시딩 스크립트
+- [seed_quick_30.py](mdc:seed_quick_30.py) - 빠른 30명 아동 데이터 생성
+- [seed_production.py](mdc:seed_production.py) - 실제 운영용 시딩 스크립트
 
 ### 템플릿 및 정적 파일
 - [templates/](mdc:templates/) - HTML 템플릿 파일들
@@ -57,12 +59,17 @@ gunicorn==21.2.0  # Render.com 배포용
 
 ### 가상환경 활성화
 ```bash
-# Windows PowerShell
+# Windows 명령 프롬프트(cmd) - 권장
 venv\Scripts\activate
+
+# Windows PowerShell
+.\venv\Scripts\Activate.ps1
 
 # 또는 배치 파일 사용
 activate_venv.bat
 ```
+
+**⚠️ 중요**: 시딩 스크립트나 Flask 앱 실행 전 반드시 가상환경을 활성화해야 합니다!
 
 ### 의존성 설치
 ```bash

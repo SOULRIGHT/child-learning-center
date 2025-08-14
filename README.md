@@ -10,9 +10,9 @@
 - 노트북↔컴퓨터 데이터베이스 동기화 완벽 지원
 
 ### 🌱 **데이터 시드 시스템 구축**
-- `seed_data.py`: 개발용 샘플 데이터 생성 (30명 아동)
-- `real_seed_data.py`: 실제 아동 데이터 입력용 (대화형 CLI)
-- `create_children.py`: 테스트용 아동 데이터 생성
+- `seed_basic.py`: 기본 개발/테스트용 데이터 생성 (7명 사용자 + 샘플 아동)
+- `seed_quick_30.py`: 빠른 30명 아동 데이터 생성 (개발/테스트용)
+- `seed_production.py`: 실제 운영용 데이터 입력 (대화형 CLI)
 - 웹 UI에서 데이터 시드 실행 가능
 
 ### 💾 **데이터 이식 및 동기화**
@@ -97,7 +97,9 @@ flask db init
 flask db upgrade
 
 # 기본 데이터 시드 (선택사항)
-python seed_data.py
+python seed_basic.py        # 기본 개발/테스트 데이터
+python seed_quick_30.py     # 빠른 30명 아동 데이터
+python seed_production.py   # 실제 운영용 데이터 입력
 ```
 
 ### 5. 애플리케이션 실행
@@ -140,20 +142,32 @@ python real_seed_data.py
 
 ## 📊 **데이터 시드 시스템**
 
-### **개발용 시드 데이터**
+### **1. 기본 개발/테스트용 데이터 (`seed_basic.py`)**
 ```bash
 # 웹 UI에서 실행
 설정 → 데이터 관리 → 시드 데이터 실행
 
 # 또는 터미널에서 실행
-python seed_data.py
+python seed_basic.py
 ```
+**특징**: 7명 사용자 + 샘플 아동 + 학습 기록 + 포인트 데이터
+**용도**: 개발 초기, 테스트 환경
 
-### **실제 운영용 시드 데이터**
+### **2. 빠른 30명 아동 데이터 (`seed_quick_30.py`)**
 ```bash
-# 대화형으로 실제 아동 데이터 입력
-python real_seed_data.py
+python seed_quick_30.py
 ```
+**특징**: 30명 아동 + 학습 기록 + 포인트 데이터 (랜덤)
+**용도**: 개발/테스트 시 빠른 데이터 생성
+**주의**: 기존 아동 데이터가 모두 삭제됩니다!
+
+### **3. 실제 운영용 데이터 (`seed_production.py`)**
+```bash
+python seed_production.py
+```
+**특징**: 대화형 입력, 실제 아동 이름과 포인트 입력
+**용도**: 실제 센터 운영 시 데이터 입력
+**주의**: 실제 센터용, 테스트용 아님
 
 ## 배포 (Render.com)
 
@@ -202,9 +216,9 @@ child-learning-center/
 ├── app.py                          # 메인 애플리케이션
 ├── requirements.txt                # Python 의존성
 ├── migrations/                     # 데이터베이스 마이그레이션
-├── seed_data.py                   # 개발용 시드 데이터
-├── real_seed_data.py              # 실제 운영용 시드 데이터
-├── create_children.py             # 테스트용 아동 데이터 생성
+├── seed_basic.py                  # 기본 개발/테스트용 시드 데이터
+├── seed_quick_30.py              # 빠른 30명 아동 데이터 생성
+├── seed_production.py             # 실제 운영용 시드 데이터
 ├── DATA_MIGRATION_GUIDE.md        # 마이그레이션 가이드
 ├── templates/                      # HTML 템플릿
 ├── static/                         # CSS, JS, 이미지
