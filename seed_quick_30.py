@@ -1,3 +1,17 @@
+#!/usr/bin/env python3
+"""
+빠른 30명 아동 데이터 생성 스크립트
+==================================
+용도: 개발/테스트 시 30명 아동 데이터를 빠르게 생성
+기능:
+- 30명 아동 데이터 생성 (환경변수에서 읽음)
+- 학습 기록 생성 (최근 7일, 랜덤)
+- 포인트 데이터 생성 (최근 30일, 랜덤)
+특징: 기존 데이터 삭제 후 새로 생성, 빠른 데이터 생성
+주의: 기존 아동 데이터가 모두 삭제됩니다!
+사용법: python seed_quick_30.py
+"""
+
 from app import app, db, Child, LearningRecord, DailyPoints
 from datetime import date, timedelta
 import random

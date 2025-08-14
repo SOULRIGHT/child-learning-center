@@ -95,10 +95,29 @@ load_dotenv()
 
 ### 마이그레이션 초기화
 ```bash
+# 가상환경 활성화 필수!
+venv\Scripts\activate
+
+# 마이그레이션 명령어
 flask db init
 flask db migrate -m "Initial migration"
 flask db upgrade
 ```
+
+## 시딩 스크립트 사용법
+
+### 기본 시딩 스크립트
+```bash
+# 가상환경 활성화 후
+python seed_basic.py        # 기본 개발/테스트 데이터
+python seed_quick_30.py     # 빠른 30명 아동 데이터
+python seed_production.py   # 실제 운영용 데이터 입력
+```
+
+### 시딩 스크립트 특징
+- **`seed_basic.py`**: 7명 사용자 + 샘플 아동, 기존 데이터 보존
+- **`seed_quick_30.py`**: 30명 아동 + 랜덤 데이터, ⚠️ 기존 데이터 삭제
+- **`seed_production.py`**: 대화형 입력, 실제 센터 데이터 입력
 
 ### 모델 변경 시
 ```bash
