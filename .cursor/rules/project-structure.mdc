@@ -100,6 +100,13 @@ pip install -r requirements.txt
 2. `pip install -r requirements.txt` 실행
 3. 누락된 모듈을 requirements.txt에 추가
 4. Git 커밋하여 변경사항 저장
+
+## 📝 **문서 업데이트 규칙**
+
+### **작업 완료 후 필수 문서 업데이트**
+- 모든 작업 완료 후 반드시 문서 업데이트 수행
+- [documentation-update.mdc](mdc:.cursor/rules/documentation-update.mdc) 규칙 참조
+- README.md, PRD_Implementation_Complete.md 등 관련 문서 동시 업데이트
 description:
 globs:
 alwaysApply: false
