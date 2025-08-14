@@ -9,19 +9,41 @@ from datetime import date, timedelta
 from werkzeug.security import generate_password_hash
 
 def create_users():
-    """기본 사용자 계정 생성"""
+    """기본 사용자 계정 생성 (환경변수에서 읽어옴)"""
     print("👥 기본 사용자 계정 생성 중...")
     
     if User.query.count() == 0:
-        default_users = [
-            {'username': 'developer', 'name': '개발자', 'role': '개발자', 'password': 'dev123'},
-            {'username': 'center_head', 'name': '센터장', 'role': '센터장', 'password': 'center123!'},
-            {'username': 'care_teacher', 'name': '돌봄선생님', 'role': '돌봄선생님', 'password': 'care123!'},
-            {'username': 'social_worker1', 'name': '사회복무요원1', 'role': '사회복무요원', 'password': 'social123!'},
-            {'username': 'social_worker2', 'name': '사회복무요원2', 'role': '사회복무요원', 'password': 'social456!'},
-            {'username': 'assistant', 'name': '보조교사', 'role': '보조교사', 'password': 'assist123!'},
-            {'username': 'test_user', 'name': '테스트사용자', 'role': '테스트사용자', 'password': 'test_kohi'}
-        ]
+        # 환경변수에서 사용자 정보 읽기
+        import os
+        from dotenv import load_dotenv
+        
+        # 환경변수 로드
+        load_dotenv()
+        
+        # 환경변수에서 사용자 정보 읽기
+        usernames = os.environ.get('DEFAULT_USERS', 'developer,center_head,care_teacher').split(',')
+        passwords = os.environ.get('DEFAULT_PASSWORDS', 'dev123,center123!,care123!').split(',')
+        roles = os.environ.get('DEFAULT_USER_ROLES', '개발자,센터장,돌봄선생님').split(',')
+        
+        # 사용자 데이터 생성
+        default_users = []
+        for i, username in enumerate(usernames):
+            if i < len(passwords) and i < len(roles):
+                default_users.append({
+                    'username': username.strip(),
+                    'name': roles[i].strip(),
+                    'role': roles[i].strip(),
+                    'password': passwords[i].strip()
+                })
+        
+        # 환경변수에서 읽을 수 없는 경우 기본값 사용
+        if not default_users:
+            print("⚠️ 환경변수에서 사용자 데이터를 읽을 수 없습니다. 기본 데이터를 사용합니다.")
+            default_users = [
+                {'username': 'developer', 'name': '개발자', 'role': '개발자', 'password': 'dev123'},
+                {'username': 'center_head', 'name': '센터장', 'role': '센터장', 'password': 'center123!'},
+                {'username': 'care_teacher', 'name': '돌봄선생님', 'role': '돌봄선생님', 'password': 'care123!'}
+            ]
         
         for user_data in default_users:
             password_hash = generate_password_hash(user_data['password'])

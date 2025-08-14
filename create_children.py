@@ -4,15 +4,37 @@ import random
 
 app.app_context().push()
 
-# 1~6학년별 아동 이름 (한국 이름)
-grade_names = {
-    1: ['김민준', '이서연', '박도현', '최지우', '정현우'],
-    2: ['강서진', '윤하은', '임준호', '한소희', '조민재'],
-    3: ['신동현', '오유진', '권태현', '배수빈', '남준영'],
-    4: ['김지원', '이승우', '박소연', '최민석', '정하나'],
-    5: ['강현준', '윤지민', '임서연', '한도현', '조유진'],
-    6: ['신태현', '오준호', '권소희', '배민재', '남수빈']
-}
+# 환경변수에서 아동 이름 읽기
+import os
+from dotenv import load_dotenv
+
+# 환경변수 로드
+load_dotenv()
+
+# 1~6학년별 아동 이름을 환경변수에서 읽기
+grade_names = {}
+for grade in range(1, 7):
+    env_key = f'CHILDREN_GRADE{grade}'
+    children_names = os.environ.get(env_key, '').split(',')
+    
+    # 빈 문자열이 아닌 이름만 필터링
+    grade_names[grade] = [name.strip() for name in children_names if name.strip()]
+    
+    # 환경변수에서 읽을 수 없는 경우 기본값 사용
+    if not grade_names[grade]:
+        print(f"⚠️ {grade}학년 아동 데이터를 환경변수에서 읽을 수 없습니다. 기본 데이터를 사용합니다.")
+        if grade == 1:
+            grade_names[grade] = ['김민준', '이서연', '박도현', '최지우', '정현우']
+        elif grade == 2:
+            grade_names[grade] = ['강서진', '윤하은', '임준호', '한소희', '조민재']
+        elif grade == 3:
+            grade_names[grade] = ['신동현', '오유진', '권태현', '배수빈', '남준영']
+        elif grade == 4:
+            grade_names[grade] = ['김지원', '이승우', '박소연', '최민석', '정하나']
+        elif grade == 5:
+            grade_names[grade] = ['강현준', '윤지민', '임서연', '한도현', '조유진']
+        elif grade == 6:
+            grade_names[grade] = ['신태현', '오준호', '권소희', '배민재', '남수빈']
 
 print("기존 아동 데이터 삭제 중...")
 # 기존 아동 데이터 삭제
