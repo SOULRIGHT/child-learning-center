@@ -154,28 +154,134 @@
 </div>
 
 <script>
-// 총점 계산 함수
+// 총점 계산 함수 (강화된 버전)
 function updateTotalScore() {
-    const korean = parseInt(document.querySelector('input[name="korean_points"]:checked')?.value || 0);
-    const math = parseInt(document.querySelector('input[name="math_points"]:checked')?.value || 0);
-    const ssen = parseInt(document.querySelector('input[name="ssen_points"]:checked')?.value || 0);
-    const reading = parseInt(document.querySelector('input[name="reading_points"]:checked')?.value || 0);
-    
-    const total = korean + math + ssen + reading;
-    
-    document.getElementById('korean_preview').textContent = korean;
-    document.getElementById('math_preview').textContent = math;
-    document.getElementById('ssen_preview').textContent = ssen;
-    document.getElementById('reading_preview').textContent = reading;
-    document.getElementById('total_preview').textContent = total;
+    try {
+        // 선택된 라디오 버튼에서 값 가져오기
+        const korean = parseInt(document.querySelector('input[name="korean_points"]:checked')?.value || 0);
+        const math = parseInt(document.querySelector('input[name="math_points"]:checked')?.value || 0);
+        const ssen = parseInt(document.querySelector('input[name="ssen_points"]:checked')?.value || 0);
+        const reading = parseInt(document.querySelector('input[name="reading_points"]:checked')?.value || 0);
+        
+        // 값 검증: NaN 체크
+        if (isNaN(korean) || isNaN(math) || isNaN(ssen) || isNaN(reading)) {
+            console.error('❌ 잘못된 포인트 값이 감지되었습니다.');
+            return;
+        }
+        
+        // 값 검증: 범위 체크 (0-200)
+        const values = [korean, math, ssen, reading];
+        for (let i = 0; i < values.length; i++) {
+            if (values[i] < 0 || values[i] > 200) {
+                console.error(`❌ 포인트 값이 범위를 벗어났습니다: ${values[i]}`);
+                return;
+            }
+        }
+        
+        // 총점 계산 (검증된 값으로)
+        const total = values.reduce((sum, val) => sum + val, 0);
+        
+        // 계산 결과 검증
+        const expectedTotal = korean + math + ssen + reading;
+        if (total !== expectedTotal) {
+            console.error(`❌ 포인트 계산 오류: 예상 ${expectedTotal}, 계산 ${total}`);
+            return;
+        }
+        
+        // UI 업데이트
+        document.getElementById('korean_preview').textContent = korean;
+        document.getElementById('math_preview').textContent = math;
+        document.getElementById('ssen_preview').textContent = ssen;
+        document.getElementById('reading_preview').textContent = reading;
+        document.getElementById('total_preview').textContent = total;
+        
+        // 총점 색상 변경 (시각적 피드백)
+        const totalElement = document.getElementById('total_preview');
+        if (total >= 600) {
+            totalElement.className = 'text-success fw-bold';
+        } else if (total >= 400) {
+            totalElement.className = 'text-warning fw-bold';
+        } else {
+            totalElement.className = 'text-danger fw-bold';
+        }
+        
+        console.log(`✅ 포인트 계산 완료: 국어(${korean}) + 수학(${math}) + 쎈수학(${ssen}) + 독서(${reading}) = ${total}`);
+        
+    } catch (error) {
+        console.error('❌ 포인트 계산 중 오류 발생:', error);
+    }
 }
 
 // 라디오 버튼 변경 시 총점 업데이트
 document.querySelectorAll('input[type="radio"]').forEach(radio => {
-    radio.addEventListener('change', updateTotalScore);
+    radio.addEventListener('change', function() {
+        updateTotalScore();
+        
+        // 선택된 과목 하이라이트
+        const subjectName = this.name.replace('_points', '');
+        const subjectSection = this.closest('.mb-4');
+        
+        // 모든 과목 섹션에서 하이라이트 제거
+        document.querySelectorAll('.mb-4').forEach(section => {
+            section.classList.remove('border-primary', 'border-2');
+        });
+        
+        // 선택된 과목 섹션 하이라이트
+        if (this.checked) {
+            subjectSection.classList.add('border-primary', 'border-2');
+        }
+    });
 });
 
+// 폼 제출 전 최종 검증
+document.querySelector('form').addEventListener('submit', function(e) {
+    try {
+        // 선택된 포인트 값들 가져오기
+        const korean = parseInt(document.querySelector('input[name="korean_points"]:checked')?.value || 0);
+        const math = parseInt(document.querySelector('input[name="math_points"]:checked')?.value || 0);
+        const ssen = parseInt(document.querySelector('input[name="ssen_points"]:checked')?.value || 0);
+        const reading = parseInt(document.querySelector('input[name="reading_points"]:checked')?.value || 0);
+        
+        // 최종 검증
+        if (isNaN(korean) || isNaN(math) || isNaN(ssen) || isNaN(reading)) {
+            e.preventDefault();
+            alert('❌ 모든 과목의 포인트를 선택해주세요.');
+            return false;
+        }
+        
+        // 총점 재계산 및 검증
+        const total = korean + math + ssen + reading;
+        const expectedTotal = sum([korean, math, ssen, reading]);
+        
+        if (total !== expectedTotal) {
+            e.preventDefault();
+            alert(`❌ 포인트 계산 오류가 발생했습니다. 다시 시도해주세요.`);
+            return false;
+        }
+        
+        // 성공 메시지
+        console.log(`✅ 폼 제출 검증 완료: 총점 ${total}점`);
+        
+    } catch (error) {
+        e.preventDefault();
+        console.error('❌ 폼 검증 중 오류 발생:', error);
+        alert('❌ 폼 검증 중 오류가 발생했습니다. 다시 시도해주세요.');
+        return false;
+    }
+});
+
+// 배열 합계 함수
+function sum(arr) {
+    return arr.reduce((sum, val) => sum + val, 0);
+}
+
 // 페이지 로드 시 초기 총점 계산
-document.addEventListener('DOMContentLoaded', updateTotalScore);
+document.addEventListener('DOMContentLoaded', function() {
+    updateTotalScore();
+    
+    // 디버깅 정보 출력
+    console.log('🚀 포인트 입력 페이지 로드 완료');
+    console.log('📊 실시간 포인트 계산 시스템 활성화');
+});
 </script>
 {% endblock %} 

@@ -8,6 +8,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from sqlalchemy import func # Added for func.date
+from sqlalchemy import text
 
 # 환경 변수 로드
 load_dotenv()
@@ -419,9 +420,12 @@ def dashboard():
     
     if weekly_points:
         total_weekly_points = sum(record.total_points for record in weekly_points)
-        weekly_avg_points = round(total_weekly_points / len(weekly_points), 1)
+        weekly_avg_points = int(round(total_weekly_points / len(weekly_points), 0))
+        weekly_points_count = len(weekly_points)
     else:
         weekly_avg_points = 0
+        total_weekly_points = 0
+        weekly_points_count = 0
     
     # 이번 주 포인트 참여율 계산
     weekly_participants = db.session.query(DailyPoints.child_id).filter(
@@ -430,7 +434,7 @@ def dashboard():
     ).distinct().count()
     
     if total_children > 0:
-        participation_rate = round((weekly_participants / total_children) * 100, 1)
+        participation_rate = int(round((weekly_participants / total_children) * 100, 0))
     else:
         participation_rate = 0
     
@@ -440,6 +444,7 @@ def dashboard():
     # ====== [과목별 주간 평균 포인트 계산] ======
     weekly_korean_avg = 0
     weekly_math_avg = 0
+    weekly_ssen_avg = 0
     weekly_reading_avg = 0
     weekly_total_points = 0
     
@@ -447,11 +452,13 @@ def dashboard():
         # 과목별 평균 계산
         korean_points = [record.korean_points for record in weekly_points if record.korean_points > 0]
         math_points = [record.math_points for record in weekly_points if record.math_points > 0]
+        ssen_points = [record.ssen_points for record in weekly_points if record.ssen_points > 0]
         reading_points = [record.reading_points for record in weekly_points if record.reading_points > 0]
         
-        weekly_korean_avg = round(sum(korean_points) / len(korean_points), 1) if korean_points else 0
-        weekly_math_avg = round(sum(math_points) / len(math_points), 1) if math_points else 0
-        weekly_reading_avg = round(sum(reading_points) / len(reading_points), 1) if reading_points else 0
+        weekly_korean_avg = round(sum(korean_points) / len(korean_points), 0) if korean_points else 0
+        weekly_math_avg = round(sum(math_points) / len(math_points), 0) if math_points else 0
+        weekly_ssen_avg = round(sum(ssen_points) / len(ssen_points), 0) if ssen_points else 0
+        weekly_reading_avg = round(sum(reading_points) / len(reading_points), 0) if reading_points else 0
         
         # 주간 총 포인트
         weekly_total_points = sum(record.total_points for record in weekly_points)
@@ -470,8 +477,10 @@ def dashboard():
                          notifications=notifications,
                          weekly_korean_avg=weekly_korean_avg,
                          weekly_math_avg=weekly_math_avg,
+                         weekly_ssen_avg=weekly_ssen_avg,
                          weekly_reading_avg=weekly_reading_avg,
-                         weekly_total_points=weekly_total_points)
+                         weekly_total_points=weekly_total_points,
+                         weekly_points_count=weekly_points_count)
 
 # 아동 관리 라우트
 @app.route('/children')
@@ -600,20 +609,58 @@ def delete_child(child_id):
 def child_detail(child_id):
     child = Child.query.get_or_404(child_id)
     
-    # 최근 학습 기록들
-    recent_records = LearningRecord.query.filter_by(child_id=child_id)\
-                                         .order_by(LearningRecord.date.desc())\
-                                         .limit(10).all()
+    # 새로운 포인트 시스템 기록들 (중복 제거)
+    from sqlalchemy import text
+    result = db.session.execute(text("""
+        SELECT id, date, korean_points, math_points, ssen_points, reading_points, total_points, created_at
+        FROM daily_points 
+        WHERE child_id = :child_id 
+        AND id IN (
+            SELECT MAX(id) 
+            FROM daily_points 
+            WHERE child_id = :child_id 
+            GROUP BY date
+        )
+        ORDER BY date DESC
+        LIMIT 30
+    """), {"child_id": child_id})
+    
+    # DailyPoints 객체로 변환
+    recent_records = []
+    for row in result:
+        # 날짜 타입 변환
+        date_value = row[1]
+        if isinstance(date_value, str):
+            from datetime import datetime
+            date_value = datetime.strptime(date_value, '%Y-%m-%d').date()
+        
+        created_at_value = row[7]
+        if isinstance(created_at_value, str):
+            from datetime import datetime
+            created_at_value = datetime.strptime(created_at_value, '%Y-%m-%d %H:%M:%S.%f')
+        
+        point_record = DailyPoints(
+            id=row[0],
+            date=date_value,
+            korean_points=row[2],
+            math_points=row[3],
+            ssen_points=row[4],
+            reading_points=row[5],
+            total_points=row[6]
+        )
+        # created_at을 별도로 설정 (템플릿에서 사용할 수 있도록)
+        point_record.created_at = created_at_value
+        recent_records.append(point_record)
     
     # 최근 특이사항들
     recent_notes = ChildNote.query.filter_by(child_id=child_id)\
                                   .order_by(ChildNote.created_at.desc())\
                                   .limit(5).all()
     
-    # 통계 계산
+    # 통계 계산 (새로운 포인트 시스템 기반)
     if recent_records:
         # 최근 5개 기록의 평균
-        recent_avg = sum(record.total_score for record in recent_records[:5]) / min(len(recent_records), 5)
+        recent_avg = sum(record.total_points for record in recent_records[:5]) / min(len(recent_records), 5)
         
         # 가장 최근 기록
         latest_record = recent_records[0] if recent_records else None
@@ -621,12 +668,16 @@ def child_detail(child_id):
         recent_avg = 0
         latest_record = None
     
+    # 총 포인트 및 추가 통계
+    total_points = sum(record.total_points for record in recent_records)
+    
     return render_template('children/detail.html', 
                          child=child,
                          recent_records=recent_records,
                          recent_notes=recent_notes,
                          recent_avg=recent_avg,
-                         latest_record=latest_record)
+                         latest_record=latest_record,
+                         total_points=total_points)
 
 # 점수 입력 라우트
 @app.route('/scores')
@@ -744,7 +795,7 @@ def edit_score(record_id):
             date_str = request.form['date']
             
             # 국어 데이터
-            korean_problems_solved = int(request.form.get('korean_problems_solved', 0))
+            korean_problems_solved = int(request.form.get('korean_problems_correct', 0))
             korean_problems_correct = int(request.form.get('korean_problems_correct', 0))
             korean_last_page = int(request.form.get('korean_last_page', 0))
             
@@ -1347,40 +1398,131 @@ def points_input(child_id):
             date=today
         ).first()
         
-        # 포인트 값 가져오기
-        korean_points = int(request.form.get('korean_points', 0))
-        math_points = int(request.form.get('math_points', 0))
-        ssen_points = int(request.form.get('ssen_points', 0))
-        reading_points = int(request.form.get('reading_points', 0))
-        
-        # 총 포인트 계산
-        total_points = korean_points + math_points + ssen_points + reading_points
-        
-        if existing_record:
-            # 기존 기록 업데이트
-            existing_record.korean_points = korean_points
-            existing_record.math_points = math_points
-            existing_record.ssen_points = ssen_points
-            existing_record.reading_points = reading_points
-            existing_record.total_points = total_points
-            existing_record.updated_at = datetime.utcnow()
-        else:
-            # 새 기록 생성
-            new_record = DailyPoints(
-                child_id=child_id,
-                date=today,
-                korean_points=korean_points,
-                math_points=math_points,
-                ssen_points=ssen_points,
-                reading_points=reading_points,
-                total_points=total_points,
-                created_by=current_user.id
-            )
-            db.session.add(new_record)
-        
-        db.session.commit()
-        flash(f'{child.name} 아이의 포인트가 저장되었습니다.', 'success')
-        return redirect(url_for('points_list'))
+        try:
+            # 포인트 값 가져오기 및 검증
+            korean_points = int(request.form.get('korean_points', 0))
+            math_points = int(request.form.get('math_points', 0))
+            ssen_points = int(request.form.get('ssen_points', 0))
+            reading_points = int(request.form.get('reading_points', 0))
+            
+            # 값 검증: 음수 방지, 범위 검증 (0-200)
+            if any(points < 0 for points in [korean_points, math_points, ssen_points, reading_points]):
+                flash('❌ 포인트는 음수일 수 없습니다. 0-200 사이의 값을 입력해주세요.', 'error')
+                return redirect(url_for('points_input', child_id=child_id))
+            
+            if any(points > 200 for points in [korean_points, math_points, ssen_points, reading_points]):
+                flash('❌ 포인트는 200점을 초과할 수 없습니다. 0-200 사이의 값을 입력해주세요.', 'error')
+                return redirect(url_for('points_input', child_id=child_id))
+            
+            # 총 포인트 계산 (검증된 값으로)
+            total_points = korean_points + math_points + ssen_points + reading_points
+            
+            # 계산 결과 검증
+            expected_total = sum([korean_points, math_points, ssen_points, reading_points])
+            if total_points != expected_total:
+                flash(f'❌ 포인트 계산 오류가 발생했습니다. 예상: {expected_total}, 계산: {total_points}', 'error')
+                return redirect(url_for('points_input', child_id=child_id))
+            
+            if existing_record:
+                # 기존 기록 업데이트 (변경 이력 기록)
+                old_total = existing_record.total_points
+                old_korean = existing_record.korean_points
+                old_math = existing_record.math_points
+                old_ssen = existing_record.ssen_points
+                old_reading = existing_record.reading_points
+                
+                # 변경사항이 있는지 확인
+                if (old_korean != korean_points or old_math != math_points or 
+                    old_ssen != ssen_points or old_reading != reading_points):
+                    
+                    # 변경 이력 기록 (PointsHistory 테이블)
+                    history_record = PointsHistory(
+                        child_id=child_id,
+                        date=today,
+                        old_korean_points=old_korean,
+                        old_math_points=old_math,
+                        old_ssen_points=old_ssen,
+                        old_reading_points=old_reading,
+                        old_total_points=old_total,
+                        new_korean_points=korean_points,
+                        new_math_points=math_points,
+                        new_ssen_points=ssen_points,
+                        new_reading_points=reading_points,
+                        new_total_points=total_points,
+                        change_type='update',
+                        changed_by=current_user.id,
+                        change_reason='웹 UI를 통한 포인트 수정'
+                    )
+                    db.session.add(history_record)
+                    
+                    # 변경 이력 기록 (간단한 로그)
+                    print(f"📝 포인트 변경 이력 - {child.name}({child.grade}학년) - {today}")
+                    print(f"  국어: {old_korean} → {korean_points}")
+                    print(f"  수학: {old_math} → {math_points}")
+                    print(f"  쎈수학: {old_ssen} → {ssen_points}")
+                    print(f"  독서: {old_reading} → {reading_points}")
+                    print(f"  총점: {old_total} → {total_points}")
+                    print(f"  변경자: {current_user.username}")
+                
+                # 기존 기록 업데이트
+                existing_record.korean_points = korean_points
+                existing_record.math_points = math_points
+                existing_record.ssen_points = ssen_points
+                existing_record.reading_points = reading_points
+                existing_record.total_points = total_points
+                existing_record.updated_at = datetime.utcnow()
+                
+                flash(f'✅ {child.name} 아이의 포인트가 수정되었습니다. (총점: {total_points}점)', 'success')
+            else:
+                # 새 기록 생성 (생성 이력 기록)
+                history_record = PointsHistory(
+                    child_id=child_id,
+                    date=today,
+                    old_korean_points=0,
+                    old_math_points=0,
+                    old_ssen_points=0,
+                    old_reading_points=0,
+                    old_total_points=0,
+                    new_korean_points=korean_points,
+                    new_math_points=math_points,
+                    new_ssen_points=ssen_points,
+                    new_reading_points=reading_points,
+                    new_total_points=total_points,
+                    change_type='create',
+                    changed_by=current_user.id,
+                    change_reason='웹 UI를 통한 포인트 신규 입력'
+                )
+                db.session.add(history_record)
+                
+                # 새 기록 생성
+                new_record = DailyPoints(
+                    child_id=child_id,
+                    date=today,
+                    korean_points=korean_points,
+                    math_points=math_points,
+                    ssen_points=ssen_points,
+                    reading_points=reading_points,
+                    total_points=total_points,
+                    created_by=current_user.id
+                )
+                db.session.add(new_record)
+                
+                flash(f'✅ {child.name} 아이의 포인트가 저장되었습니다. (총점: {total_points}점)', 'success')
+            
+            db.session.commit()
+            
+            # 누적 포인트 자동 업데이트 (Child 모델의 cumulative_points)
+            update_cumulative_points(child_id)
+            
+            return redirect(url_for('points_list'))
+            
+        except ValueError as e:
+            flash('❌ 잘못된 포인트 값이 입력되었습니다. 숫자만 입력해주세요.', 'error')
+            return redirect(url_for('points_input', child_id=child_id))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'❌ 포인트 저장 중 오류가 발생했습니다: {str(e)}', 'error')
+            return redirect(url_for('points_input', child_id=child_id))
     
     # 오늘 기록 가져오기
     today = datetime.utcnow().date()
@@ -1393,6 +1535,25 @@ def points_input(child_id):
     today_date = datetime.utcnow().strftime('%Y년 %m월 %d일')
     
     return render_template('points/input.html', child=child, today_record=today_record, today_date=today_date)
+
+def update_cumulative_points(child_id):
+    """아동의 누적 포인트를 자동으로 업데이트"""
+    try:
+        # 해당 아동의 모든 일일 포인트 합계 계산
+        total_cumulative = db.session.query(
+            db.func.sum(DailyPoints.total_points)
+        ).filter_by(child_id=child_id).scalar() or 0
+        
+        # Child 모델의 cumulative_points 업데이트
+        child = Child.query.get(child_id)
+        if child:
+            child.cumulative_points = total_cumulative
+            db.session.commit()
+            print(f"📊 {child.name}의 누적 포인트 업데이트: {total_cumulative}점")
+            
+    except Exception as e:
+        print(f"❌ 누적 포인트 업데이트 오류: {e}")
+        db.session.rollback()
 
 @app.route('/points/statistics')
 @login_required
@@ -1437,69 +1598,86 @@ def points_analysis():
     # 아동 선택 파라미터
     child_id = request.args.get('child_id', type=int)
     
-    # 디버깅: 함수 호출 확인
-    print(f"=== points_analysis 함수 호출됨 ===")
-    print(f"child_id: {child_id}")
-    print(f"request.args: {request.args}")
-    print("==================================")
-    
-    # 데이터베이스 직접 확인
-    from sqlalchemy import text
-    result = db.session.execute(text("SELECT COUNT(*) as count FROM daily_points WHERE child_id = :child_id"), {"child_id": child_id})
-    total_count = result.fetchone()[0]
-    print(f"데이터베이스에서 직접 확인한 기록 수: {total_count}")
-    
-    # 중복 날짜 확인
-    result = db.session.execute(text("""
-        SELECT date, COUNT(*) as count 
-        FROM daily_points 
-        WHERE child_id = :child_id 
-        GROUP BY date 
-        HAVING COUNT(*) > 1
-    """), {"child_id": child_id})
-    duplicates = result.fetchall()
-    if duplicates:
-        print("=== 중복된 날짜 발견 ===")
-        for date, count in duplicates:
-            print(f"날짜: {date}, 중복 횟수: {count}")
-        print("========================")
-    
     if child_id:
         # 특정 아동 분석
         child = Child.query.get_or_404(child_id)
         
-        # 해당 아동의 전체 포인트 기록
-        child_points = DailyPoints.query.filter_by(child_id=child_id).order_by(DailyPoints.date.desc()).all()
+        # 해당 아동의 전체 포인트 기록 (중복 제거 후)
+        # 날짜별로 하나의 기록만 가져오기
+        result = db.session.execute(text("""
+            SELECT id, date, korean_points, math_points, ssen_points, reading_points, total_points
+            FROM daily_points 
+            WHERE child_id = :child_id 
+            AND id IN (
+                SELECT MAX(id) 
+                FROM daily_points 
+                WHERE child_id = :child_id 
+                GROUP BY date
+            )
+            ORDER BY date DESC
+        """), {"child_id": child_id})
         
-        # 총 포인트 계산
+        # 실제 DailyPoints 객체로 변환
+        child_points = []
+        for row in result:
+            # 날짜 타입 변환 (문자열일 경우 datetime.date로 변환)
+            date_value = row[1]
+            if isinstance(date_value, str):
+                from datetime import datetime
+                date_value = datetime.strptime(date_value, '%Y-%m-%d').date()
+            
+            # DailyPoints 객체 생성
+            point_record = DailyPoints(
+                id=row[0],
+                date=date_value,
+                korean_points=row[2],
+                math_points=row[3],
+                ssen_points=row[4],
+                reading_points=row[5],
+                total_points=row[6]
+            )
+            child_points.append(point_record)
+        
+        # 총 포인트 계산 (중복 제거된 데이터로)
         total_points = sum(record.total_points for record in child_points)
         
         # 디버깅: 실제 데이터 확인
-        print(f"=== 김철수 포인트 디버깅 ===")
+        print(f"=== {child.name} 포인트 분석 ===")
         print(f"아동 ID: {child_id}")
         print(f"아동 이름: {child.name}")
         print(f"총 기록 수: {len(child_points)}")
-        
-        # 모든 기록 출력
-        for i, record in enumerate(child_points):
-            print(f"기록 {i+1}: {record.date} - 총점: {record.total_points} (국어:{record.korean_points}, 수학:{record.math_points}, 쎈:{record.ssen_points}, 독서:{record.reading_points})")
-        
         print(f"계산된 총 포인트: {total_points}")
+        print(f"Child.cumulative_points: {child.cumulative_points}")
         print("================================")
         
-        # 같은 학년 아동들의 포인트 비교
+        # 같은 학년 아동들의 포인트 비교 (중복 제거 후)
         same_grade_children = Child.query.filter_by(grade=child.grade, include_in_stats=True).all()
         grade_comparison = []
         
         for grade_child in same_grade_children:
             if grade_child.id != child_id:  # 자기 자신 제외
-                grade_child_points = DailyPoints.query.filter_by(child_id=grade_child.id).all()
-                grade_child_total = sum(record.total_points for record in grade_child_points)
+                # 중복 제거된 포인트 계산
+                result = db.session.execute(text("""
+                    SELECT SUM(total_points) as total, COUNT(*) as count
+                    FROM daily_points 
+                    WHERE child_id = :child_id 
+                    AND id IN (
+                        SELECT MAX(id) 
+                        FROM daily_points 
+                        WHERE child_id = :child_id 
+                        GROUP BY date
+                    )
+                """), {"child_id": grade_child.id})
+                
+                row = result.fetchone()
+                grade_child_total = row[0] or 0
+                record_count = row[1] or 0
+                
                 grade_comparison.append({
                     'id': grade_child.id,
                     'name': grade_child.name,
                     'total_points': grade_child_total,
-                    'record_count': len(grade_child_points)
+                    'record_count': record_count
                 })
         
         # 학년 내 순위 계산
@@ -1511,19 +1689,34 @@ def points_analysis():
         })
         grade_comparison.sort(key=lambda x: x['total_points'], reverse=True)
         
-        # 전체 학년 순위
+        # 전체 학년 순위 (중복 제거 후)
         all_children = Child.query.filter_by(include_in_stats=True).all()
         overall_ranking = []
         
         for all_child in all_children:
-            all_child_points = DailyPoints.query.filter_by(child_id=all_child.id).all()
-            all_child_total = sum(record.total_points for record in all_child_points)
+            # 중복 제거된 포인트 계산
+            result = db.session.execute(text("""
+                SELECT SUM(total_points) as total, COUNT(*) as count
+                FROM daily_points 
+                WHERE child_id = :child_id 
+                AND id IN (
+                    SELECT MAX(id) 
+                    FROM daily_points 
+                    WHERE child_id = :child_id 
+                    GROUP BY date
+                )
+            """), {"child_id": all_child.id})
+            
+            row = result.fetchone()
+            all_child_total = row[0] or 0
+            record_count = row[1] or 0
+            
             overall_ranking.append({
                 'id': all_child.id,
                 'name': all_child.name,
                 'grade': all_child.grade,
                 'total_points': all_child_total,
-                'record_count': len(all_child_points)
+                'record_count': record_count
             })
         
         overall_ranking.sort(key=lambda x: x['total_points'], reverse=True)
@@ -1732,7 +1925,7 @@ def child_point_analysis(child_id):
             'name': grade_child.name,
             'total_points': total_points,
             'record_count': record_count,
-            'avg_points': round(total_points / record_count, 1) if record_count > 0 else 0
+            'avg_points': round(total_points / record_count, 0) if record_count > 0 else 0
         })
     
     # 포인트 순으로 정렬
@@ -2118,6 +2311,67 @@ def bulk_input_cumulative_points():
         db.session.rollback()
         return jsonify({'success': False, 'message': f'오류가 발생했습니다: {str(e)}'}), 500
 
+# 포인트 변경 이력 테이블
+class PointsHistory(db.Model):
+    """포인트 변경 이력 기록"""
+    id = db.Column(db.Integer, primary_key=True)
+    child_id = db.Column(db.Integer, db.ForeignKey('child.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    
+    # 변경 전 포인트
+    old_korean_points = db.Column(db.Integer, default=0)
+    old_math_points = db.Column(db.Integer, default=0)
+    old_ssen_points = db.Column(db.Integer, default=0)
+    old_reading_points = db.Column(db.Integer, default=0)
+    old_total_points = db.Column(db.Integer, default=0)
+    
+    # 변경 후 포인트
+    new_korean_points = db.Column(db.Integer, default=0)
+    new_math_points = db.Column(db.Integer, default=0)
+    new_ssen_points = db.Column(db.Integer, default=0)
+    new_reading_points = db.Column(db.Integer, default=0)
+    new_total_points = db.Column(db.Integer, default=0)
+    
+    # 변경 정보
+    change_type = db.Column(db.String(20), default='update')  # 'create', 'update', 'delete'
+    changed_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    changed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    change_reason = db.Column(db.String(200))  # 변경 사유 (선택사항)
+    
+    # 관계 설정
+    child = db.relationship('Child', backref='points_history', lazy=True)
+    user = db.relationship('User', backref='points_changes', lazy=True)
+    
+    def __repr__(self):
+        return f'<PointsHistory {self.child.name} {self.date} {self.change_type}>'
+
+@app.route('/points/history/<int:child_id>')
+@login_required
+def points_history(child_id):
+    """아동별 포인트 변경 이력 조회"""
+    child = Child.query.get_or_404(child_id)
+    
+    # 최근 30일간의 변경 이력 조회
+    from datetime import datetime, timedelta
+    thirty_days_ago = datetime.utcnow().date() - timedelta(days=30)
+    
+    history_records = PointsHistory.query.filter(
+        PointsHistory.child_id == child_id,
+        PointsHistory.changed_at >= thirty_days_ago
+    ).order_by(PointsHistory.changed_at.desc()).all()
+    
+    return render_template('points/history.html', 
+                         child=child, 
+                         history_records=history_records)
+
+@app.route('/points/history')
+@login_required
+def all_points_history():
+    """전체 포인트 변경 이력 조회 (관리자용)"""
+    # 최근 100건의 변경 이력 조회
+    history_records = PointsHistory.query.order_by(PointsHistory.changed_at.desc()).limit(100).all()
+    
+    return render_template('points/all_history.html', history_records=history_records)
 
 if __name__ == '__main__':
     # init_db() 제거 - 서버 재시작 시 데이터 초기화 방지
