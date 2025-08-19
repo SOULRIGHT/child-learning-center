@@ -1,0 +1,213 @@
+---
+globs: *.py
+description: "Python 들여쓰기 오류 방지를 위한 전문 가이드"
+---
+
+# 🐍 Python Indentation Safety Guide
+
+## 🚨 들여쓰기 오류가 발생했던 실제 사례
+
+### 문제 발생 패턴:
+1. **try-except 블록 내부 들여쓰기 실수**
+2. **함수 정의 후 내부 코드 들여쓰기 불일치**
+3. **if-else 블록의 들여쓰기 레벨 혼동**
+4. **for 루프 내부 코드 들여쓰기 오류**
+
+## 🔍 위험한 들여쓰기 패턴 식별
+
+### ❌ 오류 발생 패턴:
+```python
+# 패턴 1: try 블록 내 들여쓰기 실수
+try:
+    # 4칸 들여쓰기 (올바름)
+    korean_points = int(request.form.get('korean_points', 0))
+math_points = int(request.form.get('math_points', 0))  # ❌ 0칸 - 오류!
+
+# 패턴 2: if-else 블록 들여쓰기 실수  
+if condition:
+    # 4칸 들여쓰기
+    do_something()
+        # 8칸 들여쓰기 - 일부는 맞고
+    do_other()  # 4칸 들여쓰기 - 일부는 틀림
+else:
+# ❌ 0칸 - else는 if와 같은 레벨이어야 함
+
+# 패턴 3: 함수 정의 후 내부 들여쓰기 실수
+def some_function():
+    if condition:
+        # 8칸 들여쓰기 (올바름)
+        return something
+else:  # ❌ 0칸 - 함수 내부인데 들여쓰기 없음
+```
+
+### ✅ 올바른 들여쓰기 패턴:
+```python
+# 패턴 1: try 블록 올바른 들여쓰기
+try:
+    korean_points = int(request.form.get('korean_points', 0))
+    math_points = int(request.form.get('math_points', 0))
+    ssen_points = int(request.form.get('ssen_points', 0))
+    reading_points = int(request.form.get('reading_points', 0))
+    
+    if existing_record:
+        # 중첩된 블록은 8칸
+        existing_record.korean_points = korean_points
+        flash('수정되었습니다.', 'success')
+    else:
+        # else도 같은 레벨 (8칸)
+        new_record = DailyPoints(...)
+        flash('저장되었습니다.', 'success')
+        
+except ValueError as e:
+    # except는 try와 같은 레벨 (4칸)
+    flash('오류가 발생했습니다.', 'error')
+```
+
+## 🛠️ 들여쓰기 수정 시 안전 절차
+
+### Step 1: 수정 전 검증
+```bash
+# 현재 파일 문법 검사
+python -m py_compile app.py
+
+# 정상이면 다음 단계로
+```
+
+### Step 2: 백업 생성
+```bash
+# 파일 백업 (타임스탬프 포함)
+cp app.py app.py.backup.$(date +%Y%m%d_%H%M%S)
+```
+
+### Step 3: 점진적 수정
+```python
+# 한 번에 하나의 블록만 수정
+# 예: try 블록만 먼저 수정
+
+# 수정 전:
+try:
+    korean_points = int(request.form.get('korean_points', 0))
+math_points = int(request.form.get('math_points', 0))  # 문제 라인
+
+# 수정 후:
+try:
+    korean_points = int(request.form.get('korean_points', 0))
+    math_points = int(request.form.get('math_points', 0))  # 들여쓰기 수정
+```
+
+### Step 4: 즉시 검증
+```bash
+python -m py_compile app.py
+```
+
+## 🔧 들여쓰기 문제 진단 도구
+
+### 문법 오류 진단:
+```bash
+# 기본 문법 검사
+python -m py_compile app.py
+
+# 상세 분석
+python -c "
+import ast
+with open('app.py', 'r', encoding='utf-8') as f:
+    try:
+        ast.parse(f.read())
+        print('✅ 문법 검사 통과')
+    except SyntaxError as e:
+        print(f'❌ 문법 오류: {e.lineno}번째 줄 - {e.msg}')
+"
+```
+
+### 들여쓰기 시각화:
+```bash
+# 들여쓰기 문제가 있는 줄 찾기
+python -c "
+with open('app.py', 'r') as f:
+    for i, line in enumerate(f, 1):
+        if line.strip() and len(line) - len(line.lstrip()) % 4 != 0:
+            print(f'Line {i}: 들여쓰기 문제 가능성')
+"
+```
+
+## 📝 들여쓰기 수정 체크리스트
+
+### ✅ 수정 전 확인사항:
+- [ ] 현재 파일이 정상 컴파일되는가?
+- [ ] 백업 파일을 생성했는가?
+- [ ] 수정할 블록의 시작과 끝을 정확히 파악했는가?
+
+### ✅ 수정 중 확인사항:
+- [ ] try-except 블록: try와 except가 같은 레벨인가?
+- [ ] if-else 블록: if와 else가 같은 레벨인가?
+- [ ] 함수 내부: 모든 코드가 함수보다 4칸 안쪽인가?
+- [ ] 중첩 블록: 올바른 8칸, 12칸 들여쓰기인가?
+
+### ✅ 수정 후 확인사항:
+- [ ] `python -m py_compile app.py` 성공했는가?
+- [ ] 서버가 정상 시작되는가?
+- [ ] 수정한 기능이 정상 동작하는가?
+
+## 🚨 응급 복구 절차
+
+### 들여쓰기 오류로 전체 파일이 망가진 경우:
+```bash
+# 1. 즉시 백업에서 복구
+cp app.py.backup.[최신타임스탬프] app.py
+
+# 2. 정상 동작 확인
+python -m py_compile app.py
+
+# 3. 문제 부분만 신중하게 재수정
+```
+
+### 특정 함수만 문제인 경우:
+```bash
+# 1. 문제 함수만 이전 버전에서 복사
+git show HEAD:app.py | sed -n '/def 함수명/,/^def /p' | head -n -1
+
+# 2. 해당 부분만 교체 후 검증
+```
+
+## 💡 들여쓰기 모범 사례
+
+### 1. 일관된 4칸 들여쓰기
+```python
+def function():           # 0칸 (함수 정의)
+    if condition:         # 4칸 (함수 내부)
+        try:              # 8칸 (if 블록 내부)
+            code()        # 12칸 (try 블록 내부)
+        except:           # 8칸 (try와 같은 레벨)
+            handle()      # 12칸 (except 블록 내부)
+    else:                 # 4칸 (if와 같은 레벨)
+        other_code()      # 8칸 (else 블록 내부)
+```
+
+### 2. 긴 함수의 들여쓰기 관리
+```python
+# 블록 시작과 끝에 주석 추가
+def long_function():
+    if condition1:
+        # condition1 블록 시작
+        for item in items:
+            # for 루프 시작
+            if condition2:
+                # condition2 블록 시작
+                complex_operation()
+                # condition2 블록 끝
+            # for 루프 끝
+        # condition1 블록 끝
+    else:
+        # else 블록 시작
+        simple_operation()
+        # else 블록 끝
+    # 함수 끝
+```
+
+## 🎯 핵심 원칙
+
+1. **하나씩 수정**: 절대 여러 블록을 동시에 수정하지 않기
+2. **즉시 검증**: 각 수정 후 바로 컴파일 테스트
+3. **백업 필수**: 수정 전 반드시 백업 생성
+4. **단계별 커밋**: 정상 동작 확인 후 즉시 커밋
+5. **복구 준비**: 문제 발생 시 즉시 이전 상태로 롤백

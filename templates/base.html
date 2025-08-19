@@ -93,6 +93,12 @@
                         리포트
                     </a>
                 </div>
+                <div class="nav-item">
+                    <a href="{{ url_for('notifications') }}" class="nav-link {% if request.endpoint and 'notifications' in request.endpoint %}active{% endif %}">
+                        <i class="bi bi-bell"></i>
+                        알림
+                    </a>
+                </div>
                 <!-- 설정 -->
                 <div class="nav-item">
                     <a href="{{ url_for('settings') }}" class="nav-link {% if request.endpoint and 'settings' in request.endpoint %}active{% endif %}">
