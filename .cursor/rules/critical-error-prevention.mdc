@@ -1,0 +1,170 @@
+---
+alwaysApply: true
+description: "대량 코드 수정 시 전체 시스템 오류 방지를 위한 필수 안전 절차"
+---
+
+# 🚨 Critical Error Prevention Rules
+
+## 📋 필수 사전 점검 (Before Any Major Changes)
+
+### 1. 백업 브랜치 생성 (MANDATORY)
+```bash
+# 위험한 수정 전 반드시 백업 브랜치 생성
+git checkout -b backup/YYYYMMDD-feature-name
+git push -u origin backup/YYYYMMDD-feature-name
+```
+
+### 2. 현재 상태 검증
+```bash
+# Python 문법 검사
+python -m py_compile app.py
+
+# 서버 실행 테스트 (5초 후 종료)
+timeout 5 python app.py || echo "Server test completed"
+```
+
+## 🔧 단계별 수정 원칙 (Step-by-Step Modification)
+
+### Rule 1: ONE FILE AT A TIME
+- **절대 금지**: 여러 파일 동시 수정
+- **원칙**: 파일 1개 → 검증 → 다음 파일
+- **예외 없음**: 급하더라도 반드시 단계별 진행
+
+### Rule 2: INCREMENTAL VALIDATION
+```bash
+# 각 파일 수정 후 즉시 실행
+python -m py_compile [수정된파일.py]
+```
+
+### Rule 3: SMALL COMMITS
+```bash
+# 5-10줄 수정마다 커밋
+git add [수정파일]
+git commit -m "Fix: 구체적인 수정 내용"
+```
+
+## ⚠️ 고위험 작업 식별
+
+### 🔴 CRITICAL 위험도 작업들:
+1. **들여쓰기 대량 수정** 
+   - 함수/클래스 전체 리팩토링
+   - 중첩 구조 변경
+2. **템플릿 JavaScript 수정**
+   - onclick 속성 변경
+   - 템플릿 변수 삽입
+3. **Import 구조 변경**
+   - 모듈 경로 수정
+   - 파일명 변경 후 참조 업데이트
+
+### 🔴 CRITICAL 작업 시 필수 절차:
+```bash
+# 1. 백업 브랜치 생성
+git checkout -b emergency-backup-$(date +%Y%m%d%H%M)
+
+# 2. 현재 상태 스냅샷
+git add -A && git commit -m "SNAPSHOT: Before critical changes"
+
+# 3. 단일 수정 → 즉시 검증 반복
+# 4. 각 단계마다 커밋
+# 5. 문제 발생 시 즉시 롤백
+```
+
+## 🛡️ 들여쓰기 오류 방지
+
+### Python 들여쓰기 안전 수칙:
+1. **들여쓰기 수정 전 전체 함수 복사**
+2. **4칸 들여쓰기 일관성 유지**
+3. **try-except 블록 특별 주의**
+4. **if-else 블록 들여쓰기 레벨 확인**
+
+### 들여쓰기 검증 명령어:
+```bash
+# Python 들여쓰기 체크
+python -m py_compile app.py
+
+# 상세 문법 오류 확인
+python -m pyflakes app.py
+```
+
+## 🌐 JavaScript/HTML 템플릿 안전 수칙
+
+### Template Literal 처리:
+```html
+<!-- ❌ 위험한 방식 -->
+onclick="func('{{ var|filter }}')"
+
+<!-- ✅ 안전한 방식 -->
+data-value="{{ var }}" class="js-action-btn"
+```
+
+### JavaScript 이벤트 처리:
+```javascript
+// ✅ 안전한 이벤트 바인딩
+document.querySelectorAll('.js-action-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const value = this.dataset.value;
+        handleAction(value);
+    });
+});
+```
+
+## 🚨 비상 복구 절차
+
+### 전체 시스템 오류 시:
+```bash
+# 1. 즉시 이전 작업 상태로 롤백
+git stash  # 현재 변경사항 임시 저장
+git checkout [마지막 정상 커밋 해시]
+
+# 2. 정상 동작 확인
+python app.py
+
+# 3. 문제 분석 후 단계별 재작업
+git checkout -b fix/step-by-step-recovery
+```
+
+### 부분 오류 시:
+```bash
+# 1. 해당 파일만 롤백
+git checkout HEAD -- [문제파일]
+
+# 2. 해당 파일 검증
+python -m py_compile [문제파일]
+
+# 3. 단계별 재수정
+```
+
+## 📊 수정 후 필수 테스트 체크리스트
+
+### ✅ Python 파일 수정 후:
+- [ ] `python -m py_compile app.py` 성공
+- [ ] 서버 시작 테스트 (5초간)
+- [ ] 주요 페이지 접근 테스트
+
+### ✅ Template 파일 수정 후:
+- [ ] 해당 페이지 렌더링 테스트
+- [ ] JavaScript 콘솔 오류 확인
+- [ ] 동적 기능 테스트
+
+### ✅ 대량 수정 완료 후:
+- [ ] 전체 기능 테스트 (포인트 입력, 특이사항 등)
+- [ ] 데이터베이스 연결 확인
+- [ ] 사용자 권한 시스템 확인
+
+## 💡 예방 수칙 요약
+
+1. **ALWAYS BACKUP FIRST** - 백업 없는 수정 금지
+2. **ONE STEP AT A TIME** - 단계별 진행 필수
+3. **VALIDATE IMMEDIATELY** - 즉시 검증 원칙
+4. **COMMIT FREQUENTLY** - 자주 커밋하여 복구점 생성
+5. **TEST BEFORE PROCEED** - 다음 단계 전 테스트 필수
+
+## 🔥 Emergency Contact Protocol
+
+### 심각한 오류 발생 시:
+1. **즉시 모든 작업 중단**
+2. **현재 상태 스냅샷 생성**
+3. **마지막 정상 상태로 롤백**
+4. **오류 원인 분석 후 이 룰 업데이트**
+
+> ⚠️ **기억하세요**: "급하게 가려면 천천히 가라" - 안전한 단계별 접근이 결국 가장 빠른 해결책입니다.

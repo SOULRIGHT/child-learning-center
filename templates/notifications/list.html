@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}알림 - 지역아동센터 학습관리{% endblock %}
+{% block page_title %}알림{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-bell"></i> 알림</h2>
+            {% if unread_count > 0 %}
+                <p class="text-muted mb-0">읽지 않은 알림 <span class="badge bg-danger">{{ unread_count }}</span>개</p>
+            {% else %}
+                <p class="text-muted mb-0">모든 알림을 확인했습니다.</p>
+            {% endif %}
+        </div>
+        <div>
+            {% if unread_count > 0 %}
+                <button class="btn btn-outline-primary me-2" onclick="markAllAsRead()">
+                    <i class="bi bi-check-all"></i> 모두 읽음
+                </button>
+            {% endif %}
+            {% if current_user.role == '센터장' %}
+                <a href="{{ url_for('test_notifications') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-plus"></i> 테스트 알림
+                </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 알림 목록 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body p-0">
+                    {% if notifications %}
+                        <div class="list-group list-group-flush">
+                            {% for notification in notifications %}
+                            <div class="list-group-item {% if not notification.is_read %}bg-light{% endif %}" 
+                                 data-notification-id="{{ notification.id }}">
+                                <div class="d-flex align-items-start">
+                                    <!-- 아이콘 -->
+                                    <div class="me-3 mt-1">
+                                        <div class="rounded-circle bg-{{ notification.color }} d-flex align-items-center justify-content-center" 
+                                             style="width: 40px; height: 40px;">
+                                            <i class="bi bi-{{ notification.icon }} text-white"></i>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- 내용 -->
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <h6 class="mb-1 {% if not notification.is_read %}fw-bold{% endif %}">
+                                                    {{ notification.title }}
+                                                    {% if not notification.is_read %}
+                                                        <span class="badge bg-primary ms-2">새로움</span>
+                                                    {% endif %}
+                                                    {% if notification.priority >= 3 %}
+                                                        <span class="badge bg-warning ms-1">중요</span>
+                                                    {% endif %}
+                                                </h6>
+                                                <p class="mb-1 text-muted">{{ notification.message }}</p>
+                                                <div class="d-flex align-items-center text-muted small">
+                                                    <i class="bi bi-clock me-1"></i>
+                                                    <span>{{ notification.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                                                    
+                                                    {% if notification.child %}
+                                                        <span class="ms-3">
+                                                            <i class="bi bi-person me-1"></i>
+                                                            {{ notification.child.name }}
+                                                        </span>
+                                                    {% endif %}
+                                                    
+                                                    {% if notification.target_role %}
+                                                        <span class="ms-3">
+                                                            <i class="bi bi-people me-1"></i>
+                                                            {{ notification.target_role }}
+                                                        </span>
+                                                    {% endif %}
+                                                    
+                                                    {% if notification.expire_date %}
+                                                        <span class="ms-3 text-warning">
+                                                            <i class="bi bi-hourglass me-1"></i>
+                                                            {{ notification.expire_date.strftime('%m/%d') }}까지
+                                                        </span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- 액션 버튼 -->
+                                            <div class="ms-3">
+                                                {% if not notification.is_read %}
+                                                    <button class="btn btn-sm btn-outline-primary" 
+                                                            onclick="markAsRead({{ notification.id }})">
+                                                        <i class="bi bi-check"></i> 읽음
+                                                    </button>
+                                                {% else %}
+                                                    <span class="text-muted small">
+                                                        <i class="bi bi-check-circle"></i> 읽음
+                                                    </span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="bi bi-bell-slash" style="font-size: 4rem; color: #dee2e6;"></i>
+                            <h5 class="text-muted mt-3">알림이 없습니다</h5>
+                            <p class="text-muted">새로운 알림이 있으면 여기에 표시됩니다.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 페이지네이션 -->
+    {% if total > per_page %}
+    <nav aria-label="알림 페이지" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('notifications', page=page-1) }}">이전</a>
+                </li>
+            {% endif %}
+            
+            {% for p in range(1, ((total - 1) // per_page) + 2) %}
+                {% if p == page %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ p }}</span>
+                    </li>
+                {% elif p >= page - 2 and p <= page + 2 %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('notifications', page=p) }}">{{ p }}</a>
+                    </li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if page < ((total - 1) // per_page) + 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('notifications', page=page+1) }}">다음</a>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+
+<script>
+function markAsRead(notificationId) {
+    fetch(`/notifications/${notificationId}/read`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('알림을 읽음으로 표시하는데 실패했습니다.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('오류가 발생했습니다.');
+    });
+}
+
+function markAllAsRead() {
+    if (!confirm('모든 읽지 않은 알림을 읽음으로 표시하시겠습니까?')) {
+        return;
+    }
+    
+    fetch('/notifications/mark-all-read', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`${data.count}개의 알림을 읽음으로 표시했습니다.`);
+            location.reload();
+        } else {
+            alert('알림을 읽음으로 표시하는데 실패했습니다.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('오류가 발생했습니다.');
+    });
+}
+</script>
+{% endblock %}

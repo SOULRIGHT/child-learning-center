@@ -96,12 +96,7 @@
                             <div class="fw-bold">누적 포인트</div>
                         </a>
                     </div>
-                    <div class="col-xl-3 col-lg-6 col-6">
-                        <a href="{{ url_for('points_analysis') }}" class="quick-action-btn">
-                            <i class="bi bi-bar-chart quick-action-icon"></i>
-                            <div class="fw-bold">포인트 분석</div>
-                        </a>
-                    </div>
+
                     <div class="col-xl-3 col-lg-6 col-6">
                         <a href="{{ url_for('points_visualization') }}" class="quick-action-btn">
                             <i class="bi bi-graph-up quick-action-icon"></i>
@@ -311,9 +306,9 @@
                         {% endfor %}
                     </div>
                     <div class="text-center mt-3">
-                        <button class="btn btn-outline-primary btn-sm" onclick="alert('곧 구현됩니다!')">
+                        <a href="{{ url_for('points_list') }}" class="btn btn-outline-primary btn-sm">
                             더 보기
-                        </button>
+                        </a>
                     </div>
                 {% else %}
                     <div class="text-center py-5">

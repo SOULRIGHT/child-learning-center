@@ -239,15 +239,22 @@
                 <h6 class="card-title mb-0">
                     <i class="bi bi-chat-dots me-2"></i>특이사항
                 </h6>
-                <button class="btn btn-sm btn-outline-primary" onclick="alert('특이사항 추가 기능은 곧 구현됩니다!')">
-                    <i class="bi bi-plus"></i>
-                </button>
+                <div>
+                    {% if recent_notes|length >= 5 %}
+                        <a href="{{ url_for('view_all_child_notes', child_id=child.id) }}" class="btn btn-sm btn-outline-secondary me-2">
+                            <i class="bi bi-list"></i> 전체보기
+                        </a>
+                    {% endif %}
+                    <button class="btn btn-sm btn-outline-primary" onclick="showAddNoteModal()">
+                        <i class="bi bi-plus"></i> 추가
+                    </button>
+                </div>
             </div>
             <div class="card-body">
                 {% if recent_notes %}
-                <div class="timeline">
+                <div class="timeline" id="notesTimeline">
                     {% for note in recent_notes %}
-                    <div class="timeline-item mb-3">
+                    <div class="timeline-item mb-3" data-note-id="{{ note.id }}">
                         <div class="d-flex">
                             <div class="me-3">
                                 <div class="rounded-circle bg-info d-flex align-items-center justify-content-center"
@@ -256,11 +263,36 @@
                                 </div>
                             </div>
                             <div class="flex-grow-1">
-                                <div class="bg-light rounded p-3">
-                                    <p class="mb-2">{{ note.note }}</p>
-                                    <small class="text-muted">
-                                        {{ note.creator.name }} • {{ note.created_at.strftime('%m/%d %H:%M') }}
-                                    </small>
+                                <div class="bg-light rounded p-3 position-relative">
+                                    <p class="mb-2" id="noteText{{ note.id }}">{{ note.note }}</p>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small class="text-muted">
+                                            {{ note.creator.name }} • {{ note.created_at.strftime('%m/%d %H:%M') }}
+                                            {% if note.updated_at != note.created_at %}
+                                                <span class="badge bg-secondary ms-1">수정됨</span>
+                                            {% endif %}
+                                        </small>
+                                        {% if note.created_by == current_user.id or current_user.role == '센터장' %}
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
+                                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                                <i class="bi bi-three-dots"></i>
+                                            </button>
+                                            <ul class="dropdown-menu">
+                                                <li>
+                                                    <a class="dropdown-item edit-note-btn" href="#" data-note-id="{{ note.id }}" data-note-content="{{ note.note }}">
+                                                        <i class="bi bi-pencil me-2"></i>수정
+                                                    </a>
+                                                </li>
+                                                <li>
+                                                    <a class="dropdown-item text-danger delete-note-btn" href="#" data-note-id="{{ note.id }}">
+                                                        <i class="bi bi-trash me-2"></i>삭제
+                                                    </a>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                        {% endif %}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -271,6 +303,9 @@
                 <div class="text-center py-4">
                     <i class="bi bi-chat" style="font-size: 2rem; color: #dee2e6;"></i>
                     <p class="text-muted mt-2 mb-0">특이사항이 없습니다.</p>
+                    <button class="btn btn-primary btn-sm mt-2" onclick="showAddNoteModal()">
+                        <i class="bi bi-plus me-1"></i>첫 특이사항 추가하기
+                    </button>
                 </div>
                 {% endif %}
             </div>
@@ -361,4 +396,149 @@
     background: #e9ecef;
 }
 </style>
+
+<!-- 특이사항 추가 모달 -->
+<div class="modal fade" id="addNoteModal" tabindex="-1" aria-labelledby="addNoteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addNoteModalLabel">
+                    <i class="bi bi-chat-dots me-2"></i>특이사항 추가
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('add_child_note', child_id=child.id) }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="noteText" class="form-label">특이사항 내용</label>
+                        <textarea class="form-control" id="noteText" name="note" rows="4" 
+                                  placeholder="예: 오늘 수학 문제 해결에 집중을 잘 했습니다." required></textarea>
+                        <div class="form-text">아동의 학습 상황, 행동 변화, 특이사항 등을 기록해주세요.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-plus me-1"></i>추가
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 특이사항 수정 모달 -->
+<div class="modal fade" id="editNoteModal" tabindex="-1" aria-labelledby="editNoteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editNoteModalLabel">
+                    <i class="bi bi-pencil me-2"></i>특이사항 수정
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editNoteForm" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="editNoteText" class="form-label">특이사항 내용</label>
+                        <textarea class="form-control" id="editNoteText" name="note" rows="4" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-pencil me-1"></i>수정
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// 특이사항 추가 모달 표시
+function showAddNoteModal() {
+    const modal = new bootstrap.Modal(document.getElementById('addNoteModal'));
+    modal.show();
+}
+
+// 특이사항 수정 모달 표시
+function editNote(noteId, currentText) {
+    const editForm = document.getElementById('editNoteForm');
+    const editTextarea = document.getElementById('editNoteText');
+    
+    // 폼 액션 URL 설정
+    editForm.action = `/children/{{ child.id }}/notes/${noteId}/edit`;
+    
+    // 현재 텍스트 설정
+    editTextarea.value = currentText;
+    
+    // 모달 표시
+    const modal = new bootstrap.Modal(document.getElementById('editNoteModal'));
+    modal.show();
+}
+
+// 특이사항 삭제
+function deleteNote(noteId) {
+    if (!confirm('정말로 이 특이사항을 삭제하시겠습니까?')) {
+        return;
+    }
+    
+    // 삭제 폼 생성 및 제출
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `/children/{{ child.id }}/notes/${noteId}/delete`;
+    
+    document.body.appendChild(form);
+    form.submit();
+}
+
+// 페이지 로드 시 실행
+document.addEventListener('DOMContentLoaded', function() {
+    // 특이사항 수정 버튼 이벤트 리스너
+    document.querySelectorAll('.edit-note-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const noteId = this.dataset.noteId;
+            const noteContent = this.dataset.noteContent;
+            editNote(noteId, noteContent);
+        });
+    });
+    
+    // 특이사항 삭제 버튼 이벤트 리스너
+    document.querySelectorAll('.delete-note-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const noteId = this.dataset.noteId;
+            deleteNote(noteId);
+        });
+    });
+    
+    // 특이사항 추가 폼 검증
+    const addNoteForm = document.querySelector('#addNoteModal form');
+    if (addNoteForm) {
+        addNoteForm.addEventListener('submit', function(e) {
+            const noteText = document.getElementById('noteText').value.trim();
+            if (noteText.length < 5) {
+                e.preventDefault();
+                alert('특이사항은 5자 이상 입력해주세요.');
+                return false;
+            }
+        });
+    }
+    
+    // 특이사항 수정 폼 검증
+    const editNoteForm = document.getElementById('editNoteForm');
+    if (editNoteForm) {
+        editNoteForm.addEventListener('submit', function(e) {
+            const noteText = document.getElementById('editNoteText').value.trim();
+            if (noteText.length < 5) {
+                e.preventDefault();
+                alert('특이사항은 5자 이상 입력해주세요.');
+                return false;
+            }
+        });
+    }
+});
+</script>
 {% endblock %} 

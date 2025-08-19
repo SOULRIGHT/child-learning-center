@@ -1,0 +1,264 @@
+---
+globs: *.html
+description: "HTML 템플릿 내 JavaScript 문법 오류 방지 및 안전한 처리 방법"
+---
+
+# 🌐 Template JavaScript Safety Guide
+
+## 🚨 실제 발생했던 JavaScript 템플릿 오류
+
+### 문제 발생 사례:
+```html
+<!-- ❌ 오류 발생 패턴들 -->
+
+<!-- 1. onclick 속성에서 따옴표 충돌 -->
+<a onclick="editNote({{ note.id }}, '{{ note.note|replace("'", "\\'") }}')">
+
+<!-- 2. 닫는 태그 누락 -->
+<a class="dropdown-item" href="#" onclick="deleteNote({{ note.id }})"
+    <i class="bi bi-trash"></i>삭제  <!-- ❌ > 누락 -->
+</a>
+
+<!-- 3. JavaScript 특수문자 처리 실패 -->
+<button onclick="alert('{{ message }}')">  <!-- message에 ' 포함시 오류 -->
+
+<!-- 4. 백틱 템플릿 리터럴 충돌 -->
+<a onclick="func(`{{ content }}`)">  <!-- 백틱 내용에 백틱 포함시 오류 -->
+```
+
+## ✅ 안전한 템플릿 JavaScript 패턴
+
+### 1. Data 속성 + 이벤트 리스너 (권장)
+```html
+<!-- ✅ 안전한 방식: data 속성 사용 -->
+<a class="edit-note-btn" 
+   data-note-id="{{ note.id }}" 
+   data-note-content="{{ note.note }}"
+   href="#">
+    <i class="bi bi-pencil"></i>수정
+</a>
+
+<script>
+// JavaScript에서 안전하게 처리
+document.querySelectorAll('.edit-note-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const noteId = this.dataset.noteId;
+        const noteContent = this.dataset.noteContent;
+        editNote(noteId, noteContent);
+    });
+});
+</script>
+```
+
+### 2. JSON 데이터 전달 (복잡한 데이터용)
+```html
+<!-- ✅ 복잡한 데이터는 JSON으로 -->
+<script id="note-data" type="application/json">
+{{ notes|tojson }}
+</script>
+
+<script>
+// JavaScript에서 안전하게 파싱
+const noteData = JSON.parse(document.getElementById('note-data').textContent);
+noteData.forEach(note => {
+    // 안전하게 데이터 사용
+    console.log(note.id, note.content);
+});
+</script>
+```
+
+### 3. 폼 기반 처리 (POST 요청용)
+```html
+<!-- ✅ 폼을 통한 안전한 데이터 전송 -->
+<form method="POST" action="/notes/{{ note.id }}/delete" class="delete-form">
+    <button type="button" class="delete-btn btn btn-danger">
+        <i class="bi bi-trash"></i>삭제
+    </button>
+</form>
+
+<script>
+document.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        if (confirm('정말 삭제하시겠습니까?')) {
+            this.closest('.delete-form').submit();
+        }
+    });
+});
+</script>
+```
+
+## 🛡️ 템플릿 보안 검증 절차
+
+### Step 1: 템플릿 수정 전 검증
+```bash
+# 현재 페이지가 정상 렌더링되는지 확인
+curl -s http://localhost:5000/children/1 | grep -q "<!DOCTYPE html"
+echo $? # 0이면 정상
+```
+
+### Step 2: JavaScript 문법 검증
+```html
+<!-- 수정 후 브라우저 개발자 도구에서 확인 -->
+<script>
+// Console에서 오류 확인
+console.log('Template JavaScript loaded successfully');
+</script>
+```
+
+### Step 3: XSS 방지 확인
+```python
+# Python 백엔드에서 데이터 이스케이핑 확인
+from markupsafe import escape
+
+# 템플릿으로 전달하기 전 이스케이핑
+note_content = escape(user_input)
+```
+
+## 🔧 문제 발생 시 디버깅 방법
+
+### JavaScript 오류 진단:
+```javascript
+// 1. 브라우저 개발자 도구 열기 (F12)
+// 2. Console 탭에서 오류 메시지 확인
+// 3. 오류가 발생한 줄 번호 확인
+
+// 일반적인 오류 패턴:
+// - SyntaxError: Unexpected token
+// - ReferenceError: function is not defined
+// - TypeError: Cannot read property
+```
+
+### 템플릿 렌더링 문제 진단:
+```python
+# Flask 템플릿 렌더링 오류 디버깅
+@app.route('/debug/template')
+def debug_template():
+    try:
+        return render_template('problematic_template.html', data=test_data)
+    except Exception as e:
+        return f"Template Error: {str(e)}"
+```
+
+## 📋 템플릿 JavaScript 안전 체크리스트
+
+### ✅ 수정 전 확인:
+- [ ] 현재 페이지가 정상 렌더링되는가?
+- [ ] JavaScript 콘솔에 오류가 없는가?
+- [ ] 동적 기능들이 정상 작동하는가?
+
+### ✅ 수정 시 주의사항:
+- [ ] `onclick` 대신 `data` 속성 + 이벤트 리스너 사용했는가?
+- [ ] 모든 HTML 태그가 올바르게 닫혔는가?
+- [ ] 특수문자가 포함된 데이터를 안전하게 처리했는가?
+- [ ] XSS 방지를 위한 이스케이핑이 적용되었는가?
+
+### ✅ 수정 후 검증:
+- [ ] 브라우저에서 페이지가 정상 로드되는가?
+- [ ] JavaScript 콘솔에 새로운 오류가 없는가?
+- [ ] 수정한 기능이 예상대로 작동하는가?
+- [ ] 다른 페이지에 영향을 주지 않았는가?
+
+## 🚨 응급 복구 절차
+
+### JavaScript 오류로 페이지가 작동하지 않는 경우:
+```bash
+# 1. 이전 버전으로 즉시 롤백
+git checkout HEAD~1 -- templates/children/detail.html
+
+# 2. 서버 재시작 후 테스트
+python app.py
+
+# 3. 문제가 해결되면 단계별 재수정
+```
+
+### 특정 기능만 오류인 경우:
+```html
+<!-- 임시로 해당 기능 비활성화 -->
+<button disabled>
+    <i class="bi bi-pencil"></i>수정 (임시 비활성화)
+</button>
+```
+
+## 💡 모범 사례 패턴
+
+### 1. 이벤트 위임 사용
+```javascript
+// ✅ 효율적인 이벤트 처리
+document.addEventListener('click', function(e) {
+    if (e.target.matches('.edit-note-btn')) {
+        const noteId = e.target.dataset.noteId;
+        const noteContent = e.target.dataset.noteContent;
+        editNote(noteId, noteContent);
+    }
+    
+    if (e.target.matches('.delete-note-btn')) {
+        const noteId = e.target.dataset.noteId;
+        deleteNote(noteId);
+    }
+});
+```
+
+### 2. 에러 처리 포함
+```javascript
+// ✅ 안전한 함수 정의
+function editNote(noteId, noteContent) {
+    try {
+        if (!noteId || !noteContent) {
+            throw new Error('Invalid note data');
+        }
+        
+        // 모달 표시 로직
+        const modal = new bootstrap.Modal(document.getElementById('editNoteModal'));
+        document.getElementById('editNoteText').value = noteContent;
+        modal.show();
+        
+    } catch (error) {
+        console.error('Error editing note:', error);
+        alert('노트 수정 중 오류가 발생했습니다.');
+    }
+}
+```
+
+### 3. 템플릿 변수 검증
+```html
+<!-- ✅ 안전한 템플릿 변수 사용 -->
+{% if note and note.id %}
+<a class="edit-note-btn" 
+   data-note-id="{{ note.id }}" 
+   data-note-content="{{ note.note|e }}"  <!-- |e 필터로 이스케이핑 -->
+   href="#">수정</a>
+{% endif %}
+```
+
+## 🎯 핵심 원칙
+
+1. **onclick 금지**: 절대 onclick 속성에 복잡한 로직 넣지 않기
+2. **데이터 분리**: HTML과 JavaScript 로직 명확히 분리
+3. **안전한 전달**: data 속성이나 JSON을 통한 안전한 데이터 전달
+4. **점진적 향상**: JavaScript 없이도 기본 기능은 작동하도록 설계
+5. **즉시 검증**: 수정 후 반드시 브라우저에서 직접 테스트
+
+## 🔍 추가 검증 도구
+
+### HTML 검증:
+```bash
+# HTML 문법 검사 (선택사항)
+pip install html5lib
+python -c "
+import html5lib
+with open('templates/children/detail.html', 'r', encoding='utf-8') as f:
+    content = f.read()
+    try:
+        html5lib.parse(content)
+        print('✅ HTML 구문 검사 통과')
+    except Exception as e:
+        print(f'❌ HTML 오류: {e}')
+"
+```
+
+### JavaScript 린팅 (선택사항):
+```bash
+# JavaScript 코드 품질 검사
+npx jshint static/js/script.js
+```

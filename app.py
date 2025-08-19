@@ -205,11 +205,11 @@ def init_db():
         # 환경변수에서 읽을 수 없는 경우 기본값 사용
         if not default_users:
             print("⚠️ 환경변수에서 사용자 데이터를 읽을 수 없습니다. 기본 데이터를 사용합니다.")
-            default_users = [
-                {'username': 'developer', 'name': '개발자', 'role': '개발자', 'password': 'dev123'},
-                {'username': 'center_head', 'name': '센터장', 'role': '센터장', 'password': 'center123!'},
+        default_users = [
+            {'username': 'developer', 'name': '개발자', 'role': '개발자', 'password': 'dev123'},
+            {'username': 'center_head', 'name': '센터장', 'role': '센터장', 'password': 'center123!'},
                 {'username': 'care_teacher', 'name': '돌봄선생님', 'role': '돌봄선생님', 'password': 'care123!'}
-            ]
+        ]
         
         for user_data in default_users:
                 password_hash = generate_password_hash(user_data['password'])
@@ -247,11 +247,11 @@ def init_db():
         if not test_children_data:
             print("⚠️ 환경변수에서 테스트 아동 데이터를 읽을 수 없습니다. 기본 데이터를 사용합니다.")
             test_children_data = [
-                Child(name='김철수', grade=3, include_in_stats=True),
-                Child(name='박영희', grade=3, include_in_stats=True),
-                Child(name='이민수', grade=4, include_in_stats=True),
-                Child(name='최지영', grade=4, include_in_stats=False),  # 통계 제외 예시
-            ]
+            Child(name='김철수', grade=3, include_in_stats=True),
+            Child(name='박영희', grade=3, include_in_stats=True),
+            Child(name='이민수', grade=4, include_in_stats=True),
+            Child(name='최지영', grade=4, include_in_stats=False),  # 통계 제외 예시
+        ]
         
         test_children = test_children_data
         
@@ -463,10 +463,8 @@ def dashboard():
         # 주간 총 포인트
         weekly_total_points = sum(record.total_points for record in weekly_points)
     
-    # ====== [알림 시스템 임시 비활성화] ======
-    notifications = []
-    # TODO: 나중에 알림 로직 재구현
-    # 현재는 빈 리스트 반환
+    # ====== [알림 시스템 활성화] ======
+    notifications = get_user_notifications(current_user.id, limit=5)
     
     return render_template('dashboard.html', 
                          today_points_children=today_points_children,
@@ -678,6 +676,131 @@ def child_detail(child_id):
                          recent_avg=recent_avg,
                          latest_record=latest_record,
                          total_points=total_points)
+
+# ===== 특이사항 관리 라우트 =====
+
+@app.route('/children/<int:child_id>/notes', methods=['POST'])
+@login_required
+def add_child_note(child_id):
+    """아동 특이사항 추가"""
+    child = Child.query.get_or_404(child_id)
+    
+    note_text = request.form.get('note', '').strip()
+    if not note_text:
+        flash('특이사항을 입력해주세요.', 'error')
+        return redirect(url_for('child_detail', child_id=child_id))
+    
+    try:
+        new_note = ChildNote(
+            child_id=child_id,
+            note=note_text,
+            created_by=current_user.id
+        )
+        
+        db.session.add(new_note)
+        db.session.commit()
+        
+        flash(f'✅ {child.name} 아동의 특이사항이 추가되었습니다.', 'success')
+        
+        # 특이사항 추가 알림 생성
+        create_notification(
+            title=f'📝 {child.name} 특이사항 추가',
+            message=f'{current_user.name}님이 {child.name} 아동의 특이사항을 추가했습니다.',
+            notification_type='info',
+            child_id=child.id,
+            target_role='돌봄선생님',
+            priority=1,
+            auto_expire=True,
+            expire_days=7
+        )
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'❌ 특이사항 추가 중 오류가 발생했습니다: {str(e)}', 'error')
+    
+    return redirect(url_for('child_detail', child_id=child_id))
+
+@app.route('/children/<int:child_id>/notes/<int:note_id>/edit', methods=['POST'])
+@login_required  
+def edit_child_note(child_id, note_id):
+    """아동 특이사항 수정"""
+    child = Child.query.get_or_404(child_id)
+    note = ChildNote.query.get_or_404(note_id)
+    
+    # 권한 확인 (작성자 또는 센터장만 수정 가능)
+    if note.created_by != current_user.id and current_user.role != '센터장':
+        flash('❌ 특이사항을 수정할 권한이 없습니다.', 'error')
+        return redirect(url_for('child_detail', child_id=child_id))
+    
+    note_text = request.form.get('note', '').strip()
+    if not note_text:
+        flash('특이사항을 입력해주세요.', 'error')
+        return redirect(url_for('child_detail', child_id=child_id))
+    
+    try:
+        old_note = note.note
+        note.note = note_text
+        note.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        flash(f'✅ {child.name} 아동의 특이사항이 수정되었습니다.', 'success')
+        
+        # 특이사항 수정 알림 생성 (중요한 변경사항인 경우)
+        if len(note_text) > len(old_note) * 1.5:  # 내용이 크게 늘어난 경우
+            create_notification(
+                title=f'📝 {child.name} 특이사항 수정',
+                message=f'{current_user.name}님이 {child.name} 아동의 특이사항을 수정했습니다.',
+                notification_type='info',
+                child_id=child.id,
+                target_role='돌봄선생님',
+                priority=1
+            )
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'❌ 특이사항 수정 중 오류가 발생했습니다: {str(e)}', 'error')
+    
+    return redirect(url_for('child_detail', child_id=child_id))
+
+@app.route('/children/<int:child_id>/notes/<int:note_id>/delete', methods=['POST'])
+@login_required
+def delete_child_note(child_id, note_id):
+    """아동 특이사항 삭제"""
+    child = Child.query.get_or_404(child_id)
+    note = ChildNote.query.get_or_404(note_id)
+    
+    # 권한 확인 (작성자 또는 센터장만 삭제 가능)
+    if note.created_by != current_user.id and current_user.role != '센터장':
+        flash('❌ 특이사항을 삭제할 권한이 없습니다.', 'error')
+        return redirect(url_for('child_detail', child_id=child_id))
+    
+    try:
+        db.session.delete(note)
+        db.session.commit()
+        
+        flash(f'✅ {child.name} 아동의 특이사항이 삭제되었습니다.', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'❌ 특이사항 삭제 중 오류가 발생했습니다: {str(e)}', 'error')
+    
+    return redirect(url_for('child_detail', child_id=child_id))
+
+@app.route('/children/<int:child_id>/notes/all')
+@login_required
+def view_all_child_notes(child_id):
+    """아동 특이사항 전체 보기"""
+    child = Child.query.get_or_404(child_id)
+    
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+    
+    notes = ChildNote.query.filter_by(child_id=child_id)\
+                          .order_by(ChildNote.created_at.desc())\
+                          .paginate(page=page, per_page=per_page, error_out=False)
+    
+    return render_template('children/notes.html', child=child, notes=notes)
 
 # 점수 입력 라우트
 @app.route('/scores')
@@ -1404,7 +1527,7 @@ def points_input(child_id):
             math_points = int(request.form.get('math_points', 0))
             ssen_points = int(request.form.get('ssen_points', 0))
             reading_points = int(request.form.get('reading_points', 0))
-            
+        
             # 값 검증: 음수 방지, 범위 검증 (0-200)
             if any(points < 0 for points in [korean_points, math_points, ssen_points, reading_points]):
                 flash('❌ 포인트는 음수일 수 없습니다. 0-200 사이의 값을 입력해주세요.', 'error')
@@ -1494,25 +1617,31 @@ def points_input(child_id):
                 )
                 db.session.add(history_record)
                 
-                # 새 기록 생성
-                new_record = DailyPoints(
-                    child_id=child_id,
-                    date=today,
-                    korean_points=korean_points,
-                    math_points=math_points,
-                    ssen_points=ssen_points,
-                    reading_points=reading_points,
-                    total_points=total_points,
-                    created_by=current_user.id
-                )
-                db.session.add(new_record)
-                
-                flash(f'✅ {child.name} 아이의 포인트가 저장되었습니다. (총점: {total_points}점)', 'success')
+            # 새 기록 생성
+            new_record = DailyPoints(
+                child_id=child_id,
+                date=today,
+                korean_points=korean_points,
+                math_points=math_points,
+                ssen_points=ssen_points,
+                reading_points=reading_points,
+                total_points=total_points,
+                created_by=current_user.id
+            )
+            db.session.add(new_record)
+            
+            flash(f'✅ {child.name} 아이의 포인트가 저장되었습니다. (총점: {total_points}점)', 'success')
             
             db.session.commit()
             
             # 누적 포인트 자동 업데이트 (Child 모델의 cumulative_points)
             update_cumulative_points(child_id)
+            
+            # 자동 알림 생성
+            if existing_record:
+                create_automatic_notifications(child, existing_record, is_update=True)
+            else:
+                create_automatic_notifications(child, new_record, is_update=False)
             
             return redirect(url_for('points_list'))
             
@@ -1603,97 +1732,59 @@ def points_analysis():
         child = Child.query.get_or_404(child_id)
         
         # 해당 아동의 전체 포인트 기록 (중복 제거 후)
-        # 날짜별로 하나의 기록만 가져오기
-        result = db.session.execute(text("""
-            SELECT id, date, korean_points, math_points, ssen_points, reading_points, total_points
+    # 날짜별로 하나의 기록만 가져오기
+    result = db.session.execute(text("""
+        SELECT id, date, korean_points, math_points, ssen_points, reading_points, total_points
+        FROM daily_points 
+        WHERE child_id = :child_id 
+        AND id IN (
+            SELECT MAX(id) 
             FROM daily_points 
             WHERE child_id = :child_id 
-            AND id IN (
-                SELECT MAX(id) 
-                FROM daily_points 
-                WHERE child_id = :child_id 
-                GROUP BY date
-            )
-            ORDER BY date DESC
-        """), {"child_id": child_id})
+            GROUP BY date 
+        )
+        ORDER BY date DESC
+    """), {"child_id": child_id})
+    
+    # 실제 DailyPoints 객체로 변환
+    child_points = []
+    for row in result:
+        # 날짜 타입 변환 (문자열일 경우 datetime.date로 변환)
+        date_value = row[1]
+        if isinstance(date_value, str):
+            from datetime import datetime
+            date_value = datetime.strptime(date_value, '%Y-%m-%d').date()
         
-        # 실제 DailyPoints 객체로 변환
-        child_points = []
-        for row in result:
-            # 날짜 타입 변환 (문자열일 경우 datetime.date로 변환)
-            date_value = row[1]
-            if isinstance(date_value, str):
-                from datetime import datetime
-                date_value = datetime.strptime(date_value, '%Y-%m-%d').date()
-            
-            # DailyPoints 객체 생성
-            point_record = DailyPoints(
-                id=row[0],
-                date=date_value,
-                korean_points=row[2],
-                math_points=row[3],
-                ssen_points=row[4],
-                reading_points=row[5],
-                total_points=row[6]
-            )
-            child_points.append(point_record)
-        
-        # 총 포인트 계산 (중복 제거된 데이터로)
-        total_points = sum(record.total_points for record in child_points)
-        
-        # 디버깅: 실제 데이터 확인
-        print(f"=== {child.name} 포인트 분석 ===")
-        print(f"아동 ID: {child_id}")
-        print(f"아동 이름: {child.name}")
-        print(f"총 기록 수: {len(child_points)}")
-        print(f"계산된 총 포인트: {total_points}")
-        print(f"Child.cumulative_points: {child.cumulative_points}")
-        print("================================")
-        
-        # 같은 학년 아동들의 포인트 비교 (중복 제거 후)
-        same_grade_children = Child.query.filter_by(grade=child.grade, include_in_stats=True).all()
-        grade_comparison = []
-        
-        for grade_child in same_grade_children:
-            if grade_child.id != child_id:  # 자기 자신 제외
-                # 중복 제거된 포인트 계산
-                result = db.session.execute(text("""
-                    SELECT SUM(total_points) as total, COUNT(*) as count
-                    FROM daily_points 
-                    WHERE child_id = :child_id 
-                    AND id IN (
-                        SELECT MAX(id) 
-                        FROM daily_points 
-                        WHERE child_id = :child_id 
-                        GROUP BY date
-                    )
-                """), {"child_id": grade_child.id})
-                
-                row = result.fetchone()
-                grade_child_total = row[0] or 0
-                record_count = row[1] or 0
-                
-                grade_comparison.append({
-                    'id': grade_child.id,
-                    'name': grade_child.name,
-                    'total_points': grade_child_total,
-                    'record_count': record_count
-                })
-        
-        # 학년 내 순위 계산
-        grade_comparison.append({
-            'id': child.id,
-            'name': child.name,
-            'total_points': total_points,
-            'record_count': len(child_points)
-        })
-        grade_comparison.sort(key=lambda x: x['total_points'], reverse=True)
-        
-        # 전체 학년 순위 (중복 제거 후)
-        all_children = Child.query.filter_by(include_in_stats=True).all()
-        overall_ranking = []
-        
-        for all_child in all_children:
+        # DailyPoints 객체 생성
+        point_record = DailyPoints(
+            id=row[0],
+            date=date_value,
+            korean_points=row[2],
+            math_points=row[3],
+            ssen_points=row[4],
+            reading_points=row[5],
+            total_points=row[6]
+        )
+        child_points.append(point_record)
+    
+    # 총 포인트 계산 (중복 제거된 데이터로)
+    total_points = sum(record.total_points for record in child_points)
+    
+    # 디버깅: 실제 데이터 확인
+    print(f"=== {child.name} 포인트 분석 ===")
+    print(f"아동 ID: {child_id}")
+    print(f"아동 이름: {child.name}")
+    print(f"총 기록 수: {len(child_points)}")
+    print(f"계산된 총 포인트: {total_points}")
+    print(f"Child.cumulative_points: {child.cumulative_points}")
+    print("================================")
+    
+    # 같은 학년 아동들의 포인트 비교 (중복 제거 후)
+    same_grade_children = Child.query.filter_by(grade=child.grade, include_in_stats=True).all()
+    grade_comparison = []
+    
+    for grade_child in same_grade_children:
+        if grade_child.id != child_id:  # 자기 자신 제외
             # 중복 제거된 포인트 계산
             result = db.session.execute(text("""
                 SELECT SUM(total_points) as total, COUNT(*) as count
@@ -1705,19 +1796,57 @@ def points_analysis():
                     WHERE child_id = :child_id 
                     GROUP BY date
                 )
-            """), {"child_id": all_child.id})
+            """), {"child_id": grade_child.id})
             
             row = result.fetchone()
-            all_child_total = row[0] or 0
+            grade_child_total = row[0] or 0
             record_count = row[1] or 0
             
-            overall_ranking.append({
-                'id': all_child.id,
-                'name': all_child.name,
-                'grade': all_child.grade,
-                'total_points': all_child_total,
+            grade_comparison.append({
+                'id': grade_child.id,
+                'name': grade_child.name,
+                'total_points': grade_child_total,
                 'record_count': record_count
             })
+    
+    # 학년 내 순위 계산
+    grade_comparison.append({
+        'id': child.id,
+        'name': child.name,
+        'total_points': total_points,
+        'record_count': len(child_points)
+    })
+    grade_comparison.sort(key=lambda x: x['total_points'], reverse=True)
+    
+    # 전체 학년 순위 (중복 제거 후)
+    all_children = Child.query.filter_by(include_in_stats=True).all()
+    overall_ranking = []
+    
+    for all_child in all_children:
+        # 중복 제거된 포인트 계산
+        result = db.session.execute(text("""
+            SELECT SUM(total_points) as total, COUNT(*) as count
+            FROM daily_points 
+            WHERE child_id = :child_id 
+            AND id IN (
+                SELECT MAX(id) 
+                FROM daily_points 
+                WHERE child_id = :child_id 
+                GROUP BY date
+            )
+        """), {"child_id": all_child.id})
+        
+        row = result.fetchone()
+        all_child_total = row[0] or 0
+        record_count = row[1] or 0
+        
+        overall_ranking.append({
+            'id': all_child.id,
+            'name': all_child.name,
+            'grade': all_child.grade,
+            'total_points': all_child_total,
+            'record_count': record_count
+        })
         
         overall_ranking.sort(key=lambda x: x['total_points'], reverse=True)
         
@@ -2120,9 +2249,9 @@ def settings_data():
         if action == 'seed_data':
             # 시드 데이터 실행
             try:
-                from seed_data import main as seed_main
+                from scripts.seed_data import main as seed_main
                 seed_main()
-                flash('데이터베이스 시드가 성공적으로 실행되었습니다.', 'success')
+                flash('기본 시드 데이터가 성공적으로 실행되었습니다.', 'success')
             except Exception as e:
                 flash(f'시드 데이터 실행 중 오류가 발생했습니다: {e}', 'error')
         
@@ -2344,6 +2473,326 @@ class PointsHistory(db.Model):
     
     def __repr__(self):
         return f'<PointsHistory {self.child.name} {self.date} {self.change_type}>'
+
+class Notification(db.Model):
+    """알림 시스템"""
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    
+    # 알림 타입 및 우선순위
+    type = db.Column(db.String(30), default='info')  # 'info', 'success', 'warning', 'danger'
+    priority = db.Column(db.Integer, default=1)  # 1=낮음, 2=보통, 3=높음, 4=긴급
+    
+    # 대상 및 조건
+    target_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # null이면 전체 공지
+    target_role = db.Column(db.String(30), nullable=True)  # 특정 역할에만 표시
+    child_id = db.Column(db.Integer, db.ForeignKey('child.id'), nullable=True)  # 특정 아동 관련 알림
+    
+    # 상태 관리
+    is_read = db.Column(db.Boolean, default=False)
+    is_active = db.Column(db.Boolean, default=True)
+    auto_expire = db.Column(db.Boolean, default=False)  # 자동 만료 여부
+    expire_date = db.Column(db.DateTime, nullable=True)  # 만료 일시
+    
+    # 메타데이터
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    read_at = db.Column(db.DateTime, nullable=True)
+    
+    # 관계 설정
+    target_user = db.relationship('User', foreign_keys=[target_user_id], backref='received_notifications', lazy=True)
+    creator = db.relationship('User', foreign_keys=[created_by], backref='created_notifications', lazy=True)
+    child = db.relationship('Child', backref='notifications', lazy=True)
+    
+    def __repr__(self):
+        return f'<Notification {self.title} ({self.type})>'
+    
+    @property
+    def icon(self):
+        """알림 타입에 따른 아이콘 반환"""
+        icons = {
+            'info': 'info-circle',
+            'success': 'check-circle',
+            'warning': 'exclamation-triangle',
+            'danger': 'x-circle',
+            'achievement': 'trophy',
+            'reminder': 'clock',
+            'system': 'gear'
+        }
+        return icons.get(self.type, 'bell')
+    
+    @property
+    def color(self):
+        """알림 타입에 따른 색상 반환"""
+        colors = {
+            'info': 'primary',
+            'success': 'success',
+            'warning': 'warning',
+            'danger': 'danger',
+            'achievement': 'warning',
+            'reminder': 'info',
+            'system': 'secondary'
+        }
+        return colors.get(self.type, 'primary')
+
+# ===== 알림 시스템 헬퍼 함수들 =====
+
+def create_notification(title, message, notification_type='info', target_user_id=None, target_role=None, 
+                       child_id=None, priority=1, auto_expire=False, expire_days=None):
+    """새 알림 생성"""
+    try:
+        expire_date = None
+        if auto_expire and expire_days:
+            expire_date = datetime.utcnow() + timedelta(days=expire_days)
+        
+        notification = Notification(
+            title=title,
+            message=message,
+            type=notification_type,
+            target_user_id=target_user_id,
+            target_role=target_role,
+            child_id=child_id,
+            priority=priority,
+            auto_expire=auto_expire,
+            expire_date=expire_date,
+            created_by=current_user.id if current_user.is_authenticated else 1
+        )
+        
+        db.session.add(notification)
+        db.session.commit()
+        return notification
+    except Exception as e:
+        db.session.rollback()
+        print(f"알림 생성 오류: {e}")
+        return None
+
+def get_user_notifications(user_id, limit=10, unread_only=False):
+    """사용자별 알림 조회"""
+    user = User.query.get(user_id)
+    if not user:
+        return []
+    
+    query = Notification.query.filter(
+        db.and_(
+            Notification.is_active == True,
+            db.or_(
+                Notification.target_user_id == user_id,  # 개인 알림
+                Notification.target_user_id == None,     # 전체 공지
+                Notification.target_role == user.role    # 역할별 알림
+            ),
+            db.or_(
+                Notification.expire_date == None,        # 만료 없음
+                Notification.expire_date > datetime.utcnow()  # 만료 안됨
+            )
+        )
+    )
+    
+    if unread_only:
+        query = query.filter(Notification.is_read == False)
+    
+    return query.order_by(Notification.priority.desc(), Notification.created_at.desc()).limit(limit).all()
+
+def mark_notification_read(notification_id, user_id):
+    """알림을 읽음으로 표시"""
+    notification = Notification.query.filter_by(id=notification_id).first()
+    if notification and (notification.target_user_id == user_id or notification.target_user_id is None):
+        notification.is_read = True
+        notification.read_at = datetime.utcnow()
+        db.session.commit()
+        return True
+    return False
+
+def create_achievement_notification(child, achievement_type, details):
+    """성취 알림 생성"""
+    titles = {
+        'perfect_score': f'🏆 {child.name} 만점 달성!',
+        'streak': f'🔥 {child.name} 연속 학습!',
+        'improvement': f'📈 {child.name} 성적 향상!',
+        'milestone': f'🎯 {child.name} 목표 달성!'
+    }
+    
+    title = titles.get(achievement_type, f'🎉 {child.name} 성취!')
+    
+    return create_notification(
+        title=title,
+        message=details,
+        notification_type='achievement',
+        child_id=child.id,
+        priority=2,
+        auto_expire=True,
+        expire_days=7
+    )
+
+def create_system_notification(title, message, target_role=None, priority=1):
+    """시스템 알림 생성"""
+    return create_notification(
+        title=title,
+        message=message,
+        notification_type='system',
+        target_role=target_role,
+        priority=priority
+    )
+
+def create_automatic_notifications(child, daily_points, is_update=False):
+    """포인트 입력/수정 시 자동 알림 생성"""
+    try:
+        # 만점 달성 알림 (800점)
+        if daily_points.total_points == 800:
+            create_achievement_notification(
+                child=child,
+                achievement_type='perfect_score',
+                details=f'{child.name} 아동이 모든 과목에서 만점을 달성했습니다! 🌟'
+            )
+        
+        # 고득점 알림 (700점 이상)
+        elif daily_points.total_points >= 700:
+            create_notification(
+                title=f'🎉 {child.name} 고득점 달성!',
+                message=f'{child.name} 아동이 {daily_points.total_points}점의 높은 점수를 기록했습니다.',
+                notification_type='success',
+                child_id=child.id,
+                priority=2,
+                auto_expire=True,
+                expire_days=5
+            )
+        
+        # 개별 과목 만점 알림
+        perfect_subjects = []
+        if daily_points.korean_points == 200:
+            perfect_subjects.append('국어')
+        if daily_points.math_points == 200:
+            perfect_subjects.append('수학')
+        if daily_points.ssen_points == 200:
+            perfect_subjects.append('쎈수학')
+        if daily_points.reading_points == 200:
+            perfect_subjects.append('독서')
+        
+        if perfect_subjects:
+            subjects_text = ', '.join(perfect_subjects)
+            create_notification(
+                title=f'🏆 {child.name} {subjects_text} 만점!',
+                message=f'{child.name} 아동이 {subjects_text} 과목에서 만점을 달성했습니다.',
+                notification_type='achievement',
+                child_id=child.id,
+                priority=2,
+                auto_expire=True,
+                expire_days=7
+            )
+        
+        # 저조한 성과 알림 (총점 200점 미만)
+        if daily_points.total_points < 200:
+            create_notification(
+                title=f'📢 {child.name} 학습 지원 필요',
+                message=f'{child.name} 아동의 오늘 총점이 {daily_points.total_points}점입니다. 추가적인 학습 지원이 필요할 수 있습니다.',
+                notification_type='warning',
+                child_id=child.id,
+                target_role='돌봄선생님',
+                priority=2,
+                auto_expire=True,
+                expire_days=3
+            )
+        
+        # 연속 학습 체크 (최근 7일 연속 기록)
+        week_ago = daily_points.date - timedelta(days=6)
+        recent_records = DailyPoints.query.filter(
+            DailyPoints.child_id == child.id,
+            DailyPoints.date >= week_ago,
+            DailyPoints.date <= daily_points.date
+        ).count()
+        
+        if recent_records >= 7:
+            create_achievement_notification(
+                child=child,
+                achievement_type='streak',
+                details=f'{child.name} 아동이 7일 연속 학습을 완료했습니다! 🔥'
+            )
+        
+    except Exception as e:
+        print(f"자동 알림 생성 오류: {e}")
+        # 알림 생성 오류가 포인트 저장을 방해하지 않도록 예외를 무시
+
+# ===== 알림 관련 라우트 =====
+
+@app.route('/notifications')
+@login_required
+def notifications():
+    """알림 목록 페이지"""
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    
+    # 모든 알림 조회
+    all_notifications = get_user_notifications(current_user.id, limit=None)
+    
+    # 페이지네이션
+    total = len(all_notifications)
+    start = (page - 1) * per_page
+    end = start + per_page
+    notifications_page = all_notifications[start:end]
+    
+    # 읽지 않은 알림 수
+    unread_count = len([n for n in all_notifications if not n.is_read])
+    
+    return render_template('notifications/list.html',
+                         notifications=notifications_page,
+                         page=page,
+                         per_page=per_page,
+                         total=total,
+                         unread_count=unread_count)
+
+@app.route('/notifications/<int:notification_id>/read', methods=['POST'])
+@login_required
+def mark_notification_as_read(notification_id):
+    """알림 읽음 처리"""
+    success = mark_notification_read(notification_id, current_user.id)
+    if success:
+        return jsonify({'success': True})
+    return jsonify({'success': False}), 400
+
+@app.route('/notifications/mark-all-read', methods=['POST'])
+@login_required
+def mark_all_notifications_read():
+    """모든 알림 읽음 처리"""
+    notifications = get_user_notifications(current_user.id, limit=None, unread_only=True)
+    
+    for notification in notifications:
+        mark_notification_read(notification.id, current_user.id)
+    
+    return jsonify({'success': True, 'count': len(notifications)})
+
+@app.route('/notifications/test')
+@login_required
+def test_notifications():
+    """테스트 알림 생성 (개발용)"""
+    if not current_user.role == '센터장':
+        return redirect(url_for('dashboard'))
+    
+    # 테스트 알림들 생성
+    create_notification(
+        title="시스템 업데이트 완료",
+        message="포인트 시스템이 성공적으로 업데이트되었습니다.",
+        notification_type='success',
+        priority=2
+    )
+    
+    create_notification(
+        title="주간 보고서 준비",
+        message="이번 주 아동들의 학습 성과 보고서를 확인해주세요.",
+        notification_type='info',
+        target_role='센터장',
+        priority=1
+    )
+    
+    create_notification(
+        title="데이터 백업 필요",
+        message="정기 데이터 백업을 진행해주세요.",
+        notification_type='warning',
+        priority=3,
+        auto_expire=True,
+        expire_days=3
+    )
+    
+    return redirect(url_for('notifications'))
 
 @app.route('/points/history/<int:child_id>')
 @login_required
