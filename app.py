@@ -1732,59 +1732,97 @@ def points_analysis():
         child = Child.query.get_or_404(child_id)
         
         # 해당 아동의 전체 포인트 기록 (중복 제거 후)
-    # 날짜별로 하나의 기록만 가져오기
-    result = db.session.execute(text("""
-        SELECT id, date, korean_points, math_points, ssen_points, reading_points, total_points
-        FROM daily_points 
-        WHERE child_id = :child_id 
-        AND id IN (
-            SELECT MAX(id) 
+        # 날짜별로 하나의 기록만 가져오기
+        result = db.session.execute(text("""
+            SELECT id, date, korean_points, math_points, ssen_points, reading_points, total_points
             FROM daily_points 
             WHERE child_id = :child_id 
-            GROUP BY date 
-        )
-        ORDER BY date DESC
-    """), {"child_id": child_id})
-    
-    # 실제 DailyPoints 객체로 변환
-    child_points = []
-    for row in result:
-        # 날짜 타입 변환 (문자열일 경우 datetime.date로 변환)
-        date_value = row[1]
-        if isinstance(date_value, str):
-            from datetime import datetime
-            date_value = datetime.strptime(date_value, '%Y-%m-%d').date()
+            AND id IN (
+                SELECT MAX(id) 
+                FROM daily_points 
+                WHERE child_id = :child_id 
+                GROUP BY date 
+            )
+            ORDER BY date DESC
+        """), {"child_id": child_id})
         
-        # DailyPoints 객체 생성
-        point_record = DailyPoints(
-            id=row[0],
-            date=date_value,
-            korean_points=row[2],
-            math_points=row[3],
-            ssen_points=row[4],
-            reading_points=row[5],
-            total_points=row[6]
-        )
-        child_points.append(point_record)
-    
-    # 총 포인트 계산 (중복 제거된 데이터로)
-    total_points = sum(record.total_points for record in child_points)
-    
-    # 디버깅: 실제 데이터 확인
-    print(f"=== {child.name} 포인트 분석 ===")
-    print(f"아동 ID: {child_id}")
-    print(f"아동 이름: {child.name}")
-    print(f"총 기록 수: {len(child_points)}")
-    print(f"계산된 총 포인트: {total_points}")
-    print(f"Child.cumulative_points: {child.cumulative_points}")
-    print("================================")
-    
-    # 같은 학년 아동들의 포인트 비교 (중복 제거 후)
-    same_grade_children = Child.query.filter_by(grade=child.grade, include_in_stats=True).all()
-    grade_comparison = []
-    
-    for grade_child in same_grade_children:
-        if grade_child.id != child_id:  # 자기 자신 제외
+        # 실제 DailyPoints 객체로 변환
+        child_points = []
+        for row in result:
+            # 날짜 타입 변환 (문자열일 경우 datetime.date로 변환)
+            date_value = row[1]
+            if isinstance(date_value, str):
+                from datetime import datetime
+                date_value = datetime.strptime(date_value, '%Y-%m-%d').date()
+            
+            # DailyPoints 객체 생성
+            point_record = DailyPoints(
+                id=row[0],
+                date=date_value,
+                korean_points=row[2],
+                math_points=row[3],
+                ssen_points=row[4],
+                reading_points=row[5],
+                total_points=row[6]
+            )
+            child_points.append(point_record)
+        
+        # 총 포인트 계산 (중복 제거된 데이터로)
+        total_points = sum(record.total_points for record in child_points)
+        
+        # 디버깅: 실제 데이터 확인
+        print(f"=== {child.name} 포인트 분석 ===")
+        print(f"아동 ID: {child_id}")
+        print(f"아동 이름: {child.name}")
+        print(f"총 기록 수: {len(child_points)}")
+        print(f"계산된 총 포인트: {total_points}")
+        print(f"Child.cumulative_points: {child.cumulative_points}")
+        print("================================")
+        
+        # 같은 학년 아동들의 포인트 비교 (중복 제거 후)
+        same_grade_children = Child.query.filter_by(grade=child.grade, include_in_stats=True).all()
+        grade_comparison = []
+        
+        for grade_child in same_grade_children:
+            if grade_child.id != child_id:  # 자기 자신 제외
+                # 중복 제거된 포인트 계산
+                result = db.session.execute(text("""
+                    SELECT SUM(total_points) as total, COUNT(*) as count
+                    FROM daily_points 
+                    WHERE child_id = :child_id 
+                    AND id IN (
+                        SELECT MAX(id) 
+                        FROM daily_points 
+                        WHERE child_id = :child_id 
+                        GROUP BY date
+                    )
+                """), {"child_id": grade_child.id})
+                
+                row = result.fetchone()
+                grade_child_total = row[0] or 0
+                record_count = row[1] or 0
+                
+                grade_comparison.append({
+                    'id': grade_child.id,
+                    'name': grade_child.name,
+                    'total_points': grade_child_total,
+                    'record_count': record_count
+                })
+        
+        # 학년 내 순위 계산
+        grade_comparison.append({
+            'id': child.id,
+            'name': child.name,
+            'total_points': total_points,
+            'record_count': len(child_points)
+        })
+        grade_comparison.sort(key=lambda x: x['total_points'], reverse=True)
+        
+        # 전체 학년 순위 (중복 제거 후)
+        all_children = Child.query.filter_by(include_in_stats=True).all()
+        overall_ranking = []
+        
+        for all_child in all_children:
             # 중복 제거된 포인트 계산
             result = db.session.execute(text("""
                 SELECT SUM(total_points) as total, COUNT(*) as count
@@ -1796,57 +1834,19 @@ def points_analysis():
                     WHERE child_id = :child_id 
                     GROUP BY date
                 )
-            """), {"child_id": grade_child.id})
+            """), {"child_id": all_child.id})
             
             row = result.fetchone()
-            grade_child_total = row[0] or 0
+            all_child_total = row[0] or 0
             record_count = row[1] or 0
             
-            grade_comparison.append({
-                'id': grade_child.id,
-                'name': grade_child.name,
-                'total_points': grade_child_total,
+            overall_ranking.append({
+                'id': all_child.id,
+                'name': all_child.name,
+                'grade': all_child.grade,
+                'total_points': all_child_total,
                 'record_count': record_count
             })
-    
-    # 학년 내 순위 계산
-    grade_comparison.append({
-        'id': child.id,
-        'name': child.name,
-        'total_points': total_points,
-        'record_count': len(child_points)
-    })
-    grade_comparison.sort(key=lambda x: x['total_points'], reverse=True)
-    
-    # 전체 학년 순위 (중복 제거 후)
-    all_children = Child.query.filter_by(include_in_stats=True).all()
-    overall_ranking = []
-    
-    for all_child in all_children:
-        # 중복 제거된 포인트 계산
-        result = db.session.execute(text("""
-            SELECT SUM(total_points) as total, COUNT(*) as count
-            FROM daily_points 
-            WHERE child_id = :child_id 
-            AND id IN (
-                SELECT MAX(id) 
-                FROM daily_points 
-                WHERE child_id = :child_id 
-                GROUP BY date
-            )
-        """), {"child_id": all_child.id})
-        
-        row = result.fetchone()
-        all_child_total = row[0] or 0
-        record_count = row[1] or 0
-        
-        overall_ranking.append({
-            'id': all_child.id,
-            'name': all_child.name,
-            'grade': all_child.grade,
-            'total_points': all_child_total,
-            'record_count': record_count
-        })
         
         overall_ranking.sort(key=lambda x: x['total_points'], reverse=True)
         
