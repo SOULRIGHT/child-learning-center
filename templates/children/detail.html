@@ -22,11 +22,14 @@
         </div>
     </div>
     <div class="btn-group">
-        <a href="{{ url_for('add_score') }}?child_id={{ child.id }}" class="btn btn-primary">
-            <i class="bi bi-plus-circle me-2"></i>점수 입력
+        <a href="{{ url_for('points_input', child_id=child.id) }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-2"></i>포인트 입력
         </a>
-        <a href="{{ url_for('child_report', child_id=child.id) }}" class="btn btn-outline-success">
-            <i class="bi bi-file-earmark-text me-2"></i>리포트
+        <a href="{{ url_for('points_analysis', child_id=child.id) }}" class="btn btn-outline-info">
+            <i class="bi bi-graph-up me-2"></i>포인트 분석
+        </a>
+        <a href="{{ url_for('points_history', child_id=child.id) }}" class="btn btn-outline-warning">
+            <i class="bi bi-clock-history me-2"></i>변경 이력
         </a>
         <a href="{{ url_for('edit_child', child_id=child.id) }}" class="btn btn-outline-primary">
             <i class="bi bi-pencil me-2"></i>정보 수정
@@ -40,8 +43,22 @@
         <div class="stat-card">
             <div class="stat-content">
                 <div>
+                    <div class="stat-number">{{ total_points if total_points else 0 }}</div>
+                    <div class="stat-label">총 누적 포인트</div>
+                </div>
+                <div class="stat-icon">
+                    <i class="bi bi-trophy"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-content">
+                <div>
                     <div class="stat-number">{{ recent_records|length }}</div>
-                    <div class="stat-label">총 학습 기록</div>
+                    <div class="stat-label">총 포인트 기록</div>
                 </div>
                 <div class="stat-icon">
                     <i class="bi bi-journal-text"></i>
@@ -54,8 +71,8 @@
         <div class="stat-card">
             <div class="stat-content">
                 <div>
-                    <div class="stat-number">{{ "%.1f"|format(recent_avg) }}</div>
-                    <div class="stat-label">최근 평균 점수</div>
+                    <div class="stat-number">{{ recent_avg | round(0) | int if recent_avg else 0 }}</div>
+                    <div class="stat-label">평균 포인트</div>
                 </div>
                 <div class="stat-icon">
                     <i class="bi bi-graph-up"></i>
@@ -75,24 +92,10 @@
                             -
                         {% endif %}
                     </div>
-                    <div class="stat-label">최근 학습일</div>
+                    <div class="stat-label">최근 입력일</div>
                 </div>
                 <div class="stat-icon">
                     <i class="bi bi-calendar-check"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-lg-3 col-md-6 mb-3">
-        <div class="stat-card">
-            <div class="stat-content">
-                <div>
-                    <div class="stat-number">{{ recent_notes|length }}</div>
-                    <div class="stat-label">특이사항</div>
-                </div>
-                <div class="stat-icon">
-                    <i class="bi bi-chat-dots"></i>
                 </div>
             </div>
         </div>
@@ -106,67 +109,77 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="card-title mb-0">
-                    <i class="bi bi-clock-history me-2"></i>최근 학습 기록
+                    <i class="bi bi-star me-2"></i>포인트 입력 내역
                 </h5>
-                <button class="btn btn-sm btn-outline-primary" onclick="alert('전체 기록 보기 기능은 곧 구현됩니다!')">
-                    <i class="bi bi-list me-1"></i>전체 보기
-                </button>
+                <a href="{{ url_for('points_analysis', child_id=child.id) }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-graph-up me-1"></i>전체 분석 보기
+                </a>
             </div>
             <div class="card-body">
                 {% if recent_records %}
                 <div class="table-responsive">
                     <table class="table table-hover">
-                        <thead>
+                        <thead class="table-light">
                             <tr>
                                 <th>날짜</th>
-                                <th>국어</th>
-                                <th>수학</th>
-                                <th>독서</th>
-                                <th>총점</th>
-                                <th>상태</th>
+                                <th class="text-center">국어</th>
+                                <th class="text-center">수학</th>
+                                <th class="text-center">쎈수학</th>
+                                <th class="text-center">독서</th>
+                                <th class="text-center">총점</th>
+                                <th>등급</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for record in recent_records %}
                             <tr>
                                 <td class="fw-bold">{{ record.date.strftime('%Y-%m-%d') }}</td>
-                                <td>
-                                    {% if record.korean_problems_solved > 0 %}
-                                        <div class="d-flex flex-column">
-                                            <span class="fw-bold text-primary">{{ "%.1f"|format(record.korean_score) }}점</span>
-                                            <small class="text-muted">{{ record.korean_problems_correct }}/{{ record.korean_problems_solved }}</small>
-                                        </div>
+                                <td class="text-center">
+                                    {% if record.korean_points == 200 %}
+                                        <span class="badge bg-success">200</span>
+                                    {% elif record.korean_points == 100 %}
+                                        <span class="badge bg-warning">100</span>
                                     {% else %}
-                                        <span class="text-muted">-</span>
+                                        <span class="badge bg-secondary">0</span>
                                     {% endif %}
                                 </td>
-                                <td>
-                                    {% if record.math_problems_solved > 0 %}
-                                        <div class="d-flex flex-column">
-                                            <span class="fw-bold text-success">{{ "%.1f"|format(record.math_score) }}점</span>
-                                            <small class="text-muted">{{ record.math_problems_correct }}/{{ record.math_problems_solved }}</small>
-                                        </div>
+                                <td class="text-center">
+                                    {% if record.math_points == 200 %}
+                                        <span class="badge bg-success">200</span>
+                                    {% elif record.math_points == 100 %}
+                                        <span class="badge bg-warning">100</span>
                                     {% else %}
-                                        <span class="text-muted">-</span>
+                                        <span class="badge bg-secondary">0</span>
                                     {% endif %}
                                 </td>
-                                <td>
-                                    {% if record.reading_completed %}
-                                        <span class="badge badge-success">완료</span>
+                                <td class="text-center">
+                                    {% if record.ssen_points == 200 %}
+                                        <span class="badge bg-success">200</span>
+                                    {% elif record.ssen_points == 100 %}
+                                        <span class="badge bg-warning">100</span>
                                     {% else %}
-                                        <span class="text-muted">-</span>
+                                        <span class="badge bg-secondary">0</span>
                                     {% endif %}
                                 </td>
-                                <td class="fw-bold text-dark">{{ "%.1f"|format(record.total_score) }}점</td>
-                                <td>
-                                    {% if record.total_score >= 240 %}
-                                        <span class="badge badge-success">우수</span>
-                                    {% elif record.total_score >= 180 %}
-                                        <span class="badge badge-warning">보통</span>
-                                    {% elif record.total_score > 0 %}
-                                        <span class="badge badge-danger">주의</span>
+                                <td class="text-center">
+                                    {% if record.reading_points == 200 %}
+                                        <span class="badge bg-success">200</span>
+                                    {% elif record.reading_points == 100 %}
+                                        <span class="badge bg-warning">100</span>
                                     {% else %}
-                                        <span class="text-muted">-</span>
+                                        <span class="badge bg-secondary">0</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center fw-bold text-primary">{{ record.total_points }}점</td>
+                                <td>
+                                    {% if record.total_points >= 600 %}
+                                        <span class="badge bg-success">우수</span>
+                                    {% elif record.total_points >= 400 %}
+                                        <span class="badge bg-warning">보통</span>
+                                    {% elif record.total_points > 0 %}
+                                        <span class="badge bg-danger">노력 필요</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">미입력</span>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -174,36 +187,48 @@
                         </tbody>
                     </table>
                 </div>
+                
+                <!-- 포인트 요약 정보 -->
+                <div class="row mt-3">
+                    <div class="col-md-4">
+                        <div class="text-center p-3 bg-light rounded">
+                            <h6 class="text-muted mb-1">최고 점수</h6>
+                            <h4 class="text-success mb-0">
+                                {% if recent_records %}
+                                    {{ recent_records|map(attribute='total_points')|max }}점
+                                {% else %}
+                                    0점
+                                {% endif %}
+                            </h4>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center p-3 bg-light rounded">
+                            <h6 class="text-muted mb-1">평균 점수</h6>
+                            <h4 class="text-info mb-0">{{ recent_avg | round(0) | int if recent_avg else 0 }}점</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center p-3 bg-light rounded">
+                            <h6 class="text-muted mb-1">총 기록일</h6>
+                            <h4 class="text-warning mb-0">{{ recent_records|length }}일</h4>
+                        </div>
+                    </div>
+                </div>
                 {% else %}
                 <div class="text-center py-5">
-                    <i class="bi bi-journal-x" style="font-size: 3rem; color: #dee2e6;"></i>
-                    <h6 class="mt-3 text-muted">아직 학습 기록이 없습니다</h6>
-                    <p class="text-muted mb-3">첫 번째 학습 기록을 입력해보세요.</p>
-                    <a href="{{ url_for('add_score') }}?child_id={{ child.id }}" class="btn btn-primary">
-                        <i class="bi bi-plus-circle me-2"></i>첫 기록 입력하기
+                    <i class="bi bi-star" style="font-size: 3rem; color: #dee2e6;"></i>
+                    <h6 class="mt-3 text-muted">아직 포인트 기록이 없습니다</h6>
+                    <p class="text-muted mb-3">첫 번째 포인트를 입력해보세요.</p>
+                    <a href="{{ url_for('points_input', child_id=child.id) }}" class="btn btn-primary">
+                        <i class="bi bi-plus-circle me-2"></i>첫 포인트 입력하기
                     </a>
                 </div>
                 {% endif %}
             </div>
         </div>
 
-        <!-- 성적 추이 차트 (임시) -->
-        {% if recent_records|length > 1 %}
-        <div class="card mt-4">
-            <div class="card-header">
-                <h5 class="card-title mb-0">
-                    <i class="bi bi-graph-up me-2"></i>성적 추이
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="text-center py-4">
-                    <i class="bi bi-bar-chart" style="font-size: 3rem; color: var(--primary-blue);"></i>
-                    <h6 class="mt-3">성적 추이 차트</h6>
-                    <p class="text-muted mb-0">곧 시각화 차트가 추가될 예정입니다.</p>
-                </div>
-            </div>
-        </div>
-        {% endif %}
+
     </div>
 
     <!-- 사이드 정보 -->
@@ -280,28 +305,40 @@
                     
                     {% if latest_record %}
                     <div class="col-12">
-                        <strong>최근 학습</strong>
+                        <strong>최근 포인트</strong>
                         <div class="mt-2">
                             <div class="d-flex justify-content-between">
-                                <span>학습일:</span>
+                                <span>입력일:</span>
                                 <span>{{ latest_record.date.strftime('%Y.%m.%d') }}</span>
                             </div>
                             <div class="d-flex justify-content-between">
                                 <span>총점:</span>
-                                <span class="fw-bold text-primary">{{ "%.1f"|format(latest_record.total_score) }}점</span>
+                                <span class="fw-bold text-primary">{{ latest_record.total_points }}점</span>
                             </div>
-                            {% if latest_record.korean_last_page > 0 %}
                             <div class="d-flex justify-content-between">
-                                <span>국어 진도:</span>
-                                <span>{{ latest_record.korean_last_page }}쪽</span>
+                                <span>국어:</span>
+                                <span class="badge bg-{% if latest_record.korean_points == 200 %}success{% elif latest_record.korean_points == 100 %}warning{% else %}secondary{% endif %}">
+                                    {{ latest_record.korean_points }}점
+                                </span>
                             </div>
-                            {% endif %}
-                            {% if latest_record.math_last_page > 0 %}
                             <div class="d-flex justify-content-between">
-                                <span>수학 진도:</span>
-                                <span>{{ latest_record.math_last_page }}쪽</span>
+                                <span>수학:</span>
+                                <span class="badge bg-{% if latest_record.math_points == 200 %}success{% elif latest_record.math_points == 100 %}warning{% else %}secondary{% endif %}">
+                                    {{ latest_record.math_points }}점
+                                </span>
                             </div>
-                            {% endif %}
+                            <div class="d-flex justify-content-between">
+                                <span>쎈수학:</span>
+                                <span class="badge bg-{% if latest_record.ssen_points == 200 %}success{% elif latest_record.ssen_points == 100 %}warning{% else %}secondary{% endif %}">
+                                    {{ latest_record.ssen_points }}점
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>독서:</span>
+                                <span class="badge bg-{% if latest_record.reading_points == 200 %}success{% elif latest_record.reading_points == 100 %}warning{% else %}secondary{% endif %}">
+                                    {{ latest_record.reading_points }}점
+                                </span>
+                            </div>
                         </div>
                     </div>
                     {% endif %}
