@@ -832,7 +832,7 @@ def add_score():
             korean_last_page = int(request.form.get('korean_last_page', 0))
             
             # 수학 데이터  
-            math_problems_solved = int(request.form.get('math_problems_solved', 0))
+            math_problems_solved = int(request.form.get('math_problems_correct', 0))
             math_problems_correct = int(request.form.get('math_problems_correct', 0))
             math_last_page = int(request.form.get('math_last_page', 0))
             
@@ -1501,8 +1501,8 @@ def period_report():
 @login_required
 def points_list():
     """포인트 기록 목록"""
-    # 최근 입력된 포인트들
-    points_records = DailyPoints.query.order_by(DailyPoints.date.desc()).limit(20).all()
+    # 최근 입력된 포인트들 (입력 시간 기준으로 정렬)
+    points_records = DailyPoints.query.order_by(DailyPoints.created_at.desc()).limit(20).all()
     return render_template('points/list.html', points_records=points_records)
 
 @app.route('/points/input/<int:child_id>', methods=['GET', 'POST'])
@@ -1528,13 +1528,9 @@ def points_input(child_id):
             ssen_points = int(request.form.get('ssen_points', 0))
             reading_points = int(request.form.get('reading_points', 0))
         
-            # 값 검증: 음수 방지, 범위 검증 (0-200)
+            # 값 검증: 음수 방지만 방지
             if any(points < 0 for points in [korean_points, math_points, ssen_points, reading_points]):
-                flash('❌ 포인트는 음수일 수 없습니다. 0-200 사이의 값을 입력해주세요.', 'error')
-                return redirect(url_for('points_input', child_id=child_id))
-            
-            if any(points > 200 for points in [korean_points, math_points, ssen_points, reading_points]):
-                flash('❌ 포인트는 200점을 초과할 수 없습니다. 0-200 사이의 값을 입력해주세요.', 'error')
+                flash('❌ 포인트는 음수일 수 없습니다. 0 이상의 값을 입력해주세요.', 'error')
                 return redirect(url_for('points_input', child_id=child_id))
             
             # 총 포인트 계산 (검증된 값으로)
@@ -1554,11 +1550,18 @@ def points_input(child_id):
                 old_ssen = existing_record.ssen_points
                 old_reading = existing_record.reading_points
                 
-                # 변경사항이 있는지 확인
+                # 기존 기록 업데이트
+                existing_record.korean_points = korean_points
+                existing_record.math_points = math_points
+                existing_record.ssen_points = ssen_points
+                existing_record.reading_points = reading_points
+                existing_record.total_points = total_points
+                existing_record.updated_at = datetime.utcnow()
+                
+                # 변경 이력 기록 (PointsHistory 테이블) - 변경사항이 있을 때만
                 if (old_korean != korean_points or old_math != math_points or 
                     old_ssen != ssen_points or old_reading != reading_points):
                     
-                    # 변경 이력 기록 (PointsHistory 테이블)
                     history_record = PointsHistory(
                         child_id=child_id,
                         date=today,
@@ -1587,15 +1590,16 @@ def points_input(child_id):
                     print(f"  총점: {old_total} → {total_points}")
                     print(f"  변경자: {current_user.username}")
                 
-                # 기존 기록 업데이트
-                existing_record.korean_points = korean_points
-                existing_record.math_points = math_points
-                existing_record.ssen_points = ssen_points
-                existing_record.reading_points = reading_points
-                existing_record.total_points = total_points
-                existing_record.updated_at = datetime.utcnow()
+                db.session.commit()
+                
+                # 누적 포인트 자동 업데이트
+                update_cumulative_points(child_id)
+                
+                # 자동 알림 생성
+                create_automatic_notifications(child, existing_record, is_update=True)
                 
                 flash(f'✅ {child.name} 아이의 포인트가 수정되었습니다. (총점: {total_points}점)', 'success')
+                return redirect(url_for('points_list'))
             else:
                 # 새 기록 생성 (생성 이력 기록)
                 history_record = PointsHistory(
@@ -1617,33 +1621,29 @@ def points_input(child_id):
                 )
                 db.session.add(history_record)
                 
-            # 새 기록 생성
-            new_record = DailyPoints(
-                child_id=child_id,
-                date=today,
-                korean_points=korean_points,
-                math_points=math_points,
-                ssen_points=ssen_points,
-                reading_points=reading_points,
-                total_points=total_points,
-                created_by=current_user.id
-            )
-            db.session.add(new_record)
-            
-            flash(f'✅ {child.name} 아이의 포인트가 저장되었습니다. (총점: {total_points}점)', 'success')
-            
-            db.session.commit()
-            
-            # 누적 포인트 자동 업데이트 (Child 모델의 cumulative_points)
-            update_cumulative_points(child_id)
-            
-            # 자동 알림 생성
-            if existing_record:
-                create_automatic_notifications(child, existing_record, is_update=True)
-            else:
+                # 새 기록 생성
+                new_record = DailyPoints(
+                    child_id=child_id,
+                    date=today,
+                    korean_points=korean_points,
+                    math_points=math_points,
+                    ssen_points=ssen_points,
+                    reading_points=reading_points,
+                    total_points=total_points,
+                    created_by=current_user.id
+                )
+                db.session.add(new_record)
+                
+                db.session.commit()
+                
+                # 누적 포인트 자동 업데이트
+                update_cumulative_points(child_id)
+                
+                # 자동 알림 생성
                 create_automatic_notifications(child, new_record, is_update=False)
-            
-            return redirect(url_for('points_list'))
+                
+                flash(f'✅ {child.name} 아이의 포인트가 저장되었습니다. (총점: {total_points}점)', 'success')
+                return redirect(url_for('points_list'))
             
         except ValueError as e:
             flash('❌ 잘못된 포인트 값이 입력되었습니다. 숫자만 입력해주세요.', 'error')
@@ -2821,6 +2821,81 @@ def all_points_history():
     history_records = PointsHistory.query.order_by(PointsHistory.changed_at.desc()).limit(100).all()
     
     return render_template('points/all_history.html', history_records=history_records)
+
+def check_duplicate_daily_points():
+    """중복 일일 포인트 기록 검사 및 정리"""
+    try:
+        print("🔍 중복 일일 포인트 기록 검사 시작...")
+        from sqlalchemy import text
+        
+        result = db.session.execute(text("""
+            SELECT child_id, date, COUNT(*) as count
+            FROM daily_points 
+            GROUP BY child_id, date 
+            HAVING COUNT(*) > 1
+        """))
+        duplicates = result.fetchall()
+        
+        if not duplicates:
+            print("✅ 중복된 일일 포인트 기록이 없습니다.")
+            return
+        
+        print(f"⚠️ {len(duplicates)}개의 중복 기록 발견")
+        
+        for duplicate in duplicates:
+            child_id = duplicate[0]
+            date = duplicate[1]
+            child = Child.query.get(child_id)
+            print(f"  {child.name} - {date}: {duplicate[2]}개 기록")
+            
+            # 해당 날짜의 모든 기록을 ID 순으로 정렬하여 첫 번째만 남기고 나머지 삭제
+            records = DailyPoints.query.filter_by(
+                child_id=child_id, 
+                date=date
+            ).order_by(DailyPoints.id.asc()).all()
+            
+            for record in records[1:]:  # 첫 번째 제외하고 모두 삭제
+                print(f"    삭제: ID {record.id} (총점: {record.total_points})")
+                db.session.delete(record)
+            
+            # 누적 포인트 재계산
+            update_cumulative_points(child_id)
+        
+        db.session.commit()
+        print("✅ 중복 기록 정리 완료")
+        
+    except Exception as e:
+        print(f"❌ 중복 기록 검사 오류: {e}")
+        db.session.rollback()
+
+def validate_points_integrity():
+    """포인트 데이터 무결성 검증 및 자동 수정"""
+    try:
+        print("🔍 포인트 데이터 무결성 검증 시작...")
+        children = Child.query.all()
+        fixed_count = 0
+        
+        for child in children:
+            # 해당 아동의 모든 일일 포인트 합계 계산
+            calculated_total = db.session.query(
+                db.func.sum(DailyPoints.total_points)
+            ).filter_by(child_id=child.id).scalar() or 0
+            
+            if child.cumulative_points != calculated_total:
+                print(f"⚠️ {child.name}의 누적 포인트 불일치 발견")
+                print(f"  DB: {child.cumulative_points}, 계산: {calculated_total}")
+                child.cumulative_points = calculated_total
+                fixed_count += 1
+        
+        if fixed_count > 0:
+            db.session.commit()
+            print(f"🔧 총 {fixed_count}명의 누적 포인트가 자동으로 수정되었습니다.")
+        else:
+            print("✅ 모든 포인트 데이터가 정상입니다.")
+            
+    except Exception as e:
+        print(f"❌ 포인트 무결성 검증 오류: {e}")
+        db.session.rollback()
 
 if __name__ == '__main__':
     # init_db() 제거 - 서버 재시작 시 데이터 초기화 방지

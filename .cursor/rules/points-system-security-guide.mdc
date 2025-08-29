@@ -1,0 +1,216 @@
+# 🛡️ 포인트 시스템 안정성 및 보안 가이드
+
+## 🚨 **핵심 원칙: 포인트 시스템은 절대 실패하면 안 됨**
+
+### **절대 금지:**
+- ❌ **포인트 계산 오류**
+- ❌ **데이터베이스 손실**
+- ❌ **포인트 데이터 불일치**
+- ❌ **중복 기록 생성**
+
+## 🔒 **현재 구현된 보안 장치들**
+
+### **1. 데이터 검증 시스템**
+```python
+# 값 검증: 음수 방지, 범위 검증 (0-200)
+if any(points < 0 for points in [korean_points, math_points, ssen_points, reading_points]):
+    flash('❌ 포인트는 음수일 수 없습니다.', 'error')
+
+if any(points > 200 for points in [korean_points, math_points, ssen_points, reading_points]):
+    flash('❌ 포인트는 200점을 초과할 수 없습니다.', 'error')
+```
+
+### **2. 이중 계산 검증**
+```python
+# 총 포인트 계산 (검증된 값으로)
+total_points = korean_points + math_points + ssen_points + reading_points
+
+# 계산 결과 검증 (이중 검증으로 오류 방지)
+expected_total = sum([korean_points, math_points, ssen_points, reading_points])
+if total_points != expected_total:
+    flash(f'❌ 포인트 계산 오류가 발생했습니다.', 'error')
+```
+
+### **3. 완벽한 변경 이력 추적**
+```python
+# PointsHistory 테이블로 모든 변경사항 기록
+history_record = PointsHistory(
+    old_korean_points=old_korean,
+    new_korean_points=korean_points,
+    change_type='update',
+    changed_by=current_user.id,
+    change_reason='웹 UI를 통한 포인트 수정 (덮어쓰기)'
+)
+```
+
+### **4. 트랜잭션 안전성**
+```python
+try:
+    # 포인트 저장 로직
+    db.session.commit()
+except Exception as e:
+    db.session.rollback()  # 오류 시 자동 롤백
+    flash(f'❌ 포인트 저장 중 오류가 발생했습니다: {str(e)}', 'error')
+```
+
+### **5. 하루에 한 번만 입력 가능**
+```python
+# 기존 기록이 있는지 확인 (하루에 하나만 존재해야 함)
+existing_record = DailyPoints.query.filter_by(
+    child_id=child_id, 
+    date=today
+).first()
+
+if existing_record:
+    # 🚨 기존 기록이 있는 경우: 덮어쓰기 모드
+    # 중복 기록 생성 방지
+```
+
+## 🔧 **포인트 시스템 관리 명령어**
+
+### **관리자 전용 기능들:**
+- **`/admin/points/integrity-check`**: 포인트 데이터 무결성 검증
+- **`/admin/points/duplicate-check`**: 중복 기록 검사 및 정리
+- **`/admin/points/backup`**: 포인트 데이터 자동 백업
+
+### **권한 요구사항:**
+```python
+if not check_permission(required_roles=['개발자', '센터장']):
+    flash('❌ 권한이 없습니다.', 'error')
+    return redirect(url_for('dashboard'))
+```
+
+## 📊 **포인트 데이터 구조**
+
+### **DailyPoints 테이블 (일일 포인트)**
+```python
+class DailyPoints(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    child_id = db.Column(db.Integer, db.ForeignKey('child.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    
+    # 각 과목별 포인트 (200 또는 100)
+    korean_points = db.Column(db.Integer, default=0)
+    math_points = db.Column(db.Integer, default=0)
+    ssen_points = db.Column(db.Integer, default=0)
+    reading_points = db.Column(db.Integer, default=0)
+    
+    # 총 포인트
+    total_points = db.Column(db.Integer, default=0)
+    
+    # 메타데이터
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+```
+
+### **PointsHistory 테이블 (변경 이력)**
+```python
+class PointsHistory(db.Model):
+    """포인트 변경 이력 기록"""
+    id = db.Column(db.Integer, primary_key=True)
+    child_id = db.Column(db.Integer, db.ForeignKey('child.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    
+    # 변경 전/후 포인트
+    old_korean_points = db.Column(db.Integer, default=0)
+    new_korean_points = db.Column(db.Integer, default=0)
+    # ... 등등
+    
+    # 변경 정보
+    change_type = db.Column(db.String(20), default='update')  # 'create', 'update', 'delete'
+    changed_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    changed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    change_reason = db.Column(db.String(200))
+```
+
+## 🚀 **포인트 입력 플로우**
+
+### **1. 새 포인트 입력**
+```python
+# 1. 기존 기록 확인
+existing_record = DailyPoints.query.filter_by(child_id=child_id, date=today).first()
+
+# 2. 새 기록 생성
+if not existing_record:
+    new_record = DailyPoints(...)
+    db.session.add(new_record)
+    db.session.commit()
+    
+    # 3. 누적 포인트 업데이트
+    update_cumulative_points(child_id)
+    
+    # 4. 자동 알림 생성
+    create_automatic_notifications(child, new_record, is_update=False)
+```
+
+### **2. 기존 포인트 수정 (덮어쓰기)**
+```python
+# 1. 기존 기록 확인
+if existing_record:
+    # 2. 변경 이력 기록
+    history_record = PointsHistory(...)
+    db.session.add(history_record)
+    
+    # 3. 기존 기록 업데이트
+    existing_record.korean_points = korean_points
+    # ... 등등
+    db.session.commit()
+    
+    # 4. 누적 포인트 업데이트
+    update_cumulative_points(child_id)
+    
+    # 5. 자동 알림 생성
+    create_automatic_notifications(child, existing_record, is_update=True)
+```
+
+## ⚠️ **주의사항**
+
+### **절대 금지:**
+1. **동시 입력**: 같은 아동의 같은 날짜에 여러 번 입력
+2. **데이터 손실**: 포인트 저장 중 오류 발생 시 데이터 손실
+3. **계산 오류**: 총점 계산이 부정확한 경우
+4. **권한 우회**: 권한이 없는 사용자의 포인트 수정
+
+### **안전한 방법:**
+1. **하루에 한 번**: 같은 날짜에는 덮어쓰기만 가능
+2. **이중 검증**: 모든 계산 결과를 이중으로 검증
+3. **완벽한 추적**: 모든 변경사항을 PointsHistory에 기록
+4. **자동 백업**: 정기적인 포인트 데이터 백업
+
+## 🔍 **문제 해결**
+
+### **포인트 계산 오류 발생 시:**
+1. **즉시 중단**: 추가 입력 금지
+2. **데이터 검증**: `validate_points_integrity()` 실행
+3. **중복 검사**: `check_duplicate_daily_points()` 실행
+4. **백업 생성**: `create_points_backup()` 실행
+
+### **데이터 불일치 발견 시:**
+1. **원인 분석**: 로그 확인
+2. **자동 수정**: 무결성 검증 함수 실행
+3. **수동 확인**: 결과 검증
+4. **재시작**: 시스템 정상화 확인
+
+## 💡 **모범 사례**
+
+### **포인트 입력 시:**
+1. **값 검증**: 입력값 범위 확인 (0-200)
+2. **계산 검증**: 총점 이중 계산으로 검증
+3. **이력 기록**: 모든 변경사항 기록
+4. **자동 업데이트**: 누적 포인트 자동 계산
+
+### **시스템 관리 시:**
+1. **정기 검증**: 주간 무결성 검증
+2. **백업 생성**: 일일 자동 백업
+3. **중복 검사**: 월간 중복 기록 검사
+4. **성능 모니터링**: 포인트 입력 속도 확인
+
+---
+
+> 🚨 **중요**: 포인트 시스템은 센터 운영의 핵심입니다!
+> 절대 실패하지 않도록 모든 보안 장치를 활용하세요.
+description:
+globs:
+alwaysApply: true
+---
