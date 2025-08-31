@@ -3340,8 +3340,15 @@ def run_scheduler():
         # 일일 백업 스케줄 (매일 22시)
         schedule.every().day.at("22:00").do(daily_backup)
         
-        # 월간 백업 스케줄 (매월 마지막 날 23시)
-        schedule.every().month.do(monthly_backup)
+        # 월간 백업 체크 함수 (매일 23시에 월의 마지막 날인지 확인)
+        def check_monthly_backup():
+            now = datetime.now()
+            # 오늘이 월의 마지막 날이고 23시인지 확인
+            last_day_of_month = (now.replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+            if now.day == last_day_of_month.day and now.hour == 23:
+                monthly_backup()
+        
+        schedule.every().day.at("23:00").do(check_monthly_backup)
         
         print("✅ 스케줄 백업 시스템 시작됨")
         print("   - 일일 백업: 매일 22:00")
@@ -3363,6 +3370,160 @@ def start_backup_scheduler():
         print("✅ 백업 스케줄러가 백그라운드에서 시작되었습니다.")
     except Exception as e:
         print(f"❌ 백업 스케줄러 시작 실패: {str(e)}")
+
+@app.route('/backup/manual', methods=['POST'])
+@login_required
+def backup_manual():
+    """수동 백업 실행"""
+    if current_user.role != '개발자':
+        flash('개발자만 백업을 실행할 수 있습니다.', 'error')
+        return redirect(url_for('settings_data'))
+    
+    try:
+        # 백업 디렉토리 생성
+        backup_dir = create_backup_directory()
+        
+        # 백업 데이터 수집
+        backup_data, error = get_backup_data()
+        if error:
+            flash(f'백업 데이터 수집 실패: {error}', 'error')
+            return redirect(url_for('settings_data'))
+        
+        # JSON 백업 생성
+        json_path, error = create_json_backup(backup_data, backup_dir, 'manual')
+        if error:
+            flash(f'JSON 백업 생성 실패: {error}', 'error')
+            return redirect(url_for('settings_data'))
+        
+        # Excel 백업 생성
+        excel_path, error = create_excel_backup(backup_data, backup_dir, 'manual')
+        if error:
+            flash(f'Excel 백업 생성 실패: {error}', 'error')
+            return redirect(url_for('settings_data'))
+        
+        # 데이터베이스 백업 생성
+        db_path, error = create_database_backup(backup_dir, 'manual')
+        if error:
+            flash(f'데이터베이스 백업 생성 실패: {error}', 'error')
+            return redirect(url_for('settings_data'))
+        
+        flash(f'백업이 완료되었습니다. JSON: {os.path.basename(json_path)}, Excel: {os.path.basename(excel_path)}, DB: {os.path.basename(db_path)}', 'success')
+        return redirect(url_for('settings_data'))
+        
+    except Exception as e:
+        flash(f'백업 실행 중 오류 발생: {str(e)}', 'error')
+        return redirect(url_for('settings_data'))
+
+@app.route('/backup/list')
+@login_required
+def backup_list():
+    """백업 파일 목록 조회"""
+    if current_user.role != '개발자':
+        flash('개발자만 백업 목록을 조회할 수 있습니다.', 'error')
+        return redirect(url_for('settings_data'))
+    
+    try:
+        backup_dir = create_backup_directory()
+        
+        # 백업 파일 목록 조회
+        backups = []
+        if os.path.exists(backup_dir):
+            for filename in os.listdir(backup_dir):
+                if filename.endswith(('.json', '.xlsx', '.db')):
+                    file_path = os.path.join(backup_dir, filename)
+                    file_stat = os.stat(file_path)
+                    
+                    # 파일 타입 추출
+                    if 'realtime' in filename:
+                        backup_type = 'realtime'
+                    elif 'daily' in filename:
+                        backup_type = 'daily'
+                    elif 'monthly' in filename:
+                        backup_type = 'monthly'
+                    elif 'manual' in filename:
+                        backup_type = 'manual'
+                    else:
+                        backup_type = 'unknown'
+                    
+                    # 크기를 MB로 변환
+                    size_mb = round(file_stat.st_size / (1024 * 1024), 2)
+                    
+                    backups.append({
+                        'filename': filename,
+                        'type': backup_type,
+                        'size_mb': size_mb,
+                        'created_at': datetime.fromtimestamp(file_stat.st_ctime).strftime('%Y-%m-%d %H:%M:%S'),
+                        'filepath': file_path,
+                        'restore_safe': True  # 기본적으로 복구 가능으로 설정
+                    })
+        
+        # 최신 파일부터 정렬
+        backups.sort(key=lambda x: x['created_at'], reverse=True)
+        
+        return render_template('backup/list.html', backups=backups)
+        
+    except Exception as e:
+        flash(f'백업 목록 조회 실패: {str(e)}', 'error')
+        return redirect(url_for('settings_data'))
+
+@app.route('/backup/status')
+@login_required
+def backup_status():
+    """백업 상태 및 목록 조회 (JSON API)"""
+    if current_user.role != '개발자':
+        return jsonify({'error': '개발자만 접근할 수 있습니다.'}), 403
+    
+    try:
+        backup_dir = create_backup_directory()
+        
+        # 백업 파일 목록 조회 (모든 하위 디렉토리 포함)
+        backups = []
+        if os.path.exists(backup_dir):
+            # 루트 디렉토리 검색
+            for filename in os.listdir(backup_dir):
+                if filename.endswith(('.json', '.xlsx', '.db')):
+                    file_path = os.path.join(backup_dir, filename)
+                    file_stat = os.stat(file_path)
+                    
+                    # 크기를 MB로 변환
+                    size_mb = round(file_stat.st_size / (1024 * 1024), 2)
+                    
+                    backups.append({
+                        'filename': filename,
+                        'size_mb': size_mb,
+                        'created_at': datetime.fromtimestamp(file_stat.st_ctime).strftime('%Y-%m-%d %H:%M:%S')
+                    })
+            
+            # 하위 디렉토리들 검색
+            subdirs = ['realtime', 'daily', 'monthly', 'database']
+            for subdir in subdirs:
+                subdir_path = os.path.join(backup_dir, subdir)
+                if os.path.exists(subdir_path):
+                    for filename in os.listdir(subdir_path):
+                        if filename.endswith(('.json', '.xlsx', '.db')):
+                            file_path = os.path.join(subdir_path, filename)
+                            file_stat = os.stat(file_path)
+                            
+                            # 크기를 MB로 변환
+                            size_mb = round(file_stat.st_size / (1024 * 1024), 2)
+                            
+                            backups.append({
+                                'filename': f"{subdir}/{filename}",
+                                'size_mb': size_mb,
+                                'created_at': datetime.fromtimestamp(file_stat.st_ctime).strftime('%Y-%m-%d %H:%M:%S')
+                            })
+        
+        # 최신 파일부터 정렬
+        backups.sort(key=lambda x: x['created_at'], reverse=True)
+        
+        return jsonify({
+            'backups': backups,
+            'total_count': len(backups),
+            'backup_dir': backup_dir
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'백업 상태 조회 실패: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # 백업 스케줄러 시작
