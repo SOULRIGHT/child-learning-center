@@ -1,6 +1,9 @@
 import os
 import json
 import shutil
+import threading
+import schedule
+import time
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -3230,7 +3233,141 @@ def realtime_backup(child_id, action_type):
         print(f"❌ 실시간 백업 실행 중 오류: {str(e)}")
         return False
 
+def create_database_backup(backup_dir, backup_type='manual'):
+    """데이터베이스 파일 백업"""
+    try:
+        # 현재 DB 파일 경로
+        db_path = os.path.join(os.path.dirname(__file__), 'instance', 'child_center.db')
+        
+        if not os.path.exists(db_path):
+            return None, "데이터베이스 파일을 찾을 수 없습니다"
+        
+        # 백업 파일명
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        backup_filename = f"{datetime.now().strftime('%Y-%m-%d')}_{timestamp.split('_')[1]}_{backup_type}.db"
+        backup_path = os.path.join(backup_dir, 'database', backup_filename)
+        
+        # 파일 복사
+        shutil.copy2(db_path, backup_path)
+        
+        return backup_path, None
+        
+    except Exception as e:
+        return None, str(e)
+
+# 스케줄 백업 시스템
+def daily_backup():
+    """일일 백업 실행 (매일 22시)"""
+    try:
+        print("🔄 일일 백업 시작...")
+        
+        # 백업 디렉토리 생성
+        backup_dir = create_backup_directory()
+        
+        # 백업 데이터 수집
+        backup_data, error = get_backup_data()
+        if error:
+            print(f"❌ 일일 백업 데이터 수집 실패: {error}")
+            return False
+        
+        # JSON 백업 생성
+        json_path, error = create_json_backup(backup_data, backup_dir, 'daily')
+        if error:
+            print(f"❌ 일일 JSON 백업 생성 실패: {error}")
+            return False
+        
+        # Excel 백업 생성
+        excel_path, error = create_excel_backup(backup_data, backup_dir, 'daily')
+        if error:
+            print(f"❌ 일일 Excel 백업 생성 실패: {error}")
+            return False
+        
+        # 데이터베이스 백업 생성
+        db_path, error = create_database_backup(backup_dir, 'daily')
+        if error:
+            print(f"❌ 일일 데이터베이스 백업 생성 실패: {error}")
+            return False
+        
+        print(f"✅ 일일 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ 일일 백업 실행 중 오류: {str(e)}")
+        return False
+
+def monthly_backup():
+    """월간 백업 실행 (매월 마지막 날 23시)"""
+    try:
+        print("🔄 월간 백업 시작...")
+        
+        # 백업 디렉토리 생성
+        backup_dir = create_backup_directory()
+        
+        # 백업 데이터 수집
+        backup_data, error = get_backup_data()
+        if error:
+            print(f"❌ 월간 백업 데이터 수집 실패: {error}")
+            return False
+        
+        # JSON 백업 생성
+        json_path, error = create_json_backup(backup_data, backup_dir, 'monthly')
+        if error:
+            print(f"❌ 월간 JSON 백업 생성 실패: {error}")
+            return False
+        
+        # Excel 백업 생성
+        excel_path, error = create_excel_backup(backup_data, backup_dir, 'monthly')
+        if error:
+            print(f"❌ 월간 Excel 백업 생성 실패: {error}")
+            return False
+        
+        # 데이터베이스 백업 생성
+        db_path, error = create_database_backup(backup_dir, 'monthly')
+        if error:
+            print(f"❌ 월간 데이터베이스 백업 생성 실패: {error}")
+            return False
+        
+        print(f"✅ 월간 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ 월간 백업 실행 중 오류: {str(e)}")
+        return False
+
+def run_scheduler():
+    """스케줄러 실행 함수"""
+    try:
+        # 일일 백업 스케줄 (매일 22시)
+        schedule.every().day.at("22:00").do(daily_backup)
+        
+        # 월간 백업 스케줄 (매월 마지막 날 23시)
+        schedule.every().month.do(monthly_backup)
+        
+        print("✅ 스케줄 백업 시스템 시작됨")
+        print("   - 일일 백업: 매일 22:00")
+        print("   - 월간 백업: 매월 마지막 날 23:00")
+        
+        # 스케줄러 루프 실행
+        while True:
+            schedule.run_pending()
+            time.sleep(60)  # 1분마다 체크
+            
+    except Exception as e:
+        print(f"❌ 스케줄러 실행 중 오류: {str(e)}")
+
+def start_backup_scheduler():
+    """백그라운드에서 스케줄러 시작"""
+    try:
+        scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+        scheduler_thread.start()
+        print("✅ 백업 스케줄러가 백그라운드에서 시작되었습니다.")
+    except Exception as e:
+        print(f"❌ 백업 스케줄러 시작 실패: {str(e)}")
+
 if __name__ == '__main__':
+    # 백업 스케줄러 시작
+    start_backup_scheduler()
+    
     # init_db() 제거 - 서버 재시작 시 데이터 초기화 방지
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
 else:
