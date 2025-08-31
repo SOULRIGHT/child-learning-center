@@ -2,6 +2,30 @@
 
 아동들의 학습 진도를 추적하고 관리하는 웹 애플리케이션입니다.
 
+## 📅 2025-08-31 업데이트 내역
+
+### ✨ 새로운 기능
+- CMD 가상환경 활성화 가이드 추가 (.cursor/rules/cmd-virtual-environment.mdc)
+- 서버 시작 배치 스크립트 (start_server.bat) 추가
+- 백업 복원 스크립트 기초 구현 (restore_backup.py)
+
+### 🔧 백엔드 개선
+- 월간 백업 스케줄링 수정 (schedule 라이브러리 제한 해결)
+- 실시간 백업 오류 해결 (realtime_backup 함수 정의 누락 수정)
+- 백업 파일 관리 시스템 개선
+- 백업 스케줄러 안정성 향상
+
+### 🐛 버그 수정
+- realtime_backup 함수 정의 누락 문제 해결
+- 백업 시스템 오류 메시지 반복 출력 문제 해결
+- 월간 백업 스케줄링 오류 (schedule.every().month 미지원) 수정
+
+### 📁 파일 구조 개선
+- .cursor/rules/cmd-virtual-environment.mdc (CMD 환경 가이드)
+- start_server.bat (서버 자동 시작)
+- restore_backup.py (복원 기능 준비)
+- 백업 파일들 자동 정리
+
 ## 📅 2024-08-19 업데이트 내역
 
 ### ✨ 새로운 기능
