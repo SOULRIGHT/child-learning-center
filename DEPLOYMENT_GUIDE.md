@@ -1,4 +1,4 @@
-# 배포 가이드 (Deployment Guide) - Ver. 2.0 (2025년 8월 11일)
+# 배포 가이드 (Deployment Guide) - Ver. 2.1 (2025년 8월 31일)
 
 ## 📋 개요
 이 문서는 아동 학습 센터 애플리케이션의 배포 과정과 관련 명령어를 정리한 가이드입니다.
@@ -6,17 +6,30 @@
 ## 🚀 배포 과정
 
 ### 1. 로컬 개발 환경 설정
-```bash
+
+#### 📌 Windows CMD 환경 (권장)
+```cmd
 # 프로젝트 디렉토리로 이동
 cd child-learning-center
 
-# 가상환경 생성 (선택사항)
+# 가상환경 생성
 python -m venv .venv
-.venv\Scripts\activate  # Windows
-source .venv/bin/activate  # macOS/Linux
+
+# 가상환경 활성화 (CMD 권장)
+.venv\Scripts\activate.bat
+
+# 또는 편리한 서버 시작 스크립트 사용
+start_server.bat
 
 # 의존성 설치
 pip install -r requirements.txt
+```
+
+#### 🚫 PowerShell 실행 정책 문제 해결
+```cmd
+# PowerShell에서 실행 정책 오류 발생 시 CMD 사용
+cmd
+.venv\Scripts\activate.bat
 ```
 
 ### 2. 데이터베이스 초기화 및 마이그레이션
@@ -99,6 +112,12 @@ python real_seed_data.py
 ```
 
 ## 🔧 주요 변경사항
+
+### 📅 2025-08-31 업데이트
+- **CMD 가상환경 가이드**: PowerShell 실행 정책 문제 해결
+- **서버 시작 스크립트**: start_server.bat 자동 실행 스크립트 추가
+- **백업 시스템 안정화**: 실시간 백업 오류 해결 및 월간 백업 수정
+- **복원 기능 준비**: restore_backup.py 기초 구현
 
 ### 데이터베이스 마이그레이션 시스템
 - **Flask-Migrate**: 스키마 변경사항 추적 및 관리
@@ -261,6 +280,6 @@ python create_children.py
 
 ---
 
-**마지막 업데이트**: 2024년 12월 1일  (날짜 수정)
-**버전**: 2.0 (마이그레이션 시스템 추가)  
+**마지막 업데이트**: 2025년 8월 31일  
+**버전**: 2.1 (백업 시스템 안정화 및 CMD 환경 지원)  
 **작성자**: 개발팀 
