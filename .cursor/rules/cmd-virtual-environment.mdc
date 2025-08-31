@@ -1,0 +1,153 @@
+# 🖥️ CMD 가상환경 활성화 및 서버 실행 규칙
+
+## 🚨 PowerShell 가상환경 문제 해결
+
+### 문제 상황:
+- PowerShell에서 `Activate.ps1` 실행 정책 오류 발생
+- `ModuleNotFoundError: No module named 'schedule'` 등 모듈 오류 발생
+- 가상환경이 제대로 활성화되지 않아 패키지 접근 불가
+
+### ✅ 해결 방법: CMD 사용
+
+## 📋 필수 작업 순서
+
+### 1. CMD로 전환
+```bash
+# PowerShell에서 CMD로 전환
+cmd
+```
+
+### 2. 가상환경 활성화 확인
+```bash
+# 프롬프트에 (.venv) 표시 확인
+(.venv) C:\Users\apple\Desktop\child-learning-center>
+```
+
+### 3. 서버 실행
+```bash
+# 가상환경 활성화 상태에서 서버 실행
+python app.py
+```
+
+## 🔧 서버 실행 전 검증 체크리스트
+
+### ✅ 가상환경 상태 확인:
+- [ ] 프롬프트에 `(.venv)` 표시가 있는가?
+- [ ] `python --version` 명령어가 정상 작동하는가?
+- [ ] `pip list` 명령어로 패키지 목록이 표시되는가?
+
+### ✅ 필수 패키지 확인:
+```bash
+# 핵심 패키지들 확인
+pip list | findstr schedule
+pip list | findstr pandas
+pip list | findstr openpyxl
+pip list | findstr flask
+```
+
+### ✅ 서버 실행 테스트:
+```bash
+# 서버 시작 후 정상 동작 확인
+python app.py
+# 예상 출력:
+# ✅ 스케줄 백업 시스템 시작됨
+# ✅ 백업 스케줄러가 백그라운드에서 시작되었습니다.
+# * Running on http://127.0.0.1:5000
+```
+
+## 🚨 오류 발생 시 대응
+
+### PowerShell 오류 발생 시:
+```bash
+# 1. 즉시 CMD로 전환
+cmd
+
+# 2. 가상환경 재활성화
+.venv\Scripts\activate.bat
+
+# 3. 서버 재시작
+python app.py
+```
+
+### 모듈 오류 발생 시:
+```bash
+# 1. 가상환경 상태 확인
+echo %VIRTUAL_ENV%
+
+# 2. 패키지 재설치 (필요시)
+pip install schedule pandas openpyxl
+
+# 3. 서버 재시작
+python app.py
+```
+
+## 📝 작업 시 주의사항
+
+### ❌ 절대 금지:
+- PowerShell에서 `python app.py` 실행
+- 가상환경 활성화 없이 서버 실행
+- `(.venv)` 표시 없이 패키지 설치
+- **가상환경 활성화된 상태에서 새 터미널 창 띄우기**
+- **이미 활성화된 가상환경을 무시하고 새로 시작하기**
+
+### ✅ 권장 사항:
+- 항상 CMD에서 작업
+- 서버 실행 전 가상환경 상태 확인
+- 오류 발생 시 즉시 CMD로 전환
+- **가상환경이 활성화된 상태(`(.venv)` 표시)에서 계속 작업**
+- **새 터미널 창을 띄우지 말고 기존 활성화된 상태 유지**
+
+## 🔄 자동화 스크립트 (선택사항)
+
+### 서버 시작 스크립트 생성:
+```bash
+# start_server.bat 파일 생성
+@echo off
+echo 가상환경 활성화 중...
+call .venv\Scripts\activate.bat
+echo 서버 시작 중...
+python app.py
+pause
+```
+
+### 사용법:
+```bash
+# 배치 파일로 서버 시작
+start_server.bat
+```
+
+## 💡 핵심 원칙
+
+1. **CMD 우선**: PowerShell 대신 CMD 사용
+2. **가상환경 확인**: `(.venv)` 표시 필수
+3. **패키지 검증**: 실행 전 필수 패키지 확인
+4. **오류 대응**: 문제 발생 시 즉시 CMD 전환
+5. **상태 유지**: 가상환경 활성화된 상태에서 계속 작업
+6. **새 창 금지**: 불필요한 새 터미널 창 띄우지 않기
+
+## 🎯 성공 기준
+
+### ✅ 정상 동작 시나리오:
+```bash
+(.venv) C:\Users\apple\Desktop\child-learning-center>python app.py
+✅ 스케줄 백업 시스템 시작됨
+✅ 백업 스케줄러가 백그라운드에서 시작되었습니다.
+   - 일일 백업: 매일 22:00
+   - 월간 백업: 매월 마지막 날 23:00
+ * Running on http://127.0.0.1:5000
+```
+
+### ❌ 오류 시나리오:
+```bash
+PS C:\Users\apple\Desktop\child-learning-center>python app.py
+ModuleNotFoundError: No module named 'schedule'
+# → 즉시 CMD로 전환 필요
+```
+
+---
+
+> ⚠️ **기억하세요**: PowerShell에서 오류가 발생하면 반드시 CMD로 전환하여 가상환경을 활성화한 후 작업하세요!
+description:
+globs:
+alwaysApply: true
+---
