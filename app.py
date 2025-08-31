@@ -607,8 +607,26 @@ def delete_child(child_id):
 def child_detail(child_id):
     child = Child.query.get_or_404(child_id)
     
-    # 새로운 포인트 시스템 기록들 (중복 제거)
+    # 페이지네이션 파라미터
+    page = request.args.get('page', 1, type=int)
+    per_page = 20  # 한 페이지당 20개 기록
+    
+    # 새로운 포인트 시스템 기록들 (중복 제거) - 페이지네이션 적용
     from sqlalchemy import text
+    
+    # 전체 기록 수 계산
+    count_result = db.session.execute(text("""
+        SELECT COUNT(DISTINCT date) as total_count
+        FROM daily_points 
+        WHERE child_id = :child_id
+    """), {"child_id": child_id})
+    total_records = count_result.fetchone()[0]
+    
+    # 페이지네이션 계산
+    offset = (page - 1) * per_page
+    total_pages = (total_records + per_page - 1) // per_page
+    
+    # 페이지별 기록 조회
     result = db.session.execute(text("""
         SELECT id, date, korean_points, math_points, ssen_points, reading_points, total_points, created_at
         FROM daily_points 
@@ -620,8 +638,8 @@ def child_detail(child_id):
             GROUP BY date
         )
         ORDER BY date DESC
-        LIMIT 30
-    """), {"child_id": child_id})
+        LIMIT :per_page OFFSET :offset
+    """), {"child_id": child_id, "per_page": per_page, "offset": offset})
     
     # DailyPoints 객체로 변환
     recent_records = []
@@ -666,8 +684,8 @@ def child_detail(child_id):
         recent_avg = 0
         latest_record = None
     
-    # 총 포인트 및 추가 통계
-    total_points = sum(record.total_points for record in recent_records)
+    # 총 누적 포인트 (실제 전체 누적)
+    total_points = child.cumulative_points
     
     return render_template('children/detail.html', 
                          child=child,
@@ -675,7 +693,12 @@ def child_detail(child_id):
                          recent_notes=recent_notes,
                          recent_avg=recent_avg,
                          latest_record=latest_record,
-                         total_points=total_points)
+                         total_points=total_points,
+                         # 페이지네이션 정보
+                         current_page=page,
+                         total_pages=total_pages,
+                         total_records=total_records,
+                         per_page=per_page)
 
 # ===== 특이사항 관리 라우트 =====
 
@@ -1590,10 +1613,11 @@ def points_input(child_id):
                     print(f"  총점: {old_total} → {total_points}")
                     print(f"  변경자: {current_user.username}")
                 
-                db.session.commit()
+                # 누적 포인트 자동 업데이트 (커밋 없이)
+                update_cumulative_points(child_id, commit=False)
                 
-                # 누적 포인트 자동 업데이트
-                update_cumulative_points(child_id)
+                # 모든 변경사항을 한 번에 커밋
+                db.session.commit()
                 
                 # 자동 알림 생성
                 create_automatic_notifications(child, existing_record, is_update=True)
@@ -1634,10 +1658,11 @@ def points_input(child_id):
                 )
                 db.session.add(new_record)
                 
-                db.session.commit()
+                # 누적 포인트 자동 업데이트 (커밋 없이)
+                update_cumulative_points(child_id, commit=False)
                 
-                # 누적 포인트 자동 업데이트
-                update_cumulative_points(child_id)
+                # 모든 변경사항을 한 번에 커밋
+                db.session.commit()
                 
                 # 자동 알림 생성
                 create_automatic_notifications(child, new_record, is_update=False)
@@ -1665,7 +1690,7 @@ def points_input(child_id):
     
     return render_template('points/input.html', child=child, today_record=today_record, today_date=today_date)
 
-def update_cumulative_points(child_id):
+def update_cumulative_points(child_id, commit=True):
     """아동의 누적 포인트를 자동으로 업데이트"""
     try:
         # 해당 아동의 모든 일일 포인트 합계 계산
@@ -1677,12 +1702,16 @@ def update_cumulative_points(child_id):
         child = Child.query.get(child_id)
         if child:
             child.cumulative_points = total_cumulative
-            db.session.commit()
+            if commit:
+                db.session.commit()
             print(f"📊 {child.name}의 누적 포인트 업데이트: {total_cumulative}점")
+            return total_cumulative
             
     except Exception as e:
         print(f"❌ 누적 포인트 업데이트 오류: {e}")
-        db.session.rollback()
+        if commit:
+            db.session.rollback()
+        raise e
 
 @app.route('/points/statistics')
 @login_required

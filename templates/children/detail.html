@@ -38,7 +38,7 @@
 </div>
 
 <!-- 통계 요약 카드 -->
-<div class="row mb-4">
+<div class="row mb-4 mt-5">
     <div class="col-lg-3 col-md-6 mb-3">
         <div class="stat-card">
             <div class="stat-content">
@@ -57,7 +57,7 @@
         <div class="stat-card">
             <div class="stat-content">
                 <div>
-                    <div class="stat-number">{{ recent_records|length }}</div>
+                    <div class="stat-number">{{ total_records }}</div>
                     <div class="stat-label">총 포인트 기록</div>
                 </div>
                 <div class="stat-icon">
@@ -115,6 +115,33 @@
                     <i class="bi bi-graph-up me-1"></i>전체 분석 보기
                 </a>
             </div>
+            
+            <!-- 포인트 요약 정보 -->
+            {% if recent_records %}
+            <div class="border-bottom">
+                <div class="row mx-0">
+                    <div class="col-md-4 border-end">
+                        <div class="text-center p-3">
+                            <h6 class="text-muted mb-1">최고 점수</h6>
+                            <h4 class="text-success mb-0">{{ recent_records|map(attribute='total_points')|max }}점</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-4 border-end">
+                        <div class="text-center p-3">
+                            <h6 class="text-muted mb-1">평균 점수</h6>
+                            <h4 class="text-info mb-0">{{ recent_avg | round(0) | int if recent_avg else 0 }}점</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center p-3">
+                            <h6 class="text-muted mb-1">총 기록일</h6>
+                            <h4 class="text-warning mb-0">{{ total_records }}일</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
             <div class="card-body">
                 {% if recent_records %}
                 <div class="table-responsive">
@@ -127,7 +154,6 @@
                                 <th class="text-center">쎈수학</th>
                                 <th class="text-center">독서</th>
                                 <th class="text-center">총점</th>
-                                <th>등급</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -171,50 +197,76 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-center fw-bold text-primary">{{ record.total_points }}점</td>
-                                <td>
-                                    {% if record.total_points >= 600 %}
-                                        <span class="badge bg-success">우수</span>
-                                    {% elif record.total_points >= 400 %}
-                                        <span class="badge bg-warning">보통</span>
-                                    {% elif record.total_points > 0 %}
-                                        <span class="badge bg-danger">노력 필요</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary">미입력</span>
-                                    {% endif %}
-                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
                 
-                <!-- 포인트 요약 정보 -->
-                <div class="row mt-3">
-                    <div class="col-md-4">
-                        <div class="text-center p-3 bg-light rounded">
-                            <h6 class="text-muted mb-1">최고 점수</h6>
-                            <h4 class="text-success mb-0">
-                                {% if recent_records %}
-                                    {{ recent_records|map(attribute='total_points')|max }}점
-                                {% else %}
-                                    0점
+                <!-- 페이지네이션 -->
+                {% if total_pages > 1 %}
+                <div class="text-center mt-3 mb-3">
+                    <div class="text-muted mb-2">
+                        전체 {{ total_records }}개 기록 중 {{ (current_page-1) * per_page + 1 }}-{{ [current_page * per_page, total_records] | min }}번째 표시
+                    </div>
+                    <nav aria-label="포인트 기록 페이지네이션">
+                        <ul class="pagination pagination-sm mb-0 justify-content-center">
+                            <!-- 이전 페이지 -->
+                            {% if current_page > 1 %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('child_detail', child_id=child.id, page=current_page-1) }}">
+                                    <i class="bi bi-chevron-left"></i>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">
+                                    <i class="bi bi-chevron-left"></i>
+                                </span>
+                            </li>
+                            {% endif %}
+                            
+                            <!-- 페이지 번호들 -->
+                            {% for page_num in range(1, total_pages + 1) %}
+                                {% if page_num == current_page %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ page_num }}</span>
+                                </li>
+                                {% elif page_num <= 3 or page_num > total_pages - 3 or (page_num >= current_page - 1 and page_num <= current_page + 1) %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('child_detail', child_id=child.id, page=page_num) }}">{{ page_num }}</a>
+                                </li>
+                                {% elif page_num == 4 and current_page > 5 %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                                {% elif page_num == total_pages - 3 and current_page < total_pages - 4 %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
                                 {% endif %}
-                            </h4>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-center p-3 bg-light rounded">
-                            <h6 class="text-muted mb-1">평균 점수</h6>
-                            <h4 class="text-info mb-0">{{ recent_avg | round(0) | int if recent_avg else 0 }}점</h4>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-center p-3 bg-light rounded">
-                            <h6 class="text-muted mb-1">총 기록일</h6>
-                            <h4 class="text-warning mb-0">{{ recent_records|length }}일</h4>
-                        </div>
-                    </div>
+                            {% endfor %}
+                            
+                            <!-- 다음 페이지 -->
+                            {% if current_page < total_pages %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('child_detail', child_id=child.id, page=current_page+1) }}">
+                                    <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">
+                                    <i class="bi bi-chevron-right"></i>
+                                </span>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
                 </div>
+                {% endif %}
+                
+
                 {% else %}
                 <div class="text-center py-5">
                     <i class="bi bi-star" style="font-size: 3rem; color: #dee2e6;"></i>
