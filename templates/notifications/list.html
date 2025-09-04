@@ -36,6 +36,14 @@
                     <i class="bi bi-check-all"></i> 모두 읽음
                 </button>
             {% endif %}
+            
+            <!-- 개발자만 삭제 버튼 표시 -->
+            {% if current_user.role == '개발자' %}
+                <button class="btn btn-outline-danger me-2" onclick="deleteSelectedNotifications()">
+                    <i class="bi bi-trash"></i> 선택 삭제
+                </button>
+            {% endif %}
+            
             {% if current_user.role == '센터장' %}
                 <a href="{{ url_for('test_notifications') }}" class="btn btn-outline-secondary">
                     <i class="bi bi-plus"></i> 테스트 알림
@@ -50,12 +58,33 @@
             <div class="card">
                 <div class="card-body p-0">
                     {% if notifications %}
+                        <!-- 전체 선택 체크박스 (개발자만 표시) -->
+                        {% if current_user.role == '개발자' %}
+                        <div class="p-3 border-bottom">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="select-all-checkbox" onchange="toggleAllNotifications()">
+                                <label class="form-check-label" for="select-all-checkbox">
+                                    전체 선택
+                                </label>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
                         <div class="list-group list-group-flush">
                             {% for notification in notifications %}
                             <div class="list-group-item {% if not notification.is_read %}bg-light{% endif %}" 
                                  data-notification-id="{{ notification.id }}"
                                  data-notification-type="{{ notification.type }}">
                                 <div class="d-flex align-items-start">
+                                    <!-- 체크박스 (개발자만 표시) -->
+                                    {% if current_user.role == '개발자' %}
+                                    <div class="me-2 mt-2">
+                                        <input type="checkbox" class="notification-checkbox" 
+                                               value="{{ notification.id }}" 
+                                               aria-label="알림 선택">
+                                    </div>
+                                    {% endif %}
+                                    
                                     <!-- 아이콘 -->
                                     <div class="me-3 mt-1">
                                         <div class="rounded-circle bg-{{ notification.color }} d-flex align-items-center justify-content-center" 
@@ -116,6 +145,14 @@
                                                     <span class="text-muted small">
                                                         <i class="bi bi-check-circle"></i> 읽음
                                                     </span>
+                                                {% endif %}
+                                                
+                                                <!-- 개별 삭제 버튼 (개발자만 표시) -->
+                                                {% if current_user.role == '개발자' %}
+                                                    <button class="btn btn-sm btn-outline-danger ms-2" 
+                                                            onclick="deleteNotification({{ notification.id }})">
+                                                        <i class="bi bi-trash"></i> 삭제
+                                                    </button>
                                                 {% endif %}
                                             </div>
                                         </div>
@@ -246,6 +283,80 @@ function markAllAsRead() {
     .catch(error => {
         console.error('Error:', error);
         alert('오류가 발생했습니다.');
+    });
+}
+
+// 알림 삭제 기능
+function deleteNotification(notificationId) {
+    if (!confirm('이 알림을 삭제하시겠습니까?')) {
+        return;
+    }
+    
+    fetch(`/notifications/${notificationId}/delete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert(data.message || '알림 삭제에 실패했습니다.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('오류가 발생했습니다.');
+    });
+}
+
+function deleteSelectedNotifications() {
+    const checkboxes = document.querySelectorAll('.notification-checkbox:checked');
+    const notificationIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    
+    if (notificationIds.length === 0) {
+        alert('삭제할 알림을 선택해주세요.');
+        return;
+    }
+    
+    if (!confirm(`선택한 ${notificationIds.length}개의 알림을 삭제하시겠습니까?`)) {
+        return;
+    }
+    
+    fetch('/notifications/delete-multiple', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            notification_ids: notificationIds
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert(data.message || '알림 삭제에 실패했습니다.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('오류가 발생했습니다.');
+    });
+}
+
+// 전체 선택/해제 기능
+function toggleAllNotifications() {
+    const checkboxes = document.querySelectorAll('.notification-checkbox');
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAllCheckbox.checked;
     });
 }
 </script>
