@@ -3285,26 +3285,36 @@ def realtime_backup(child_id, action_type):
         # 백업 데이터 수집
         backup_data, error = get_backup_data()
         if error:
-            print(f"실시간 백업 데이터 수집 실패: {error}")
+            error_msg = f"실시간 백업 데이터 수집 실패: {error}"
+            print(f"❌ {error_msg}")
+            create_backup_notification('실시간', 'failed', error_msg)
             return False
         
         # JSON 백업 생성
         json_path, error = create_json_backup(backup_data, backup_dir, 'realtime')
         if error:
-            print(f"실시간 JSON 백업 생성 실패: {error}")
+            error_msg = f"실시간 JSON 백업 생성 실패: {error}"
+            print(f"❌ {error_msg}")
+            create_backup_notification('실시간', 'failed', error_msg)
             return False
         
         # Excel 백업 생성
         excel_path, error = create_excel_backup(backup_data, backup_dir, 'realtime')
         if error:
-            print(f"실시간 Excel 백업 생성 실패: {error}")
+            error_msg = f"실시간 Excel 백업 생성 실패: {error}"
+            print(f"❌ {error_msg}")
+            create_backup_notification('실시간', 'failed', error_msg)
             return False
         
-        print(f"✅ 실시간 백업 완료 - {action_type}: {os.path.basename(json_path)}, {os.path.basename(excel_path)}")
+        success_msg = f"실시간 백업 완료 - {action_type}: {os.path.basename(json_path)}, {os.path.basename(excel_path)}"
+        print(f"✅ {success_msg}")
+        create_backup_notification('실시간', 'success', success_msg)
         return True
         
     except Exception as e:
-        print(f"❌ 실시간 백업 실행 중 오류: {str(e)}")
+        error_msg = f"실시간 백업 실행 중 오류: {str(e)}"
+        print(f"❌ {error_msg}")
+        create_backup_notification('실시간', 'failed', error_msg)
         return False
 
 def create_database_backup(backup_dir, backup_type='manual'):
