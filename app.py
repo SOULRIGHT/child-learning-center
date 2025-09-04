@@ -1642,9 +1642,6 @@ def points_input(child_id):
                     print(f"백업 실패: {backup_error}")
                     # 백업 실패는 포인트 입력 성공에 영향을 주지 않음
                 
-                # 자동 알림 생성
-                create_automatic_notifications(child, existing_record, is_update=True)
-                
                 flash(f'✅ {child.name} 아이의 포인트가 수정되었습니다. (총점: {total_points}점)', 'success')
                 return redirect(url_for('points_list'))
             else:
@@ -1693,9 +1690,6 @@ def points_input(child_id):
                 except Exception as backup_error:
                     print(f"백업 실패: {backup_error}")
                     # 백업 실패는 포인트 입력 성공에 영향을 주지 않음
-                
-                # 자동 알림 생성
-                create_automatic_notifications(child, new_record, is_update=False)
                 
                 flash(f'✅ {child.name} 아이의 포인트가 저장되었습니다. (총점: {total_points}점)', 'success')
                 return redirect(url_for('points_list'))
@@ -2551,6 +2545,7 @@ class Notification(db.Model):
     # 상태 관리
     is_read = db.Column(db.Boolean, default=False)
     is_active = db.Column(db.Boolean, default=True)
+    # is_deleted = db.Column(db.Boolean, default=False)  # 소프트 삭제 플래그
     auto_expire = db.Column(db.Boolean, default=False)  # 자동 만료 여부
     expire_date = db.Column(db.DateTime, nullable=True)  # 만료 일시
     
@@ -2575,7 +2570,6 @@ class Notification(db.Model):
             'success': 'check-circle',
             'warning': 'exclamation-triangle',
             'danger': 'x-circle',
-            'achievement': 'trophy',
             'reminder': 'clock',
             'system': 'gear',
             'backup_success': 'cloud-check',
@@ -2593,7 +2587,6 @@ class Notification(db.Model):
             'success': 'success',
             'warning': 'warning',
             'danger': 'danger',
-            'achievement': 'warning',
             'reminder': 'info',
             'system': 'secondary',
             'backup_success': 'success',
@@ -2736,26 +2729,56 @@ def mark_notification_read(notification_id, user_id):
         return True
     return False
 
-def create_achievement_notification(child, achievement_type, details):
-    """성취 알림 생성"""
-    titles = {
-        'perfect_score': f'🏆 {child.name} 만점 달성!',
-        'streak': f'🔥 {child.name} 연속 학습!',
-        'improvement': f'📈 {child.name} 성적 향상!',
-        'milestone': f'🎯 {child.name} 목표 달성!'
-    }
-    
-    title = titles.get(achievement_type, f'🎉 {child.name} 성취!')
-    
-    return create_notification(
-        title=title,
-        message=details,
-        notification_type='achievement',
-        child_id=child.id,
-        priority=2,
-        auto_expire=True,
-        expire_days=7
-    )
+def delete_notification(notification_id, user_id):
+    """알림 소프트 삭제 (개발자만 가능)"""
+    try:
+        # 사용자 권한 확인
+        user = User.query.get(user_id)
+        if not user or user.role != '개발자':
+            return False, "개발자 권한이 필요합니다."
+        
+        # 알림 조회
+        notification = Notification.query.filter_by(id=notification_id).first()
+        if not notification:
+            return False, "알림을 찾을 수 없습니다."
+        
+        # 소프트 삭제 처리
+        db.session.delete(notification)
+        db.session.commit()
+        
+        return True, "알림이 삭제되었습니다."
+        
+    except Exception as e:
+        db.session.rollback()
+        return False, f"삭제 중 오류가 발생했습니다: {str(e)}"
+
+def delete_multiple_notifications(notification_ids, user_id):
+    """여러 알림 일괄 삭제 (개발자만 가능)"""
+    try:
+        # 사용자 권한 확인
+        user = User.query.get(user_id)
+        if not user or user.role != '개발자':
+            return False, "개발자 권한이 필요합니다."
+        
+        # 알림들 조회 및 삭제
+        notifications = Notification.query.filter(
+            Notification.id.in_(notification_ids)
+        ).all()
+        
+        if not notifications:
+            return False, "삭제할 알림을 찾을 수 없습니다."
+        
+        # 소프트 삭제 처리
+        for notification in notifications:
+            db.session.delete(notification)
+        
+        db.session.commit()
+        
+        return True, f"{len(notifications)}개의 알림이 삭제되었습니다."
+        
+    except Exception as e:
+        db.session.rollback()
+        return False, f"삭제 중 오류가 발생했습니다: {str(e)}"
 
 def create_system_notification(title, message, target_role=None, priority=1):
     """시스템 알림 생성"""
@@ -2766,84 +2789,6 @@ def create_system_notification(title, message, target_role=None, priority=1):
         target_role=target_role,
         priority=priority
     )
-
-def create_automatic_notifications(child, daily_points, is_update=False):
-    """포인트 입력/수정 시 자동 알림 생성"""
-    try:
-        # 만점 달성 알림 (800점)
-        if daily_points.total_points == 800:
-            create_achievement_notification(
-                child=child,
-                achievement_type='perfect_score',
-                details=f'{child.name} 아동이 모든 과목에서 만점을 달성했습니다! 🌟'
-            )
-        
-        # 고득점 알림 (700점 이상)
-        elif daily_points.total_points >= 700:
-            create_notification(
-                title=f'🎉 {child.name} 고득점 달성!',
-                message=f'{child.name} 아동이 {daily_points.total_points}점의 높은 점수를 기록했습니다.',
-                notification_type='success',
-                child_id=child.id,
-                priority=2,
-                auto_expire=True,
-                expire_days=5
-            )
-        
-        # 개별 과목 만점 알림
-        perfect_subjects = []
-        if daily_points.korean_points == 200:
-            perfect_subjects.append('국어')
-        if daily_points.math_points == 200:
-            perfect_subjects.append('수학')
-        if daily_points.ssen_points == 200:
-            perfect_subjects.append('쎈수학')
-        if daily_points.reading_points == 200:
-            perfect_subjects.append('독서')
-        
-        if perfect_subjects:
-            subjects_text = ', '.join(perfect_subjects)
-            create_notification(
-                title=f'🏆 {child.name} {subjects_text} 만점!',
-                message=f'{child.name} 아동이 {subjects_text} 과목에서 만점을 달성했습니다.',
-                notification_type='achievement',
-                child_id=child.id,
-                priority=2,
-                auto_expire=True,
-                expire_days=7
-            )
-        
-        # 저조한 성과 알림 (총점 200점 미만)
-        if daily_points.total_points < 200:
-            create_notification(
-                title=f'📢 {child.name} 학습 지원 필요',
-                message=f'{child.name} 아동의 오늘 총점이 {daily_points.total_points}점입니다. 추가적인 학습 지원이 필요할 수 있습니다.',
-                notification_type='warning',
-                child_id=child.id,
-                target_role='돌봄선생님',
-                priority=2,
-                auto_expire=True,
-                expire_days=3
-            )
-        
-        # 연속 학습 체크 (최근 7일 연속 기록)
-        week_ago = daily_points.date - timedelta(days=6)
-        recent_records = DailyPoints.query.filter(
-            DailyPoints.child_id == child.id,
-            DailyPoints.date >= week_ago,
-            DailyPoints.date <= daily_points.date
-        ).count()
-        
-        if recent_records >= 7:
-            create_achievement_notification(
-                child=child,
-                achievement_type='streak',
-                details=f'{child.name} 아동이 7일 연속 학습을 완료했습니다! 🔥'
-            )
-        
-    except Exception as e:
-        print(f"자동 알림 생성 오류: {e}")
-        # 알림 생성 오류가 포인트 저장을 방해하지 않도록 예외를 무시
 
 # ===== 알림 관련 라우트 =====
 
@@ -2892,6 +2837,34 @@ def mark_all_notifications_read():
         mark_notification_read(notification.id, current_user.id)
     
     return jsonify({'success': True, 'count': len(notifications)})
+
+@app.route('/notifications/<int:notification_id>/delete', methods=['POST'])
+@login_required
+def delete_single_notification(notification_id):
+    """개별 알림 삭제"""
+    success, message = delete_notification(notification_id, current_user.id)
+    if success:
+        return jsonify({'success': True, 'message': message})
+    return jsonify({'success': False, 'message': message}), 400
+
+@app.route('/notifications/delete-multiple', methods=['POST'])
+@login_required
+def delete_multiple_notifications_route():
+    """여러 알림 일괄 삭제"""
+    try:
+        data = request.get_json()
+        notification_ids = data.get('notification_ids', [])
+        
+        if not notification_ids:
+            return jsonify({'success': False, 'message': '삭제할 알림을 선택해주세요.'}), 400
+        
+        success, message = delete_multiple_notifications(notification_ids, current_user.id)
+        if success:
+            return jsonify({'success': True, 'message': message})
+        return jsonify({'success': False, 'message': message}), 400
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'오류가 발생했습니다: {str(e)}'}), 500
 
 @app.route('/notifications/test')
 @login_required
