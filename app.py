@@ -2577,7 +2577,11 @@ class Notification(db.Model):
             'danger': 'x-circle',
             'achievement': 'trophy',
             'reminder': 'clock',
-            'system': 'gear'
+            'system': 'gear',
+            'backup_success': 'cloud-check',
+            'backup_failed': 'cloud-x',
+            'restore_success': 'arrow-clockwise',
+            'restore_failed': 'exclamation-triangle'
         }
         return icons.get(self.type, 'bell')
     
@@ -2591,9 +2595,79 @@ class Notification(db.Model):
             'danger': 'danger',
             'achievement': 'warning',
             'reminder': 'info',
-            'system': 'secondary'
+            'system': 'secondary',
+            'backup_success': 'success',
+            'backup_failed': 'danger',
+            'restore_success': 'success',
+            'restore_failed': 'danger'
         }
         return colors.get(self.type, 'primary')
+
+def create_backup_notification(backup_type, status, message, target_role='개발자'):
+    """백업 관련 알림 생성"""
+    try:
+        if status == 'success':
+            notification_type = 'backup_success'
+            title = f"{backup_type} 백업 완료"
+            priority = 2  # 보통 우선순위
+        else:
+            notification_type = 'backup_failed'
+            title = f"{backup_type} 백업 실패"
+            priority = 4  # 긴급 우선순위
+        
+        notification = Notification(
+            title=title,
+            message=message,
+            type=notification_type,
+            target_role=target_role,
+            priority=priority,
+            auto_expire=True,
+            expire_date=datetime.utcnow() + timedelta(days=7),  # 7일 후 자동 만료
+            created_by=1  # 시스템 생성
+        )
+        
+        db.session.add(notification)
+        db.session.commit()
+        print(f"✅ 백업 알림 생성: {title}")
+        return notification
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ 백업 알림 생성 실패: {e}")
+        return None
+
+def create_restore_notification(status, message, target_role='개발자'):
+    """복원 관련 알림 생성"""
+    try:
+        if status == 'success':
+            notification_type = 'restore_success'
+            title = "데이터베이스 복원 완료"
+            priority = 3  # 높은 우선순위
+        else:
+            notification_type = 'restore_failed'
+            title = "데이터베이스 복원 실패"
+            priority = 4  # 긴급 우선순위
+        
+        notification = Notification(
+            title=title,
+            message=message,
+            type=notification_type,
+            target_role=target_role,
+            priority=priority,
+            auto_expire=True,
+            expire_date=datetime.utcnow() + timedelta(days=7),  # 7일 후 자동 만료
+            created_by=1  # 시스템 생성
+        )
+        
+        db.session.add(notification)
+        db.session.commit()
+        print(f"✅ 복원 알림 생성: {title}")
+        return notification
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ 복원 알림 생성 실패: {e}")
+        return None
 
 # ===== 알림 시스템 헬퍼 함수들 =====
 
@@ -3269,32 +3343,44 @@ def daily_backup():
             # 백업 데이터 수집
             backup_data, error = get_backup_data()
             if error:
-                print(f"❌ 일일 백업 데이터 수집 실패: {error}")
+                error_msg = f"일일 백업 데이터 수집 실패: {error}"
+                print(f"❌ {error_msg}")
+                create_backup_notification('일일', 'failed', error_msg)
                 return False
             
             # JSON 백업 생성
             json_path, error = create_json_backup(backup_data, backup_dir, 'daily')
             if error:
-                print(f"❌ 일일 JSON 백업 생성 실패: {error}")
+                error_msg = f"일일 JSON 백업 생성 실패: {error}"
+                print(f"❌ {error_msg}")
+                create_backup_notification('일일', 'failed', error_msg)
                 return False
             
             # Excel 백업 생성
             excel_path, error = create_excel_backup(backup_data, backup_dir, 'daily')
             if error:
-                print(f"❌ 일일 Excel 백업 생성 실패: {error}")
+                error_msg = f"일일 Excel 백업 생성 실패: {error}"
+                print(f"❌ {error_msg}")
+                create_backup_notification('일일', 'failed', error_msg)
                 return False
             
             # 데이터베이스 백업 생성
             db_path, error = create_database_backup(backup_dir, 'daily')
             if error:
-                print(f"❌ 일일 데이터베이스 백업 생성 실패: {error}")
+                error_msg = f"일일 데이터베이스 백업 생성 실패: {error}"
+                print(f"❌ {error_msg}")
+                create_backup_notification('일일', 'failed', error_msg)
                 return False
             
-            print(f"✅ 일일 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}")
+            success_msg = f"일일 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}"
+            print(f"✅ {success_msg}")
+            create_backup_notification('일일', 'success', success_msg)
             return True
         
     except Exception as e:
-        print(f"❌ 일일 백업 실행 중 오류: {str(e)}")
+        error_msg = f"일일 백업 실행 중 오류: {str(e)}"
+        print(f"❌ {error_msg}")
+        create_backup_notification('일일', 'failed', error_msg)
         return False
 
 def monthly_backup():
@@ -3310,32 +3396,44 @@ def monthly_backup():
             # 백업 데이터 수집
             backup_data, error = get_backup_data()
             if error:
-                print(f"❌ 월간 백업 데이터 수집 실패: {error}")
+                error_msg = f"월간 백업 데이터 수집 실패: {error}"
+                print(f"❌ {error_msg}")
+                create_backup_notification('월간', 'failed', error_msg)
                 return False
             
             # JSON 백업 생성
             json_path, error = create_json_backup(backup_data, backup_dir, 'monthly')
             if error:
-                print(f"❌ 월간 JSON 백업 생성 실패: {error}")
+                error_msg = f"월간 JSON 백업 생성 실패: {error}"
+                print(f"❌ {error_msg}")
+                create_backup_notification('월간', 'failed', error_msg)
                 return False
             
             # Excel 백업 생성
             excel_path, error = create_excel_backup(backup_data, backup_dir, 'monthly')
             if error:
-                print(f"❌ 월간 Excel 백업 생성 실패: {error}")
+                error_msg = f"월간 Excel 백업 생성 실패: {error}"
+                print(f"❌ {error_msg}")
+                create_backup_notification('월간', 'failed', error_msg)
                 return False
             
             # 데이터베이스 백업 생성
             db_path, error = create_database_backup(backup_dir, 'monthly')
             if error:
-                print(f"❌ 월간 데이터베이스 백업 생성 실패: {error}")
+                error_msg = f"월간 데이터베이스 백업 생성 실패: {error}"
+                print(f"❌ {error_msg}")
+                create_backup_notification('월간', 'failed', error_msg)
                 return False
             
-            print(f"✅ 월간 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}")
+            success_msg = f"월간 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}"
+            print(f"✅ {success_msg}")
+            create_backup_notification('월간', 'success', success_msg)
             return True
         
     except Exception as e:
-        print(f"❌ 월간 백업 실행 중 오류: {str(e)}")
+        error_msg = f"월간 백업 실행 중 오류: {str(e)}"
+        print(f"❌ {error_msg}")
+        create_backup_notification('월간', 'failed', error_msg)
         return False
 
 def run_scheduler():
@@ -3390,32 +3488,44 @@ def backup_manual():
         # 백업 데이터 수집
         backup_data, error = get_backup_data()
         if error:
-            flash(f'백업 데이터 수집 실패: {error}', 'error')
+            error_msg = f'백업 데이터 수집 실패: {error}'
+            flash(error_msg, 'error')
+            create_backup_notification('수동', 'failed', error_msg)
             return redirect(url_for('settings_data'))
         
         # JSON 백업 생성
         json_path, error = create_json_backup(backup_data, backup_dir, 'manual')
         if error:
-            flash(f'JSON 백업 생성 실패: {error}', 'error')
+            error_msg = f'JSON 백업 생성 실패: {error}'
+            flash(error_msg, 'error')
+            create_backup_notification('수동', 'failed', error_msg)
             return redirect(url_for('settings_data'))
         
         # Excel 백업 생성
         excel_path, error = create_excel_backup(backup_data, backup_dir, 'manual')
         if error:
-            flash(f'Excel 백업 생성 실패: {error}', 'error')
+            error_msg = f'Excel 백업 생성 실패: {error}'
+            flash(error_msg, 'error')
+            create_backup_notification('수동', 'failed', error_msg)
             return redirect(url_for('settings_data'))
         
         # 데이터베이스 백업 생성
         db_path, error = create_database_backup(backup_dir, 'manual')
         if error:
-            flash(f'데이터베이스 백업 생성 실패: {error}', 'error')
+            error_msg = f'데이터베이스 백업 생성 실패: {error}'
+            flash(error_msg, 'error')
+            create_backup_notification('수동', 'failed', error_msg)
             return redirect(url_for('settings_data'))
         
-        flash(f'백업이 완료되었습니다. JSON: {os.path.basename(json_path)}, Excel: {os.path.basename(excel_path)}, DB: {os.path.basename(db_path)}', 'success')
+        success_msg = f'백업이 완료되었습니다. JSON: {os.path.basename(json_path)}, Excel: {os.path.basename(excel_path)}, DB: {os.path.basename(db_path)}'
+        flash(success_msg, 'success')
+        create_backup_notification('수동', 'success', success_msg)
         return redirect(url_for('settings_data'))
         
     except Exception as e:
-        flash(f'백업 실행 중 오류 발생: {str(e)}', 'error')
+        error_msg = f'백업 실행 중 오류 발생: {str(e)}'
+        flash(error_msg, 'error')
+        create_backup_notification('수동', 'failed', error_msg)
         return redirect(url_for('settings_data'))
 
 @app.route('/backup/list')
