@@ -3261,35 +3261,37 @@ def daily_backup():
     try:
         print("🔄 일일 백업 시작...")
         
-        # 백업 디렉토리 생성
-        backup_dir = create_backup_directory()
-        
-        # 백업 데이터 수집
-        backup_data, error = get_backup_data()
-        if error:
-            print(f"❌ 일일 백업 데이터 수집 실패: {error}")
-            return False
-        
-        # JSON 백업 생성
-        json_path, error = create_json_backup(backup_data, backup_dir, 'daily')
-        if error:
-            print(f"❌ 일일 JSON 백업 생성 실패: {error}")
-            return False
-        
-        # Excel 백업 생성
-        excel_path, error = create_excel_backup(backup_data, backup_dir, 'daily')
-        if error:
-            print(f"❌ 일일 Excel 백업 생성 실패: {error}")
-            return False
-        
-        # 데이터베이스 백업 생성
-        db_path, error = create_database_backup(backup_dir, 'daily')
-        if error:
-            print(f"❌ 일일 데이터베이스 백업 생성 실패: {error}")
-            return False
-        
-        print(f"✅ 일일 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}")
-        return True
+        # Flask 앱 컨텍스트 내에서 실행
+        with app.app_context():
+            # 백업 디렉토리 생성
+            backup_dir = create_backup_directory()
+            
+            # 백업 데이터 수집
+            backup_data, error = get_backup_data()
+            if error:
+                print(f"❌ 일일 백업 데이터 수집 실패: {error}")
+                return False
+            
+            # JSON 백업 생성
+            json_path, error = create_json_backup(backup_data, backup_dir, 'daily')
+            if error:
+                print(f"❌ 일일 JSON 백업 생성 실패: {error}")
+                return False
+            
+            # Excel 백업 생성
+            excel_path, error = create_excel_backup(backup_data, backup_dir, 'daily')
+            if error:
+                print(f"❌ 일일 Excel 백업 생성 실패: {error}")
+                return False
+            
+            # 데이터베이스 백업 생성
+            db_path, error = create_database_backup(backup_dir, 'daily')
+            if error:
+                print(f"❌ 일일 데이터베이스 백업 생성 실패: {error}")
+                return False
+            
+            print(f"✅ 일일 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}")
+            return True
         
     except Exception as e:
         print(f"❌ 일일 백업 실행 중 오류: {str(e)}")
@@ -3300,35 +3302,37 @@ def monthly_backup():
     try:
         print("🔄 월간 백업 시작...")
         
-        # 백업 디렉토리 생성
-        backup_dir = create_backup_directory()
-        
-        # 백업 데이터 수집
-        backup_data, error = get_backup_data()
-        if error:
-            print(f"❌ 월간 백업 데이터 수집 실패: {error}")
-            return False
-        
-        # JSON 백업 생성
-        json_path, error = create_json_backup(backup_data, backup_dir, 'monthly')
-        if error:
-            print(f"❌ 월간 JSON 백업 생성 실패: {error}")
-            return False
-        
-        # Excel 백업 생성
-        excel_path, error = create_excel_backup(backup_data, backup_dir, 'monthly')
-        if error:
-            print(f"❌ 월간 Excel 백업 생성 실패: {error}")
-            return False
-        
-        # 데이터베이스 백업 생성
-        db_path, error = create_database_backup(backup_dir, 'monthly')
-        if error:
-            print(f"❌ 월간 데이터베이스 백업 생성 실패: {error}")
-            return False
-        
-        print(f"✅ 월간 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}")
-        return True
+        # Flask 앱 컨텍스트 내에서 실행
+        with app.app_context():
+            # 백업 디렉토리 생성
+            backup_dir = create_backup_directory()
+            
+            # 백업 데이터 수집
+            backup_data, error = get_backup_data()
+            if error:
+                print(f"❌ 월간 백업 데이터 수집 실패: {error}")
+                return False
+            
+            # JSON 백업 생성
+            json_path, error = create_json_backup(backup_data, backup_dir, 'monthly')
+            if error:
+                print(f"❌ 월간 JSON 백업 생성 실패: {error}")
+                return False
+            
+            # Excel 백업 생성
+            excel_path, error = create_excel_backup(backup_data, backup_dir, 'monthly')
+            if error:
+                print(f"❌ 월간 Excel 백업 생성 실패: {error}")
+                return False
+            
+            # 데이터베이스 백업 생성
+            db_path, error = create_database_backup(backup_dir, 'monthly')
+            if error:
+                print(f"❌ 월간 데이터베이스 백업 생성 실패: {error}")
+                return False
+            
+            print(f"✅ 월간 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}")
+            return True
         
     except Exception as e:
         print(f"❌ 월간 백업 실행 중 오류: {str(e)}")
@@ -3539,3 +3543,6 @@ else:
         if not User.query.filter_by(username='center_head').first():
             # init_db() 제거 - 실제 데이터 보호
             pass
+    
+    # 배포 환경에서도 백업 스케줄러 시작
+    start_backup_scheduler()
