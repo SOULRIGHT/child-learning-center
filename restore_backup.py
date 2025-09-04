@@ -9,6 +9,30 @@ import sys
 import shutil
 from datetime import datetime
 
+#!/usr/bin/env python3
+"""
+간단한 백업 복원 스크립트
+사용법: python restore_backup.py [백업파일명]
+"""
+
+import os
+import sys
+import shutil
+from datetime import datetime
+
+def create_restore_notification(status, message):
+    """복원 알림 생성 (Flask 앱과 연동)"""
+    try:
+        # Flask 앱 임포트
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        from app import app, db, create_restore_notification as create_notification
+        
+        with app.app_context():
+            create_notification(status, message)
+            print(f"✅ 복원 알림 생성: {status}")
+    except Exception as e:
+        print(f"⚠️  알림 생성 실패: {e}")
+
 def restore_backup(backup_filename):
     """백업 파일에서 데이터베이스 복원"""
     
@@ -23,7 +47,9 @@ def restore_backup(backup_filename):
     
     # 백업 파일 존재 확인
     if not os.path.exists(backup_path):
-        print(f"❌ 백업 파일을 찾을 수 없습니다: {backup_path}")
+        error_msg = f"백업 파일을 찾을 수 없습니다: {backup_path}"
+        print(f"❌ {error_msg}")
+        create_restore_notification('failed', error_msg)
         return False
     
     # 현재 DB 백업 (안전을 위해)
@@ -37,12 +63,16 @@ def restore_backup(backup_filename):
     # 복원 실행
     try:
         shutil.copy2(backup_path, current_db)
-        print(f"✅ 복원 완료: {backup_filename}")
+        success_msg = f"복원 완료: {backup_filename}"
+        print(f"✅ {success_msg}")
         print(f"📁 복원된 파일: {current_db}")
+        create_restore_notification('success', success_msg)
         return True
         
     except Exception as e:
-        print(f"❌ 복원 실패: {e}")
+        error_msg = f"복원 실패: {e}"
+        print(f"❌ {error_msg}")
+        create_restore_notification('failed', error_msg)
         return False
 
 def list_backups():

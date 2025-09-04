@@ -15,6 +15,22 @@
             {% endif %}
         </div>
         <div>
+            <!-- 필터 버튼들 -->
+            <div class="btn-group me-2" role="group">
+                <button type="button" class="btn btn-outline-secondary active" data-filter="all">
+                    전체
+                </button>
+                <button type="button" class="btn btn-outline-secondary" data-filter="backup">
+                    백업
+                </button>
+                <button type="button" class="btn btn-outline-secondary" data-filter="restore">
+                    복원
+                </button>
+                <button type="button" class="btn btn-outline-secondary" data-filter="system">
+                    시스템
+                </button>
+            </div>
+            
             {% if unread_count > 0 %}
                 <button class="btn btn-outline-primary me-2" onclick="markAllAsRead()">
                     <i class="bi bi-check-all"></i> 모두 읽음
@@ -37,7 +53,8 @@
                         <div class="list-group list-group-flush">
                             {% for notification in notifications %}
                             <div class="list-group-item {% if not notification.is_read %}bg-light{% endif %}" 
-                                 data-notification-id="{{ notification.id }}">
+                                 data-notification-id="{{ notification.id }}"
+                                 data-notification-type="{{ notification.type }}">
                                 <div class="d-flex align-items-start">
                                     <!-- 아이콘 -->
                                     <div class="me-3 mt-1">
@@ -152,6 +169,39 @@
 </div>
 
 <script>
+// 알림 필터링 기능
+document.addEventListener('DOMContentLoaded', function() {
+    const filterButtons = document.querySelectorAll('[data-filter]');
+    const notificationItems = document.querySelectorAll('.list-group-item');
+    
+    filterButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const filter = this.getAttribute('data-filter');
+            
+            // 버튼 활성화 상태 변경
+            filterButtons.forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+            
+            // 알림 필터링
+            notificationItems.forEach(item => {
+                const notificationType = item.getAttribute('data-notification-type');
+                
+                if (filter === 'all') {
+                    item.style.display = 'block';
+                } else if (filter === 'backup' && notificationType.startsWith('backup')) {
+                    item.style.display = 'block';
+                } else if (filter === 'restore' && notificationType.startsWith('restore')) {
+                    item.style.display = 'block';
+                } else if (filter === 'system' && (notificationType === 'system' || notificationType === 'info')) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
+    });
+});
+
 function markAsRead(notificationId) {
     fetch(`/notifications/${notificationId}/read`, {
         method: 'POST',
