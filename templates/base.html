@@ -21,8 +21,16 @@
 </head>
 <body>
     {% if current_user.is_authenticated %}
+        <!-- 햄버거 메뉴 버튼 (모바일/태블릿용) -->
+        <button class="sidebar-toggle d-lg-none" id="sidebarToggle" type="button">
+            <i class="bi bi-list"></i>
+        </button>
+        
+        <!-- 사이드바 오버레이 (모바일/태블릿용) -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+        
         <!-- 사이드바 -->
-        <div class="sidebar">
+        <div class="sidebar" id="sidebar">
             <div class="sidebar-brand dev-branch">
                 <h3><i class="bi bi-house-heart-fill me-2"></i>지역아동센터</h3>
                 <p>학습관리 시스템</p>
@@ -156,13 +164,6 @@
                 {% block content %}{% endblock %}
             </div>
         </div>
-
-        <!-- 모바일 사이드바 토글 버튼 -->
-        <button class="btn btn-primary d-md-none position-fixed" 
-                style="top: 15px; left: 15px; z-index: 1100; width: 40px; height: 40px; border-radius: 8px; padding: 0;"
-                onclick="toggleSidebar()">
-            <i class="bi bi-list" style="font-size: 1.2rem;"></i>
-        </button>
     {% endif %}
 
     <!-- Bootstrap JS -->
@@ -173,25 +174,6 @@
     
     <!-- 커스텀 JS -->
     <script>
-        // 사이드바 토글 함수
-        function toggleSidebar() {
-            const sidebar = document.querySelector('.sidebar');
-            sidebar.classList.toggle('show');
-        }
-
-        // 모바일에서 메인 컨텐츠 클릭 시 사이드바 닫기
-        document.addEventListener('DOMContentLoaded', function() {
-            const mainContent = document.querySelector('.main-content');
-            if (mainContent) {
-                mainContent.addEventListener('click', function() {
-                    if (window.innerWidth <= 768) {
-                        const sidebar = document.querySelector('.sidebar');
-                        sidebar.classList.remove('show');
-                    }
-                });
-            }
-        });
-
         // 페이지 로드 애니메이션
         document.addEventListener('DOMContentLoaded', function() {
             const cards = document.querySelectorAll('.card');
@@ -199,6 +181,35 @@
                 card.style.animationDelay = `${index * 0.1}s`;
                 card.classList.add('fade-in');
             });
+        });
+
+        // 사이드바 토글 기능
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebarToggle = document.getElementById('sidebarToggle');
+            const sidebar = document.getElementById('sidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+            
+            if (sidebarToggle && sidebar && sidebarOverlay) {
+                // 햄버거 버튼 클릭 시 사이드바 열기/닫기
+                sidebarToggle.addEventListener('click', function() {
+                    sidebar.classList.toggle('show');
+                    sidebarOverlay.classList.toggle('show');
+                });
+                
+                // 오버레이 클릭 시 사이드바 닫기
+                sidebarOverlay.addEventListener('click', function() {
+                    sidebar.classList.remove('show');
+                    sidebarOverlay.classList.remove('show');
+                });
+                
+                // ESC 키로 사이드바 닫기
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape' && sidebar.classList.contains('show')) {
+                        sidebar.classList.remove('show');
+                        sidebarOverlay.classList.remove('show');
+                    }
+                });
+            }
         });
     </script>
     

@@ -350,6 +350,11 @@
                             </div>
                         </div>
                         {% endfor %}
+                        <div class="text-center mt-3">
+                            <a href="{{ url_for('notifications') }}" class="btn btn-outline-primary btn-sm">
+                                더 보기
+                            </a>
+                        </div>
                     {% else %}
                         <div class="list-group-item border-0 px-0 text-center text-muted small py-3">
                             <i class="bi bi-bell-slash"></i> 새로운 알림이 없습니다.
