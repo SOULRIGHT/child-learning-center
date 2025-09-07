@@ -23,8 +23,11 @@
             <form method="GET" class="row g-3">
                 <div class="col-md-4">
                     <label for="search" class="form-label">아동 검색</label>
-                    <input type="text" class="form-control" id="search" name="search" 
-                           value="{{ search }}" placeholder="아동 이름으로 검색...">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" id="search" name="search" 
+                               value="{{ search }}" placeholder="아동 이름을 입력해주세요">
+                    </div>
                 </div>
                 <div class="col-md-3">
                     <label for="grade" class="form-label">학년</label>
