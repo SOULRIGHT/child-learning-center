@@ -374,9 +374,20 @@ def login():
         username = request.form['username']
         password = request.form['password']
         
+        # 디버깅: 사용자 계정 목록 출력
+        all_users = User.query.all()
+        print(f"🔍 디버깅: 현재 데이터베이스의 사용자 계정들:")
+        for u in all_users:
+            print(f"  - {u.username} ({u.name}) - {u.role}")
+        
         user = User.query.filter_by(username=username).first()
+        print(f"🔍 디버깅: 찾은 사용자: {user}")
         
         if user:
+            print(f"🔍 디버깅: 비밀번호 해시 확인 중...")
+            password_match = check_password_hash(user.password_hash, password)
+            print(f"🔍 디버깅: 비밀번호 일치 여부: {password_match}")
+            
             # 로그인 시도 횟수 확인
             if user.login_attempts >= 5:
                 if user.last_attempt and (datetime.utcnow() - user.last_attempt).seconds < 900:  # 15분 잠금
@@ -387,7 +398,7 @@ def login():
                     user.login_attempts = 0
                     db.session.commit()
             
-            if check_password_hash(user.password_hash, password):
+            if password_match:
                 # 로그인 성공
                 user.login_attempts = 0
                 user.last_attempt = None
@@ -402,6 +413,7 @@ def login():
                 db.session.commit()
                 flash('아이디 또는 비밀번호가 잘못되었습니다.', 'error')
         else:
+            print(f"🔍 디버깅: 사용자를 찾을 수 없음: {username}")
             flash('아이디 또는 비밀번호가 잘못되었습니다.', 'error')
     
     return render_template('login.html')
