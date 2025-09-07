@@ -750,4 +750,75 @@ body {
     .sidebar-overlay {
         display: none !important;
     }
+}
+
+/* ===== 태블릿 최적화 (768px ~ 1200px) ===== */
+
+@media (max-width: 1200px) and (min-width: 768px) {
+    /* 주간 포인트 현황 섹션 최적화 */
+    .card-body .row .col-md-3 {
+        flex: 0 0 50% !important;
+        max-width: 50% !important;
+        width: 50% !important;
+        margin-bottom: 1.5rem !important;
+    }
+    
+    /* d-flex 컨테이너 최적화 */
+    .card-body .row .col-md-3 .d-flex {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        text-align: left !important;
+    }
+    
+    /* 아이콘과 텍스트 분리 */
+    .card-body .row .col-md-3 .d-flex .me-3 {
+        margin-right: 0 !important;
+        margin-bottom: 0.5rem !important;
+        align-self: center !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+    }
+    
+    /* 아이콘 원형 배경 최적화 */
+    .card-body .row .col-md-3 .d-flex .me-3 .rounded-circle {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        overflow: hidden !important;
+    }
+    
+    /* 텍스트 영역 최적화 */
+    .card-body .row .col-md-3 .d-flex > div:last-child {
+        width: 100% !important;
+        flex: 1 !important;
+    }
+    
+    /* "평균 포인트" 텍스트 줄바꿈 방지 */
+    .card-body .row .col-md-3 .text-muted.small {
+        white-space: nowrap !important;
+        font-size: 0.9rem !important;
+        line-height: 1.2 !important;
+        overflow: visible !important;
+    }
+    
+    /* 과목명 최적화 */
+    .card-body .row .col-md-3 .fw-bold {
+        font-size: 1rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+}
+
+/* ===== 검색 입력창 최적화 ===== */
+
+/* input-group 텍스트가 아이콘에 가려지지 않도록 패딩 조정 */
+.input-group .form-control {
+    padding-left: 4rem !important;
+}
+
+/* input-group-text 아이콘 크기 조정 */
+.input-group-text {
+    width: 2.5rem !important;
+    justify-content: center !important;
+    align-items: center !important;
 } 
