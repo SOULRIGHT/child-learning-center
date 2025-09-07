@@ -3683,8 +3683,54 @@ else:
         db.create_all()
         # 기본 사용자가 없으면 생성 (한 번만)
         if not User.query.filter_by(username='center_head').first():
-            # init_db() 제거 - 실제 데이터 보호
-            pass
+            print("🚀 배포 환경: 환경변수에서 사용자 계정 생성 중...")
+            
+            # 환경변수에서 사용자 정보 읽기
+            usernames = os.environ.get('DEFAULT_USERS', '').split(',')
+            passwords = os.environ.get('DEFAULT_PASSWORDS', '').split(',')
+            roles = os.environ.get('DEFAULT_USER_ROLES', '').split(',')
+            
+            # 환경변수가 모두 설정되어 있는지 확인
+            if (usernames and passwords and roles and 
+                usernames[0].strip() and passwords[0].strip() and roles[0].strip()):
+                
+                # 사용자 데이터 생성
+                default_users = []
+                for i, username in enumerate(usernames):
+                    if i < len(passwords) and i < len(roles):
+                        username = username.strip()
+                        password = passwords[i].strip()
+                        role = roles[i].strip()
+                        
+                        if username and password and role:
+                            default_users.append({
+                                'username': username,
+                                'name': role,
+                                'role': role,
+                                'password': password
+                            })
+                
+                if default_users:
+                    for user_data in default_users:
+                        password_hash = generate_password_hash(user_data['password'])
+                        user = User(
+                            username=user_data['username'],
+                            password_hash=password_hash,
+                            name=user_data['name'],
+                            role=user_data['role']
+                        )
+                        db.session.add(user)
+                    
+                    db.session.commit()
+                    print(f"✅ {len(default_users)}명의 사용자 계정 생성 완료")
+                else:
+                    print("⚠️ 환경변수에서 유효한 사용자 데이터를 읽을 수 없습니다.")
+            else:
+                print("⚠️ 환경변수가 설정되지 않았습니다. 사용자 계정을 생성하지 않습니다.")
+                print("   다음 환경변수를 설정하세요:")
+                print("   - DEFAULT_USERS")
+                print("   - DEFAULT_PASSWORDS") 
+                print("   - DEFAULT_USER_ROLES")
     
     # 배포 환경에서도 백업 스케줄러 시작
     start_backup_scheduler()
