@@ -324,7 +324,7 @@
                                                 <span class="badge bg-secondary ms-1">수정됨</span>
                                             {% endif %}
                                         </small>
-                                        {% if note.created_by == current_user.id or current_user.role == '센터장' %}
+                                        <!-- 권한 체크 제거 - 모든 사용자가 수정/삭제 가능 -->
                                         <div class="dropdown">
                                             <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
                                                     data-bs-toggle="dropdown" aria-expanded="false">
@@ -341,9 +341,7 @@
                                                         <i class="bi bi-trash me-2"></i>삭제
                                                     </a>
                                                 </li>
-                                            </ul>
-                                        </div>
-                                        {% endif %}
+                                        <!-- 권한 체크 제거 - 모든 사용자가 수정/삭제 가능 -->
                                     </div>
                                 </div>
                             </div>

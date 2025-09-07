@@ -224,12 +224,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 const notificationType = item.getAttribute('data-notification-type');
                 
                 if (filter === 'all') {
+                    // 전체 필터에서는 모든 알림 표시
                     item.style.display = 'block';
                 } else if (filter === 'backup' && notificationType.startsWith('backup')) {
                     item.style.display = 'block';
                 } else if (filter === 'restore' && notificationType.startsWith('restore')) {
                     item.style.display = 'block';
-                } else if (filter === 'system' && (notificationType === 'system' || notificationType === 'info')) {
+                } else if (filter === 'system' && (notificationType === 'system' || notificationType === 'info' || notificationType === 'warning')) {
                     item.style.display = 'block';
                 } else {
                     item.style.display = 'none';

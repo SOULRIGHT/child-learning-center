@@ -67,7 +67,7 @@
                                                         {% endif %}
                                                     </div>
                                                 </div>
-                                                {% if note.created_by == current_user.id or current_user.role == '센터장' %}
+                                                <!-- 권한 체크 제거 - 모든 사용자가 수정/삭제 가능 -->
                                                 <div class="btn-group">
                                                     <button class="btn btn-sm btn-outline-primary" 
                                                             onclick="editNote({{ note.id }}, '{{ note.note|replace("'", "\\'") }}')">
@@ -78,7 +78,7 @@
                                                         <i class="bi bi-trash"></i>
                                                     </button>
                                                 </div>
-                                                {% endif %}
+                                                <!-- 권한 체크 제거 - 모든 사용자가 수정/삭제 가능 -->
                                             </div>
                                         </div>
                                     </div>
@@ -257,16 +257,14 @@ function deleteNote(noteId) {
 
 // 페이지 로드 시 실행
 document.addEventListener('DOMContentLoaded', function() {
-    // 특이사항 추가 폼 검증
+    // 특이사항 추가 폼 검증 (완전 비활성화)
     const addNoteForm = document.querySelector('#addNoteModal form');
     if (addNoteForm) {
         addNoteForm.addEventListener('submit', function(e) {
             const noteText = document.getElementById('noteText').value.trim();
-            if (noteText.length < 10) {
-                e.preventDefault();
-                alert('특이사항은 10자 이상 입력해주세요.');
-                return false;
-            }
+            console.log('폼 제출 시도:', noteText.length, '자');
+            // 검증 비활성화
+            console.log('폼 제출 진행');
         });
     }
     

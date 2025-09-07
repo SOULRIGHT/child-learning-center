@@ -742,16 +742,18 @@ def add_child_note(child_id):
         flash(f'✅ {child.name} 아동의 특이사항이 추가되었습니다.', 'success')
         
         # 특이사항 추가 알림 생성
-        create_notification(
+        print(f"DEBUG: 특이사항 추가 알림 생성 시도 - {child.name}")
+        notification = create_notification(
             title=f'📝 {child.name} 특이사항 추가',
             message=f'{current_user.name}님이 {child.name} 아동의 특이사항을 추가했습니다.',
-            notification_type='info',
+            notification_type='warning',
             child_id=child.id,
-            target_role='돌봄선생님',
-            priority=1,
+            target_role=None,  # 모든 사용자에게 표시
+            priority=2,
             auto_expire=True,
-            expire_days=7
+            expire_days=3
         )
+        print(f"DEBUG: 알림 생성 결과 - {notification}")
         
     except Exception as e:
         db.session.rollback()
@@ -766,10 +768,8 @@ def edit_child_note(child_id, note_id):
     child = Child.query.get_or_404(child_id)
     note = ChildNote.query.get_or_404(note_id)
     
-    # 권한 확인 (작성자 또는 센터장만 수정 가능)
-    if note.created_by != current_user.id and current_user.role != '센터장':
-        flash('❌ 특이사항을 수정할 권한이 없습니다.', 'error')
-        return redirect(url_for('child_detail', child_id=child_id))
+    # 권한 확인 (작성자 또는 개발자만 수정 가능)
+    # 권한 체크 제거 - 모든 사용자가 수정 가능
     
     note_text = request.form.get('note', '').strip()
     if not note_text:
@@ -785,16 +785,19 @@ def edit_child_note(child_id, note_id):
         
         flash(f'✅ {child.name} 아동의 특이사항이 수정되었습니다.', 'success')
         
-        # 특이사항 수정 알림 생성 (중요한 변경사항인 경우)
-        if len(note_text) > len(old_note) * 1.5:  # 내용이 크게 늘어난 경우
-            create_notification(
-                title=f'📝 {child.name} 특이사항 수정',
-                message=f'{current_user.name}님이 {child.name} 아동의 특이사항을 수정했습니다.',
-                notification_type='info',
-                child_id=child.id,
-                target_role='돌봄선생님',
-                priority=1
-            )
+        # 특이사항 수정 알림 생성
+        print(f"DEBUG: 특이사항 수정 알림 생성 시도 - {child.name}")
+        notification = create_notification(
+            title=f'📝 {child.name} 특이사항 수정',
+            message=f'{current_user.name}님이 {child.name} 아동의 특이사항을 수정했습니다.',
+            notification_type='warning',
+            child_id=child.id,
+            target_role=None,  # 모든 사용자에게 표시
+            priority=2,
+            auto_expire=True,
+            expire_days=3
+        )
+        print(f"DEBUG: 수정 알림 생성 결과 - {notification}")
         
     except Exception as e:
         db.session.rollback()
@@ -809,16 +812,26 @@ def delete_child_note(child_id, note_id):
     child = Child.query.get_or_404(child_id)
     note = ChildNote.query.get_or_404(note_id)
     
-    # 권한 확인 (작성자 또는 센터장만 삭제 가능)
-    if note.created_by != current_user.id and current_user.role != '센터장':
-        flash('❌ 특이사항을 삭제할 권한이 없습니다.', 'error')
-        return redirect(url_for('child_detail', child_id=child_id))
+    # 권한 확인 (작성자 또는 개발자만 삭제 가능)
+    # 권한 체크 제거 - 모든 사용자가 삭제 가능
     
     try:
         db.session.delete(note)
         db.session.commit()
         
         flash(f'✅ {child.name} 아동의 특이사항이 삭제되었습니다.', 'success')
+        
+        # 특이사항 삭제 알림 생성
+        create_notification(
+            title=f'🗑️ {child.name} 특이사항 삭제',
+            message=f'{current_user.name}님이 {child.name} 아동의 특이사항을 삭제했습니다.',
+            notification_type='warning',
+            child_id=child.id,
+            target_role=None,  # 모든 사용자에게 표시
+            priority=2,
+            auto_expire=True,
+            expire_days=3
+        )
         
     except Exception as e:
         db.session.rollback()
@@ -2668,6 +2681,10 @@ def create_notification(title, message, notification_type='info', target_user_id
                        child_id=None, priority=1, auto_expire=False, expire_days=None):
     """새 알림 생성"""
     try:
+        print(f"DEBUG: create_notification 호출됨 - {title}")
+        print(f"DEBUG: current_user.is_authenticated = {current_user.is_authenticated}")
+        print(f"DEBUG: current_user.id = {current_user.id if current_user.is_authenticated else 'None'}")
+        
         expire_date = None
         if auto_expire and expire_days:
             expire_date = datetime.utcnow() + timedelta(days=expire_days)
@@ -2685,12 +2702,17 @@ def create_notification(title, message, notification_type='info', target_user_id
             created_by=current_user.id if current_user.is_authenticated else 1
         )
         
+        print(f"DEBUG: Notification 객체 생성 완료")
         db.session.add(notification)
+        print(f"DEBUG: DB에 추가 완료")
         db.session.commit()
+        print(f"DEBUG: DB 커밋 완료 - 알림 ID: {notification.id}")
         return notification
     except Exception as e:
         db.session.rollback()
         print(f"알림 생성 오류: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def get_user_notifications(user_id, limit=10, unread_only=False):
@@ -2699,25 +2721,54 @@ def get_user_notifications(user_id, limit=10, unread_only=False):
     if not user:
         return []
     
-    query = Notification.query.filter(
+    # 조건들을 리스트로 구성
+    conditions = []
+    
+    # 1. 개인 알림 (target_user_id가 현재 사용자)
+    conditions.append(Notification.target_user_id == user_id)
+    
+    # 2. 전체 공지 (target_user_id=None, target_role=None)
+    conditions.append(
         db.and_(
-            Notification.is_active == True,
-            db.or_(
-                Notification.target_user_id == user_id,  # 개인 알림
-                Notification.target_user_id == None,     # 전체 공지
-                Notification.target_role == user.role    # 역할별 알림
-            ),
-            db.or_(
-                Notification.expire_date == None,        # 만료 없음
-                Notification.expire_date > datetime.utcnow()  # 만료 안됨
-            )
+            Notification.target_user_id.is_(None),
+            Notification.target_role.is_(None)
         )
     )
     
+    # 3. 역할별 공지 (target_user_id=None, target_role=사용자 역할)
+    conditions.append(
+        db.and_(
+            Notification.target_user_id.is_(None),
+            Notification.target_role == user.role
+        )
+    )
+    
+    # 4. 아동 관련 알림 (child_id가 있는 알림 - 모든 사용자에게 표시)
+    conditions.append(Notification.child_id.isnot(None))
+    
+    # 기본 쿼리: 위의 조건들 중 하나라도 만족하는 알림
+    query = Notification.query.filter(db.or_(*conditions))
+    
+    # 만료 조건 적용
+    query = query.filter(
+        db.or_(
+            Notification.expire_date.is_(None),
+            Notification.expire_date > datetime.utcnow()
+        )
+    )
+    
+    # 읽지 않은 알림만 필터링 (필요시)
     if unread_only:
         query = query.filter(Notification.is_read == False)
     
-    return query.order_by(Notification.priority.desc(), Notification.created_at.desc()).limit(limit).all()
+    # 정렬
+    query = query.order_by(Notification.priority.desc(), Notification.created_at.desc())
+    
+    # limit 적용
+    if limit is not None:
+        query = query.limit(limit)
+    
+    return query.all()
 
 def mark_notification_read(notification_id, user_id):
     """알림을 읽음으로 표시"""
@@ -2789,8 +2840,6 @@ def create_system_notification(title, message, target_role=None, priority=1):
         target_role=target_role,
         priority=priority
     )
-
-# ===== 알림 관련 라우트 =====
 
 @app.route('/notifications')
 @login_required
