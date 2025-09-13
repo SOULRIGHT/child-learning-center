@@ -25,6 +25,7 @@ MANIFEST
 venv/
 env/
 ENV/
+.venv/
 
 # Database
 *.db
@@ -45,7 +46,23 @@ Thumbs.db
 # Environment variables
 .env
 .env.local
-.env.production
+.env.production 
+.env.example 
+
+# Firebase (보안 파일들)
+firebase-service-account.json
+firebase-config.json
+firebase_env_example.txt
+.env.example.backup
 
 # Logs
-*.log 
+*.log
+
+# Backup files
+*.backup
+*.bak
+
+# Temporary files
+*.tmp
+*.temp
+

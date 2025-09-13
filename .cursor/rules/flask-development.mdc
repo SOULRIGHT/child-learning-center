@@ -1,0 +1,174 @@
+# Flask 개발 규칙
+
+## 핵심 Flask 확장 프로그램
+
+### 필수 import 문
+```python
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_migrate import Migrate  # 데이터베이스 마이그레이션용
+```
+
+### 앱 초기화 순서
+```python
+# 1. Flask 앱 생성
+app = Flask(__name__)
+
+# 2. 환경변수 설정
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-key')
+
+# 3. 데이터베이스 설정
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///child_center.db')
+
+# 4. 확장 프로그램 초기화
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
+login_manager = LoginManager()
+login_manager.init_app(app)
+```
+
+## 데이터베이스 모델 규칙
+
+### 기본 모델 구조
+```python
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    # 필드 정의
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+```
+
+### 관계 설정
+```python
+# 일대다 관계
+learning_records = db.relationship('LearningRecord', backref='child', lazy=True, cascade='all, delete-orphan')
+
+# 다대일 관계
+created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+creator = db.relationship('User', backref='notes', lazy=True)
+```
+
+## 라우트 규칙
+
+### 보안 데코레이터
+```python
+@app.route('/protected')
+@login_required
+def protected_route():
+    pass
+```
+
+### 권한 체크 함수
+```python
+def check_permission(required_roles=None, excluded_roles=None):
+    if not current_user.is_authenticated:
+        return False
+    # 권한 로직
+```
+
+### Flash 메시지 사용
+```python
+flash('성공 메시지', 'success')
+flash('오류 메시지', 'error')
+flash('경고 메시지', 'warning')
+flash('정보 메시지', 'info')
+```
+
+## 환경변수 관리
+
+### 필수 환경변수
+```bash
+SECRET_KEY=안전한-랜덤-문자열
+DATABASE_URL=sqlite:///child_center.db
+FLASK_ENV=production
+FLASK_DEBUG=False
+```
+
+### 환경변수 로드
+```python
+from dotenv import load_dotenv
+load_dotenv()
+```
+
+## 데이터베이스 마이그레이션
+
+### 마이그레이션 초기화
+```bash
+# 가상환경 활성화 필수!
+venv\Scripts\activate
+
+# 마이그레이션 명령어
+flask db init
+flask db migrate -m "Initial migration"
+flask db upgrade
+```
+
+## 시딩 스크립트 사용법
+
+### 기본 시딩 스크립트
+```bash
+# 가상환경 활성화 후
+python seed_basic.py        # 기본 개발/테스트 데이터
+python seed_quick_30.py     # 빠른 30명 아동 데이터
+python seed_production.py   # 실제 운영용 데이터 입력
+```
+
+### 시딩 스크립트 특징
+- **`seed_basic.py`**: 7명 사용자 + 샘플 아동, 기존 데이터 보존
+- **`seed_quick_30.py`**: 30명 아동 + 랜덤 데이터, ⚠️ 기존 데이터 삭제
+- **`seed_production.py`**: 대화형 입력, 실제 센터 데이터 입력
+
+### 모델 변경 시
+```bash
+flask db migrate -m "Add new field"
+flask db upgrade
+```
+
+## 보안 고려사항
+
+### 비밀번호 해싱
+```python
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# 저장 시
+password_hash = generate_password_hash(password)
+
+# 검증 시
+if check_password_hash(user.password_hash, password):
+    # 로그인 성공
+```
+
+### 세션 관리
+```python
+# 로그인
+login_user(user)
+
+# 로그아웃
+logout_user()
+
+# 현재 사용자 확인
+if current_user.is_authenticated:
+    # 인증된 사용자
+```
+
+## 일반적인 문제 해결
+
+### ModuleNotFoundError
+1. 가상환경 활성화 확인
+2. requirements.txt 업데이트
+3. pip install 실행
+
+### 데이터베이스 오류
+1. 마이그레이션 상태 확인
+2. 데이터베이스 파일 권한 확인
+3. 연결 문자열 확인
+
+### 템플릿 오류
+1. templates/ 폴더 구조 확인
+2. Jinja2 문법 확인
+3. 변수 전달 확인
+description:
+globs:
+alwaysApply: false
+---

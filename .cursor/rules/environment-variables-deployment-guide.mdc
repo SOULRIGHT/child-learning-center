@@ -1,0 +1,142 @@
+# 🚨 환경변수 관리 및 배포 주의사항 가이드
+
+## 🔐 환경변수 관리 원칙
+
+### **보안 우선 원칙**
+- **절대 금지**: 실제 아동 데이터를 Git에 올리기
+- **안전한 방법**: `.env` 파일을 수동으로 관리
+- **정보 저장**: 환경변수 정보는 노션에 저장
+
+### **파일 구조**
+```
+프로젝트/
+├── .env                    # 실제 운영 데이터 (Git에서 제외)
+├── .env.example           # 템플릿 파일 (Git에 포함)
+├── render.yaml            # 배포 환경 설정 (Git에 포함)
+└── .gitignore             # .env 파일 제외 설정
+```
+
+## 📝 환경변수 설정 방법
+
+### **로컬 개발 환경**
+```bash
+# 1. .env 파일 생성
+copy .env.example .env
+
+# 2. 실제 데이터로 수정
+notepad .env
+
+# 3. 데이터베이스 초기화
+python seed_basic.py
+```
+
+### **환경변수 내용 (노션에 저장)**
+```bash
+# 센터 정보
+CENTER_NAME=실제센터명
+CENTER_DESCRIPTION=학습관리 시스템
+CENTER_LOCATION=실제위치
+
+# 아동 데이터 (실제 아동 이름)
+CHILDREN_GRADE1=실제아동1,실제아동2,실제아동3
+CHILDREN_GRADE2=실제아동4,실제아동5,실제아동6
+CHILDREN_GRADE3=실제아동7,실제아동8,실제아동9
+CHILDREN_GRADE4=실제아동10,실제아동11,실제아동12
+CHILDREN_GRADE5=실제아동13,실제아동14,실제아동15
+CHILDREN_GRADE6=실제아동16,실제아동17,실제아동18
+
+# 사용자 계정
+DEFAULT_USERS=실제사용자1,실제사용자2,실제사용자3
+DEFAULT_PASSWORDS=실제비밀번호1,실제비밀번호2,실제비밀번호3
+DEFAULT_USER_ROLES=실제역할1,실제역할2,실제역할3
+
+# 데이터베이스 설정
+DATABASE_URL=sqlite:///child_center.db
+DATABASE_BACKUP_PATH=./backups/
+
+# 테스트 데이터 설정
+TEST_DATA_ENABLED=true
+TEST_CHILDREN_COUNT=4
+
+# UI/UX 설정
+THEME_COLOR=#ff6b35
+BRANCH_INDICATOR_ENABLED=true
+```
+
+## 🚀 배포 시 필수 체크리스트
+
+### **배포 전 확인사항**
+- [ ] **render.yaml 수정**: 실제 아동 데이터로 업데이트
+- [ ] **보안 확인**: 실제 비밀번호로 변경
+- [ ] **센터 정보**: 실제 센터명과 위치로 수정
+
+### **render.yaml 수정 예시**
+```yaml
+# 기존 (가상 데이터)
+CHILDREN_GRADE1: 김철수,박영희,이민수,최지영,정현우
+
+# 수정 후 (실제 데이터)
+CHILDREN_GRADE1: 실제아동1,실제아동2,실제아동3,실제아동4,실제아동5
+```
+
+### **배포 후 확인사항**
+- [ ] **환경변수 적용**: Render.com에서 올바르게 설정되었는지 확인
+- [ ] **데이터 로드**: 실제 아동 데이터가 제대로 로드되는지 확인
+- [ ] **보안 테스트**: 실제 데이터가 외부에 노출되지 않는지 확인
+
+## ⚠️ 주의사항
+
+### **절대 금지**
+- ❌ 실제 아동 이름을 Git에 올리기
+- ❌ 실제 비밀번호를 코드에 하드코딩
+- ❌ .env 파일을 Git에 커밋
+
+### **안전한 방법**
+- ✅ 환경변수 정보를 노션에 저장
+- ✅ .env 파일을 수동으로 관리
+- ✅ 배포 시에만 render.yaml 수정
+
+## 🔧 문제 해결
+
+### **환경변수가 로드되지 않는 경우**
+```bash
+# 1. .env 파일 존재 확인
+dir .env
+
+# 2. 파일 내용 확인
+type .env
+
+# 3. load_dotenv() 호출 확인
+python -c "from dotenv import load_dotenv; load_dotenv(); import os; print(os.environ.get('CENTER_NAME'))"
+```
+
+### **배포 후 데이터가 가상 데이터로 표시되는 경우**
+1. **render.yaml 수정**: 실제 데이터로 업데이트
+2. **Git 푸시**: 변경사항 반영
+3. **Render.com 재배포**: 자동으로 실행됨
+
+## 📋 체크리스트
+
+### **개발 환경 설정**
+- [ ] .env 파일 생성 및 실제 데이터 입력
+- [ ] 데이터베이스 초기화 완료
+- [ ] 로컬에서 정상 동작 확인
+
+### **배포 준비**
+- [ ] render.yaml에 실제 데이터 입력
+- [ ] 보안 정보 업데이트
+- [ ] Git 커밋 및 푸시
+
+### **배포 후 확인**
+- [ ] Render.com 환경변수 적용 확인
+- [ ] 실제 데이터 로드 확인
+- [ ] 보안 테스트 완료
+
+---
+
+> 🚨 **중요**: 이 가이드를 따르지 않으면 실제 아동 데이터가 노출될 수 있습니다!
+> 항상 보안을 우선으로 생각하고, 환경변수는 수동으로 관리하세요.
+description:
+globs:
+alwaysApply: true
+---

@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}백업 관리 - 지역아동센터 학습관리{% endblock %}
+{% block page_title %}백업 관리{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-cloud-arrow-down"></i>
+                    백업 파일 목록
+                </h5>
+                <div>
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> 대시보드로
+                    </a>
+                    <form method="POST" action="{{ url_for('backup_manual') }}" style="display: inline;">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-cloud-arrow-up"></i> 새 백업 생성
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if backups %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>파일명</th>
+                                    <th>타입</th>
+                                    <th>크기</th>
+                                    <th>생성일시</th>
+                                    <th>복구가능</th>
+                                    <th>작업</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for backup in backups %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ backup.filename }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ backup.filepath }}</small>
+                                    </td>
+                                    <td>
+                                        {% if backup.type == 'realtime' %}
+                                            <span class="badge bg-info">실시간</span>
+                                        {% elif backup.type == 'daily' %}
+                                            <span class="badge bg-success">일일</span>
+                                        {% elif backup.type == 'monthly' %}
+                                            <span class="badge bg-warning">월간</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ backup.type }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ backup.size_mb }} MB</td>
+                                    <td>{{ backup.created_at }}</td>
+                                    <td>
+                                        {% if backup.restore_safe %}
+                                            <span class="text-success">
+                                                <i class="bi bi-check-circle"></i> 가능
+                                            </span>
+                                        {% else %}
+                                            <span class="text-danger">
+                                                <i class="bi bi-x-circle"></i> 불가
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <a href="#" class="btn btn-outline-info btn-sm" 
+                                               onclick="showBackupInfo('{{ backup.filename }}', '{{ backup.type }}', '{{ backup.size_mb }}', '{{ backup.created_at }}')">
+                                                <i class="bi bi-info-circle"></i> 정보
+                                            </a>
+                                            {% if backup.restore_safe %}
+                                            <button type="button" class="btn btn-outline-warning btn-sm" 
+                                                    onclick="confirmRestore('{{ backup.filename }}')">
+                                                <i class="bi bi-arrow-clockwise"></i> 복구
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle"></i>
+                            총 {{ backups|length }}개의 백업 파일이 있습니다.
+                        </small>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-cloud-slash" style="font-size: 3rem; color: #dee2e6;"></i>
+                        <p class="text-muted mt-3 mb-0">사용 가능한 백업 파일이 없습니다.</p>
+                        <form method="POST" action="{{ url_for('backup_manual') }}" class="mt-3">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-cloud-arrow-up"></i> 첫 백업 생성하기
+                            </button>
+                        </form>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 백업 정보 모달 -->
+<div class="modal fade" id="backupInfoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">백업 파일 정보</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-6">
+                        <strong>파일명:</strong>
+                    </div>
+                    <div class="col-6" id="modal-filename"></div>
+                </div>
+                <div class="row">
+                    <div class="col-6">
+                        <strong>타입:</strong>
+                    </div>
+                    <div class="col-6" id="modal-type"></div>
+                </div>
+                <div class="row">
+                    <div class="col-6">
+                        <strong>크기:</strong>
+                    </div>
+                    <div class="col-6" id="modal-size"></div>
+                </div>
+                <div class="row">
+                    <div class="col-6">
+                        <strong>생성일시:</strong>
+                    </div>
+                    <div class="col-6" id="modal-created"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 복구 확인 모달 -->
+<div class="modal fade" id="restoreConfirmModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    백업 복구 확인
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <strong>⚠️ 주의사항:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>현재 데이터베이스의 모든 데이터가 삭제됩니다.</li>
+                        <li>복구 전 안전 백업이 자동으로 생성됩니다.</li>
+                        <li>이 작업은 되돌릴 수 없습니다.</li>
+                    </ul>
+                </div>
+                <p>
+                    <strong id="restore-filename"></strong> 파일에서 데이터를 복구하시겠습니까?
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <form method="POST" id="restore-form" style="display: inline;">
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-arrow-clockwise"></i> 복구 실행
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showBackupInfo(filename, type, size, created) {
+    document.getElementById('modal-filename').textContent = filename;
+    document.getElementById('modal-type').textContent = type;
+    document.getElementById('modal-size').textContent = size + ' MB';
+    document.getElementById('modal-created').textContent = created;
+    
+    const modal = new bootstrap.Modal(document.getElementById('backupInfoModal'));
+    modal.show();
+}
+
+function confirmRestore(filename) {
+    document.getElementById('restore-filename').textContent = filename;
+    document.getElementById('restore-form').action = "{{ url_for('backup_restore', filename='PLACEHOLDER') }}".replace('PLACEHOLDER', filename);
+    
+    const modal = new bootstrap.Modal(document.getElementById('restoreConfirmModal'));
+    modal.show();
+}
+</script>
+{% endblock %}

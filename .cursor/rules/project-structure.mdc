@@ -1,0 +1,113 @@
+# 아동 학습 관리 시스템 - 프로젝트 구조 가이드
+
+## 주요 파일 구조
+
+### 핵심 애플리케이션 파일
+- [app.py](mdc:app.py) - Flask 애플리케이션의 메인 진입점
+- [requirements.txt](mdc:requirements.txt) - Python 의존성 목록 (반드시 최신 상태 유지)
+- [render.yaml](mdc:render.yaml) - Render.com 배포 설정
+
+### 환경 설정 파일
+- [.env](mdc:.env) - 환경변수 (Git에서 제외됨)
+- [config.env](mdc:config.env) - 기존 설정 파일 (더 이상 사용하지 않음)
+
+### 데이터베이스 관련
+- [migrations/](mdc:migrations/) - Alembic 마이그레이션 파일들
+- [seed_basic.py](mdc:seed_basic.py) - 기본 개발/테스트용 시딩 스크립트
+- [seed_quick_30.py](mdc:seed_quick_30.py) - 빠른 30명 아동 데이터 생성
+- [seed_production.py](mdc:seed_production.py) - 실제 운영용 시딩 스크립트
+
+### 템플릿 및 정적 파일
+- [templates/](mdc:templates/) - HTML 템플릿 파일들
+- [static/](mdc:static/) - CSS, JavaScript, 이미지 파일들
+
+## 필수 의존성 관리
+
+### Flask 관련 의존성 (반드시 포함)
+```python
+Flask==3.1.1
+Flask-Login==0.6.3
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.1.0  # 데이터베이스 마이그레이션용
+```
+
+### 데이터베이스 관련
+```python
+SQLAlchemy==2.0.41
+Alembic==1.16.4  # Flask-Migrate의 의존성
+```
+
+### 환경변수 및 보안
+```python
+python-dotenv==1.1.1
+Werkzeug==3.1.3
+```
+
+### 템플릿 엔진
+```python
+Jinja2==3.1.6
+MarkupSafe==3.0.2
+Mako==1.3.10  # Alembic의 의존성
+```
+
+### 배포 관련
+```python
+gunicorn==21.2.0  # Render.com 배포용
+```
+
+## 개발 환경 설정
+
+### 가상환경 활성화
+```bash
+# Windows 명령 프롬프트(cmd) - 권장
+venv\Scripts\activate
+
+# Windows PowerShell
+.\venv\Scripts\Activate.ps1
+
+# 또는 배치 파일 사용
+activate_venv.bat
+```
+
+**⚠️ 중요**: 시딩 스크립트나 Flask 앱 실행 전 반드시 가상환경을 활성화해야 합니다!
+
+### 의존성 설치
+```bash
+pip install -r requirements.txt
+```
+
+### 누락된 의존성 발견 시
+1. 해당 모듈을 pip로 설치
+2. [requirements.txt](mdc:requirements.txt)에 추가
+3. 버전 고정 (== 사용)
+
+## 보안 고려사항
+
+### 환경변수 관리
+- [.env](mdc:.env) 파일은 Git에서 제외됨
+- [.gitignore](mdc:.gitignore)에 .env 포함 확인
+- SECRET_KEY는 반드시 안전한 랜덤 값 사용
+
+### 데이터베이스
+- 개발 환경: SQLite 사용
+- 배포 환경: PostgreSQL 사용 (Render.com)
+- 민감한 데이터는 환경변수로 관리
+
+## 일반적인 문제 해결
+
+### ModuleNotFoundError 발생 시
+1. 가상환경이 활성화되어 있는지 확인
+2. `pip install -r requirements.txt` 실행
+3. 누락된 모듈을 requirements.txt에 추가
+4. Git 커밋하여 변경사항 저장
+
+## 📝 **문서 업데이트 규칙**
+
+### **작업 완료 후 필수 문서 업데이트**
+- 모든 작업 완료 후 반드시 문서 업데이트 수행
+- [documentation-update.mdc](mdc:.cursor/rules/documentation-update.mdc) 규칙 참조
+- README.md, PRD_Implementation_Complete.md 등 관련 문서 동시 업데이트
+description:
+globs:
+alwaysApply: false
+---

@@ -51,7 +51,7 @@
                         <div class="col-md-3">
                             <div class="text-center">
                                 <h6 class="text-muted">평균 포인트</h6>
-                                <h2 class="text-warning">{{ (total_points / child_points|length) | round(0) if child_points else 0 }}</h2>
+                                <h2 class="text-warning">{{ (total_points / child_points|length) | round(0) | int if child_points else 0 }}</h2>
                             </div>
                         </div>
                     </div>
@@ -228,7 +228,7 @@
                                     <td>{{ student.grade }}학년</td>
                                     <td><strong>{{ student.total_points }}</strong></td>
                                     <td>{{ student.record_count }}</td>
-                                    <td>{{ "%.1f"|format(student.total_points / student.record_count) if student.record_count > 0 else 0 }}</td>
+                                    <td>{{ (student.total_points / student.record_count) | round(0) | int if student.record_count > 0 else 0 }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

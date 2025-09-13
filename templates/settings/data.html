@@ -1,92 +1,275 @@
 {% extends "base.html" %}
 
-{% block title %}데이터 관리 - 설정{% endblock %}
+{% block title %}데이터 관리 - {{ super() }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <!-- 페이지 헤더 -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h4 class="fw-bold text-dark mb-1">데이터 관리</h4>
-            <p class="text-muted mb-0">데이터 백업, 복원 및 정리를 관리합니다.</p>
-        </div>
-        <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left me-2"></i>설정으로 돌아가기
-        </a>
-    </div>
-
-    <!-- 데이터 백업 -->
-    <div class="card">
-        <div class="card-header">
-            <h5 class="card-title mb-0">
-                <i class="bi bi-download me-2"></i>데이터 백업
-            </h5>
-        </div>
-        <div class="card-body">
-            <p class="text-muted mb-3">현재 데이터를 안전하게 백업합니다.</p>
-            <button class="btn btn-primary">
-                <i class="bi bi-download me-2"></i>백업 다운로드
-            </button>
-        </div>
-    </div>
-
-    <!-- 데이터 복원 -->
-    <div class="card mt-4">
-        <div class="card-header">
-            <h5 class="card-title mb-0">
-                <i class="bi bi-upload me-2"></i>데이터 복원
-            </h5>
-        </div>
-        <div class="card-body">
-            <p class="text-muted mb-3">백업된 데이터를 복원합니다.</p>
-            <div class="mb-3">
-                <label class="form-label">백업 파일 선택</label>
-                <input type="file" class="form-control" accept=".json,.sql">
-            </div>
-            <button class="btn btn-warning">
-                <i class="bi bi-upload me-2"></i>데이터 복원
-            </button>
-        </div>
-    </div>
-
-    <!-- 데이터 정리 -->
-    <div class="card mt-4">
-        <div class="card-header">
-            <h5 class="card-title mb-0">
-                <i class="bi bi-trash me-2"></i>데이터 정리
-            </h5>
-        </div>
-        <div class="card-body">
-            <p class="text-muted mb-3">오래된 데이터를 정리하여 시스템 성능을 향상시킵니다.</p>
-            <div class="row">
-                <div class="col-md-6">
-                    <h6 class="fw-bold mb-3">정리 옵션</h6>
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" id="cleanOldRecords">
-                        <label class="form-check-label" for="cleanOldRecords">
-                            6개월 이상 된 기록 삭제
-                        </label>
-                    </div>
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" id="cleanDeletedChildren">
-                        <label class="form-check-label" for="cleanDeletedChildren">
-                            삭제된 아동 관련 데이터 정리
-                        </label>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <h6 class="fw-bold mb-3">현재 상태</h6>
-                    <div class="alert alert-info">
-                        <strong>총 기록:</strong> 1,234개<br>
-                        <strong>오래된 기록:</strong> 45개 (6개월 이상)<br>
-                        <strong>삭제된 아동 데이터:</strong> 12개
-                    </div>
+<div class="container mt-4">
+    <h2>📊 데이터 관리</h2>
+    
+    <!-- 현재 데이터베이스 현황 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">👥 사용자</h5>
+                    <h3 class="text-primary">{{ users_count }}명</h3>
                 </div>
             </div>
-            <button class="btn btn-danger">
-                <i class="bi bi-trash me-2"></i>데이터 정리 실행
-            </button>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">👶 아동</h5>
+                    <h3 class="text-success">{{ children_count }}명</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">📚 학습 기록</h5>
+                    <h3 class="text-info">{{ records_count }}개</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">⭐ 포인트 기록</h5>
+                    <h3 class="text-warning">{{ points_count }}개</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 데이터 관리 기능 -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>🌱 데이터 시드</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        샘플 데이터를 생성하여 시스템을 테스트할 수 있습니다.
+                        기존 데이터가 있으면 추가로 생성되지 않습니다.
+                    </p>
+                    <form method="POST">
+                        <input type="hidden" name="action" value="seed_data">
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-seedling"></i> 시드 데이터 실행
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>💾 데이터 백업</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        전체 데이터베이스를 JSON, Excel, DB 파일로 백업합니다.
+                        개발자만 사용할 수 있습니다.
+                    </p>
+                    {% if current_user.role == '개발자' %}
+                    <form method="POST" action="{{ url_for('backup_manual') }}" style="display: inline;">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="fas fa-cloud-upload-alt"></i> 백업 생성
+                        </button>
+                    </form>
+                    <a href="#backup-list" class="btn btn-outline-info" data-bs-toggle="collapse">
+                        <i class="fas fa-list"></i> 백업 목록
+                    </a>
+                    {% else %}
+                    <button class="btn btn-secondary" disabled>
+                        <i class="fas fa-lock"></i> 권한 없음
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 백업 목록 (collapse) -->
+    {% if current_user.role == '개발자' %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="collapse" id="backup-list">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>📂 백업 파일 목록</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="backup-files-container">
+                            <p class="text-muted">백업 목록을 불러오는 중...</p>
+                        </div>
+                        <button class="btn btn-outline-primary btn-sm" onclick="loadBackupList()">
+                            <i class="fas fa-refresh"></i> 목록 새로고침
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 위험한 작업 -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5>⚠️ 위험한 작업</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text text-danger">
+                        <strong>주의:</strong> 아래 작업은 되돌릴 수 없습니다!
+                    </p>
+                    
+                    {% if current_user.role == '개발자' %}
+                    <div class="alert alert-warning">
+                        <h6>🔴 데이터 초기화</h6>
+                        <p>모든 데이터를 삭제하고 처음부터 시작합니다.</p>
+                        <form method="POST" onsubmit="return confirm('정말로 모든 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다!')">
+                            <input type="hidden" name="action" value="reset_data">
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-trash"></i> 모든 데이터 삭제
+                            </button>
+                        </form>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-secondary">
+                        <p><i class="fas fa-lock"></i> 개발자만 데이터 초기화를 할 수 있습니다.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 사용 가이드 -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>📖 사용 가이드</h5>
+                </div>
+                <div class="card-body">
+                    <h6>🔄 마이그레이션 관리</h6>
+                    <ul>
+                        <li><code>flask db migrate -m "설명"</code> - 스키마 변경사항 추적</li>
+                        <li><code>flask db upgrade</code> - 변경사항을 데이터베이스에 적용</li>
+                        <li><code>flask db downgrade</code> - 이전 버전으로 되돌리기</li>
+                    </ul>
+                    
+                    <h6>🌱 데이터 시드</h6>
+                    <ul>
+                        <li>웹 UI에서 "시드 데이터 실행" 버튼 클릭</li>
+                        <li>또는 터미널에서 <code>python seed_data.py</code> 실행</li>
+                        <li>실제 운영 시 <code>seed_data.py</code> 파일에서 아동 이름과 포인트 수정</li>
+                    </ul>
+                    
+                    <h6>💾 데이터 이식 (노트북 ↔ 컴퓨터)</h6>
+                    <ul>
+                        <li><strong>방법 1:</strong> <code>child_center.db</code> 파일을 직접 복사</li>
+                        <li><strong>방법 2:</strong> 시드 스크립트로 데이터 재생성</li>
+                        <li><strong>방법 3:</strong> 마이그레이션 파일을 통해 스키마 동기화</li>
+                    </ul>
+                </div>
+            </div>
         </div>
     </div>
 </div>
+
+{% block scripts %}
+<script>
+async function loadBackupList() {
+    const container = document.getElementById('backup-files-container');
+    container.innerHTML = '<p class="text-muted"><i class="fas fa-spinner fa-spin"></i> 백업 목록을 불러오는 중...</p>';
+    
+    try {
+        const response = await fetch('/backup/status');
+        if (!response.ok) {
+            throw new Error('백업 목록을 불러오는데 실패했습니다.');
+        }
+        
+        const data = await response.json();
+        
+        if (!data.backups || data.backups.length === 0) {
+            container.innerHTML = '<p class="text-muted">백업 파일이 없습니다.</p>';
+            return;
+        }
+        
+        let html = '<div class="table-responsive">';
+        html += '<table class="table table-sm table-striped">';
+        html += '<thead><tr><th>파일명</th><th>크기</th><th>생성일</th><th>작업</th></tr></thead>';
+        html += '<tbody>';
+        
+        data.backups.forEach(backup => {
+            const date = new Date(backup.created_at).toLocaleString('ko-KR');
+            const size = backup.size_mb + ' MB';
+            
+            html += `<tr>
+                <td><small>${backup.filename}</small></td>
+                <td><small>${size}</small></td>
+                <td><small>${date}</small></td>
+                <td>
+                    <button class="btn btn-success btn-sm me-1" onclick="restoreBackup('${backup.filename}')" 
+                            title="복원" style="font-size: 0.8rem; padding: 0.25rem 0.5rem;">
+                        <i class="fas fa-download"></i> 복원
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteBackup('${backup.filename}')" 
+                            title="삭제" style="font-size: 0.8rem; padding: 0.25rem 0.5rem;">
+                        <i class="fas fa-trash"></i> 삭제
+                    </button>
+                </td>
+            </tr>`;
+        });
+        
+        html += '</tbody></table></div>';
+        container.innerHTML = html;
+        
+    } catch (error) {
+        container.innerHTML = `<p class="text-danger">오류: ${error.message}</p>`;
+    }
+}
+
+async function restoreBackup(filename) {
+    if (!confirm(`백업 파일 "${filename}"에서 데이터를 복원하시겠습니까?\n\n⚠️ 현재 데이터가 백업으로 덮어써집니다!`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/backup/restore/${filename}`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            alert('✅ 백업 복원이 완료되었습니다!');
+            location.reload();
+        } else {
+            throw new Error('백업 복원에 실패했습니다.');
+        }
+    } catch (error) {
+        alert(`❌ 복원 실패: ${error.message}`);
+    }
+}
+
+function deleteBackup(filename) {
+    alert('백업 파일 삭제 기능은 아직 구현되지 않았습니다.');
+}
+
+// 백업 목록 토글 시 자동 로드
+document.addEventListener('DOMContentLoaded', function() {
+    const backupListToggle = document.querySelector('[data-bs-toggle="collapse"]');
+    if (backupListToggle) {
+        backupListToggle.addEventListener('click', function() {
+            setTimeout(loadBackupList, 500); // collapse 애니메이션 후 로드
+        });
+    }
+});
+</script>
+{% endblock %}
 {% endblock %} 

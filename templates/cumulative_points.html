@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}누적 포인트 관리{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>📊 누적 포인트 관리</h2>
+                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> 대시보드로
+                </a>
+            </div>
+            
+            <!-- 설명 카드 -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">💡 사용 방법</h5>
+                    <p class="card-text">
+                        각 아동의 <strong>전체 누적 포인트</strong>를 입력하세요. 
+                        이 포인트는 국어, 수학, 쎈수학, 독서를 포함한 <strong>전체 과목의 합계</strong>입니다.
+                    </p>
+                    <div class="alert alert-info">
+                        <strong>예시:</strong> 김철수가 그동안 모은 포인트가 3700점이라면, 3700을 입력하면 됩니다.
+                        이후 일일 포인트는 이 누적 포인트에 계속 더해집니다.
+                    </div>
+                </div>
+            </div>
+
+            <!-- 일괄 입력 폼 -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">📝 일괄 누적 포인트 입력</h5>
+                </div>
+                <div class="card-body">
+                    <form id="bulkForm">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>아동명</th>
+                                        <th>학년</th>
+                                        <th>현재 누적 포인트</th>
+                                        <th>새 누적 포인트</th>
+                                        <th>상태</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for child in children %}
+                                    <tr data-child-id="{{ child.id }}">
+                                        <td>
+                                            <strong>{{ child.name }}</strong>
+                                        </td>
+                                        <td>{{ child.grade }}학년</td>
+                                        <td>
+                                            <span class="current-points" data-child-id="{{ child.id }}">
+                                                {{ child.cumulative_points or 0 }}
+                                            </span>점
+                                        </td>
+                                        <td>
+                                            <input type="number" 
+                                                   class="form-control new-points" 
+                                                   data-child-id="{{ child.id }}"
+                                                   placeholder="누적 포인트 입력"
+                                                   min="0"
+                                                   value="{{ child.cumulative_points or '' }}">
+                                        </td>
+                                        <td>
+                                            <span class="status-badge" data-child-id="{{ child.id }}">
+                                                <span class="badge bg-secondary">대기</span>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="text-center mt-3">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-save"></i> 모든 누적 포인트 저장
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 개별 입력 폼 -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">✏️ 개별 누적 포인트 입력</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label for="childSelect" class="form-label">아동 선택</label>
+                            <select class="form-select" id="childSelect">
+                                <option value="">아동을 선택하세요</option>
+                                {% for child in children %}
+                                <option value="{{ child.id }}" data-current-points="{{ child.cumulative_points or 0 }}">
+                                    {{ child.name }} ({{ child.grade }}학년)
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="individualPoints" class="form-label">누적 포인트</label>
+                            <input type="number" class="form-control" id="individualPoints" 
+                                   placeholder="누적 포인트 입력" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">&nbsp;</label>
+                            <button type="button" class="btn btn-success d-block w-100" id="saveIndividual">
+                                <i class="fas fa-save"></i> 저장
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 결과 모달 -->
+<div class="modal fade" id="resultModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">처리 결과</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- 결과 내용이 여기에 표시됩니다 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 오류 상세 모달 -->
+<div class="modal fade" id="errorModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger">오류 상세</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="errorModalBody">
+                <!-- 오류 내용이 여기에 표시됩니다 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 일괄 입력 폼 처리
+    document.getElementById('bulkForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const pointsData = [];
+        const rows = document.querySelectorAll('tbody tr');
+        
+        rows.forEach(row => {
+            const childId = row.dataset.childId;
+            const input = row.querySelector('.new-points');
+            const points = input.value.trim();
+            
+            if (points !== '') {
+                pointsData.push({
+                    child_id: parseInt(childId),
+                    cumulative_points: parseInt(points)
+                });
+            }
+        });
+        
+        if (pointsData.length === 0) {
+            showModal('입력할 포인트가 없습니다. 모든 아동의 누적 포인트를 입력해주세요.', 'warning');
+            return;
+        }
+        
+        // 상태 표시 업데이트
+        rows.forEach(row => {
+            const childId = row.dataset.childId;
+            const input = row.querySelector('.new-points');
+            const statusBadge = row.querySelector('.status-badge');
+            
+            if (input.value.trim() !== '') {
+                statusBadge.innerHTML = '<span class="badge bg-warning">처리중...</span>';
+            }
+        });
+        
+        // API 호출
+        fetch('/cumulative-points/bulk-input', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ points_data: pointsData })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showModal(data.message, 'success');
+                // 성공 시 현재 포인트 업데이트
+                updateCurrentPoints(pointsData);
+                // 상태 초기화
+                resetStatusBadges();
+            } else {
+                showModal(data.message, 'error');
+                if (data.errors) {
+                    showErrorDetails(data.errors);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showModal('서버 오류가 발생했습니다.', 'error');
+        })
+        .finally(() => {
+            // 상태 초기화
+            resetStatusBadges();
+        });
+    });
+    
+    // 개별 입력 처리
+    document.getElementById('saveIndividual').addEventListener('click', function() {
+        const childId = document.getElementById('childSelect').value;
+        const points = document.getElementById('individualPoints').value.trim();
+        
+        if (!childId) {
+            showModal('아동을 선택해주세요.', 'warning');
+            return;
+        }
+        
+        if (!points) {
+            showModal('누적 포인트를 입력해주세요.', 'warning');
+            return;
+        }
+        
+        // API 호출
+        fetch('/cumulative-points/input', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                child_id: parseInt(childId),
+                cumulative_points: parseInt(points)
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showModal(data.message, 'success');
+                // 성공 시 현재 포인트 업데이트
+                updateIndividualPoints(parseInt(childId), parseInt(points));
+                // 폼 초기화
+                document.getElementById('childSelect').value = '';
+                document.getElementById('individualPoints').value = '';
+            } else {
+                showModal(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showModal('서버 오류가 발생했습니다.', 'error');
+        });
+    });
+    
+    // 아동 선택 시 현재 포인트 표시
+    document.getElementById('childSelect').addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        const currentPoints = selectedOption.dataset.currentPoints || 0;
+        document.getElementById('individualPoints').value = currentPoints;
+    });
+    
+    // 현재 포인트 업데이트 함수
+    function updateCurrentPoints(pointsData) {
+        pointsData.forEach(item => {
+            const currentPointsElement = document.querySelector(`.current-points[data-child-id="${item.child_id}"]`);
+            if (currentPointsElement) {
+                currentPointsElement.textContent = item.cumulative_points;
+            }
+        });
+    }
+    
+    // 개별 포인트 업데이트 함수
+    function updateIndividualPoints(childId, points) {
+        const currentPointsElement = document.querySelector(`.current-points[data-child-id="${childId}"]`);
+        if (currentPointsElement) {
+            currentPointsElement.textContent = points;
+        }
+        
+        // 개별 입력 폼의 현재 포인트도 업데이트
+        const option = document.querySelector(`#childSelect option[value="${childId}"]`);
+        if (option) {
+            option.dataset.currentPoints = points;
+        }
+    }
+    
+    // 상태 배지 초기화
+    function resetStatusBadges() {
+        document.querySelectorAll('.status-badge').forEach(badge => {
+            badge.innerHTML = '<span class="badge bg-secondary">대기</span>';
+        });
+    }
+    
+    // 모달 표시 함수
+    function showModal(message, type) {
+        const modal = new bootstrap.Modal(document.getElementById('resultModal'));
+        const modalBody = document.getElementById('modalBody');
+        
+        let alertClass = 'alert-success';
+        if (type === 'error') alertClass = 'alert-danger';
+        else if (type === 'warning') alertClass = 'alert-warning';
+        
+        modalBody.innerHTML = `<div class="alert ${alertClass} mb-0">${message}</div>`;
+        modal.show();
+    }
+    
+    // 오류 상세 표시 함수
+    function showErrorDetails(errors) {
+        const modal = new bootstrap.Modal(document.getElementById('errorModal'));
+        const modalBody = document.getElementById('errorModalBody');
+        
+        let errorHtml = '<div class="alert alert-danger"><h6>다음 오류들이 발생했습니다:</h6><ul>';
+        errors.forEach(error => {
+            errorHtml += `<li>${error}</li>`;
+        });
+        errorHtml += '</ul></div>';
+        
+        modalBody.innerHTML = errorHtml;
+        modal.show();
+    }
+});
+</script>
+{% endblock %}
