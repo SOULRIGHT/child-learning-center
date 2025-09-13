@@ -14,6 +14,14 @@ from dotenv import load_dotenv
 from sqlalchemy import func # Added for func.date
 from sqlalchemy import text
 
+# Firebase Authentication
+from firebase_config import (
+    initialize_firebase, 
+    verify_firebase_token, 
+    get_user_role_from_email,
+    FIREBASE_CONFIG
+)
+
 # 백업 시스템을 위한 import
 try:
     import pandas as pd
@@ -31,7 +39,7 @@ load_dotenv()
 
 # Flask 앱 생성
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production-firebase-auth')
 
 # 데이터베이스 설정
 if os.environ.get('DATABASE_URL'):
@@ -66,13 +74,17 @@ def inject_center_info():
 # 데이터베이스 모델
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=True)  # Firebase 사용 시 nullable
+    password_hash = db.Column(db.String(255), nullable=True)  # Firebase 사용 시 nullable
     name = db.Column(db.String(100), nullable=False)
     role = db.Column(db.String(50), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     login_attempts = db.Column(db.Integer, default=0)
     last_attempt = db.Column(db.DateTime)
+    
+    # Firebase Auth 전용 필드들
+    email = db.Column(db.String(120), unique=True, nullable=True)
+    firebase_uid = db.Column(db.String(128), unique=True, nullable=True)
 
 class Child(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -368,55 +380,114 @@ def index():
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
+# === 완전 Firebase Auth 시스템 ===
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    """완전 Firebase Auth 기반 로그인"""
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        # Firebase 토큰 검증
+        token = request.json.get('token') if request.is_json else request.form.get('token')
         
-        # 디버깅: 사용자 계정 목록 출력
-        all_users = User.query.all()
-        print(f"🔍 디버깅: 현재 데이터베이스의 사용자 계정들:")
-        for u in all_users:
-            print(f"  - {u.username} ({u.name}) - {u.role}")
+        if not token:
+            flash('로그인 토큰이 없습니다.', 'error')
+            return render_template('login.html', firebase_config=FIREBASE_CONFIG)
         
-        user = User.query.filter_by(username=username).first()
-        print(f"🔍 디버깅: 찾은 사용자: {user}")
+        # Firebase 토큰 검증
+        decoded_token = verify_firebase_token(token)
         
-        if user:
-            print(f"🔍 디버깅: 비밀번호 해시 확인 중...")
-            password_match = check_password_hash(user.password_hash, password)
-            print(f"🔍 디버깅: 비밀번호 일치 여부: {password_match}")
+        if decoded_token:
+            # 사용자 정보 추출
+            firebase_uid = decoded_token['uid']
+            email = decoded_token['email']
+            name = decoded_token.get('name', email.split('@')[0])
             
-            # 로그인 시도 횟수 확인
-            if user.login_attempts >= 5:
-                if user.last_attempt and (datetime.utcnow() - user.last_attempt).seconds < 900:  # 15분 잠금
-                    flash('로그인 시도 횟수를 초과했습니다. 15분 후 다시 시도해주세요.', 'error')
-                    return render_template('login.html')
-                else:
-                    # 잠금 시간 해제
-                    user.login_attempts = 0
-                    db.session.commit()
-            
-            if password_match:
-                # 로그인 성공
-                user.login_attempts = 0
-                user.last_attempt = None
+            # Firebase 사용자로 로그인 처리
+            user = User.query.filter_by(firebase_uid=firebase_uid).first()
+            if not user:
+                # 새 Firebase 사용자 생성
+                user = User(
+                    firebase_uid=firebase_uid,
+                    email=email,
+                    name=name,
+                    role=get_user_role_from_email(email),
+                    username=email.split('@')[0],  # 호환성을 위해
+                    password_hash=''  # Firebase 사용자는 비밀번호 없음
+                )
+                db.session.add(user)
                 db.session.commit()
-                login_user(user)
-                flash(f'{user.name}님, 환영합니다!', 'success')
-                return redirect(url_for('dashboard'))
+                print(f"✅ 새 Firebase 사용자 생성: {email}")
+            
+            # Firebase 사용자로 로그인
+            login_user(user)
+            flash(f'{user.name}님, Firebase 인증으로 로그인되었습니다!', 'success')
+            
+            if request.is_json:
+                return jsonify({'success': True, 'redirect': url_for('dashboard')})
             else:
-                # 로그인 실패
-                user.login_attempts += 1
-                user.last_attempt = datetime.utcnow()
-                db.session.commit()
-                flash('아이디 또는 비밀번호가 잘못되었습니다.', 'error')
+                return redirect(url_for('dashboard'))
         else:
-            print(f"🔍 디버깅: 사용자를 찾을 수 없음: {username}")
-            flash('아이디 또는 비밀번호가 잘못되었습니다.', 'error')
+            flash('Firebase 인증에 실패했습니다.', 'error')
+            if request.is_json:
+                return jsonify({'success': False, 'error': 'Invalid Firebase token'})
     
-    return render_template('login.html')
+    # Firebase 설정 정보를 템플릿에 전달
+    return render_template('login.html', firebase_config=FIREBASE_CONFIG)
+
+@app.route('/firebase-login', methods=['POST'])
+def firebase_login():
+    """Firebase Auth API 엔드포인트"""
+    try:
+        data = request.get_json()
+        token = data.get('token')
+        
+        if not token:
+            return jsonify({'success': False, 'error': 'Token is required'})
+        
+        # Firebase 토큰 검증
+        decoded_token = verify_firebase_token(token)
+        
+        if decoded_token:
+            # 사용자 정보 추출
+            firebase_uid = decoded_token['uid']
+            email = decoded_token['email']
+            name = decoded_token.get('name', email.split('@')[0])
+            
+            # Firebase 사용자로 로그인 처리
+            user = User.query.filter_by(firebase_uid=firebase_uid).first()
+            if not user:
+                # 새 Firebase 사용자 생성
+                user = User(
+                    firebase_uid=firebase_uid,
+                    email=email,
+                    name=name,
+                    role=get_user_role_from_email(email),
+                    username=email.split('@')[0],  # 호환성을 위해
+                    password_hash=''  # Firebase 사용자는 비밀번호 없음
+                )
+                db.session.add(user)
+                db.session.commit()
+                print(f"✅ 새 Firebase 사용자 생성: {email}")
+            
+            # Firebase 사용자로 로그인
+            login_user(user)
+            
+            return jsonify({
+                'success': True, 
+                'redirect': url_for('dashboard'),
+                'user': {
+                    'id': user.id,
+                    'name': user.name,
+                    'email': user.email,
+                    'role': user.role,
+                    'firebase_uid': user.firebase_uid
+                }
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Invalid Firebase token'})
+            
+    except Exception as e:
+        print(f"Firebase login error: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/logout')
 @login_required
@@ -800,10 +871,10 @@ def edit_child_note(child_id, note_id):
         # 특이사항 수정 알림 생성
         print(f"DEBUG: 특이사항 수정 알림 생성 시도 - {child.name}")
         notification = create_notification(
-            title=f'📝 {child.name} 특이사항 수정',
-            message=f'{current_user.name}님이 {child.name} 아동의 특이사항을 수정했습니다.',
+                title=f'📝 {child.name} 특이사항 수정',
+                message=f'{current_user.name}님이 {child.name} 아동의 특이사항을 수정했습니다.',
             notification_type='warning',
-            child_id=child.id,
+                child_id=child.id,
             target_role=None,  # 모든 사용자에게 표시
             priority=2,
             auto_expire=True,
@@ -1690,34 +1761,34 @@ def points_input(child_id):
                 )
                 db.session.add(history_record)
                 
-                # 새 기록 생성
-                new_record = DailyPoints(
-                    child_id=child_id,
-                    date=today,
-                    korean_points=korean_points,
-                    math_points=math_points,
-                    ssen_points=ssen_points,
-                    reading_points=reading_points,
-                    total_points=total_points,
-                    created_by=current_user.id
-                )
-                db.session.add(new_record)
-                
-                # 누적 포인트 자동 업데이트 (커밋 없이)
-                update_cumulative_points(child_id, commit=False)
-                
-                # 모든 변경사항을 한 번에 커밋
-                db.session.commit()
-                
-                # 실시간 백업 호출 (백업 실패가 포인트 입력에 영향 주지 않도록)
-                try:
-                    realtime_backup(child_id, "create")
-                except Exception as backup_error:
-                    print(f"백업 실패: {backup_error}")
-                    # 백업 실패는 포인트 입력 성공에 영향을 주지 않음
-                
-                flash(f'✅ {child.name} 아이의 포인트가 저장되었습니다. (총점: {total_points}점)', 'success')
-                return redirect(url_for('points_list'))
+            # 새 기록 생성
+            new_record = DailyPoints(
+                child_id=child_id,
+                date=today,
+                korean_points=korean_points,
+                math_points=math_points,
+                ssen_points=ssen_points,
+                reading_points=reading_points,
+                total_points=total_points,
+                created_by=current_user.id
+            )
+            db.session.add(new_record)
+            
+            # 누적 포인트 자동 업데이트 (커밋 없이)
+            update_cumulative_points(child_id, commit=False)
+            
+            # 모든 변경사항을 한 번에 커밋
+            db.session.commit()
+            
+            # 실시간 백업 호출 (백업 실패가 포인트 입력에 영향 주지 않도록)
+            try:
+                realtime_backup(child_id, "create")
+            except Exception as backup_error:
+                print(f"백업 실패: {backup_error}")
+                # 백업 실패는 포인트 입력 성공에 영향을 주지 않음
+            
+            flash(f'✅ {child.name} 아이의 포인트가 저장되었습니다. (총점: {total_points}점)', 'success')
+            return redirect(url_for('points_list'))
             
         except ValueError as e:
             flash('❌ 잘못된 포인트 값이 입력되었습니다. 숫자만 입력해주세요.', 'error')
@@ -3684,6 +3755,9 @@ def backup_status():
         return jsonify({'error': f'백업 상태 조회 실패: {str(e)}'}), 500
 
 if __name__ == '__main__':
+    # Firebase 초기화
+    initialize_firebase()
+    
     # 백업 스케줄러 시작
     start_backup_scheduler()
     
@@ -3692,57 +3766,14 @@ if __name__ == '__main__':
 else:
     # 배포된 환경에서도 데이터베이스 초기화
     with app.app_context():
+        # Firebase 초기화
+        initialize_firebase()
+        
         db.create_all()
-        # 기본 사용자가 없으면 생성 (한 번만)
-        if not User.query.filter_by(username='center_head').first():
-            print("🚀 배포 환경: 환경변수에서 사용자 계정 생성 중...")
-            
-            # 환경변수에서 사용자 정보 읽기
-            usernames = os.environ.get('DEFAULT_USERS', '').split(',')
-            passwords = os.environ.get('DEFAULT_PASSWORDS', '').split(',')
-            roles = os.environ.get('DEFAULT_USER_ROLES', '').split(',')
-            
-            # 환경변수가 모두 설정되어 있는지 확인
-            if (usernames and passwords and roles and 
-                usernames[0].strip() and passwords[0].strip() and roles[0].strip()):
-                
-                # 사용자 데이터 생성
-                default_users = []
-                for i, username in enumerate(usernames):
-                    if i < len(passwords) and i < len(roles):
-                        username = username.strip()
-                        password = passwords[i].strip()
-                        role = roles[i].strip()
-                        
-                        if username and password and role:
-                            default_users.append({
-                                'username': username,
-                                'name': role,
-                                'role': role,
-                                'password': password
-                            })
-                
-                if default_users:
-                    for user_data in default_users:
-                        password_hash = generate_password_hash(user_data['password'])
-                        user = User(
-                            username=user_data['username'],
-                            password_hash=password_hash,
-                            name=user_data['name'],
-                            role=user_data['role']
-                        )
-                        db.session.add(user)
-                    
-                    db.session.commit()
-                    print(f"✅ {len(default_users)}명의 사용자 계정 생성 완료")
-                else:
-                    print("⚠️ 환경변수에서 유효한 사용자 데이터를 읽을 수 없습니다.")
-            else:
-                print("⚠️ 환경변수가 설정되지 않았습니다. 사용자 계정을 생성하지 않습니다.")
-                print("   다음 환경변수를 설정하세요:")
-                print("   - DEFAULT_USERS")
-                print("   - DEFAULT_PASSWORDS") 
-                print("   - DEFAULT_USER_ROLES")
+        # 기본 사용자가 없으면 생성 (한 번만) - Firebase 사용 시 임시 비활성화
+        # if not User.query.filter_by(username='center_head').first():
+        #     # init_db() 제거 - 실제 데이터 보호
+        #     pass
     
     # 배포 환경에서도 백업 스케줄러 시작
     start_backup_scheduler()

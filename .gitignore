@@ -48,5 +48,12 @@ Thumbs.db
 .env.local
 .env.production
 
+# Firebase
+firebase-service-account.json
+firebase-config.json
+.env
+.env.local
+.env.production
+
 # Logs
 *.log 

@@ -16,34 +16,36 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <!-- 커스텀 CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+
+    <!-- Firebase SDK (8.x 버전으로 변경) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/ui/4.8.0/firebase-ui-auth.js"></script>
+    <link type="text/css" rel="stylesheet" href="https://www.gstatic.com/firebasejs/ui/4.8.0/firebase-ui-auth.css" />
+    
     <style>
-        /* 로그인 입력 필드 완전 수정 */
-        .input-group {
-            border-radius: 0.375rem;
+        /* Firebase Auth UI 커스터마이징 */
+        .firebaseui-container {
+            margin: 0 auto;
+            max-width: 400px;
         }
         
-        .input-group .input-group-text {
-            border-right: none;
-            background-color: #f8f9fa;
-            border-top-right-radius: 0;
-            border-bottom-right-radius: 0;
+        .firebaseui-card-content {
+            padding: 0;
         }
         
-        .input-group .form-control {
-            border-left: none;
-            padding-left: 70px;
-            border-top-left-radius: 0;
-            border-bottom-left-radius: 0;
+        .firebaseui-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 1rem;
         }
         
-        .input-group .form-control:focus {
-            border-left: none;
-            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
-        }
-        
-        .input-group:focus-within .input-group-text {
-            border-color: #0d6efd;
-            border-right: none;
+        .firebaseui-subtitle {
+            font-size: 1rem;
+            color: #666;
+            margin-bottom: 2rem;
         }
         
         /* 로그인 카드 정렬 */
@@ -51,13 +53,42 @@
             text-align: center;
         }
         
-        .login-card form,
         .login-card .mt-4 {
             text-align: center;
         }
         
-        .login-card .form-group {
-            text-align: left;
+        /* 로딩 스피너 */
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            margin: 2rem 0;
+        }
+        
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+        
+        /* 에러 메시지 */
+        .error-message {
+            display: none;
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            margin: 1rem 0;
+            border: 1px solid #f5c6cb;
+        }
+        
+        /* 성공 메시지 */
+        .success-message {
+            display: none;
+            background-color: #d4edda;
+            color: #155724;
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            margin: 1rem 0;
+            border: 1px solid #c3e6cb;
         }
     </style>
 </head>
@@ -83,31 +114,39 @@
                 <i class="bi bi-house-heart-fill"></i>
                 <h2>지역아동센터</h2>
                 <p>학습관리 시스템</p>
-                    </div>
+            </div>
 
-                    <form method="POST">
-                <div class="form-group">
-                            <label for="username" class="form-label">아이디</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bi bi-person"></i></span>
-                        <input type="text" class="form-control" id="username" name="username" placeholder="아이디를 입력하세요" required>
+            <!-- 로딩 스피너 -->
+            <div class="loading-spinner" id="loadingSpinner">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">로딩 중...</span>
+                </div>
+                <p class="mt-2 text-muted">Firebase 인증을 초기화하는 중...</p>
+            </div>
+
+            <!-- 에러 메시지 -->
+            <div class="error-message" id="errorMessage">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <span id="errorText">로그인 중 오류가 발생했습니다.</span>
+            </div>
+
+            <!-- 성공 메시지 -->
+            <div class="success-message" id="successMessage">
+                <i class="bi bi-check-circle me-2"></i>
+                <span id="successText">로그인에 성공했습니다!</span>
+            </div>
+
+                        <!-- Firebase Auth UI 컨테이너 -->
+                        <div id="firebaseui-auth-container">
+                            <div class="text-center my-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-3 text-muted">Firebase 인증 시스템 로딩 중...</p>
                             </div>
                         </div>
 
-                <div class="form-group">
-                            <label for="password" class="form-label">비밀번호</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bi bi-lock"></i></span>
-                        <input type="password" class="form-control" id="password" name="password" placeholder="비밀번호를 입력하세요" required>
-                            </div>
-                        </div>
-
-                <button type="submit" class="btn btn-primary w-100 mb-4">
-                            <i class="bi bi-box-arrow-in-right me-2"></i>로그인
-                        </button>
-                    </form>
-
-                    <div class="mt-4">
+            <div class="mt-4">
                 <div class="text-center mb-3">
                     <small class="text-muted">시스템 정보</small>
                 </div>
@@ -145,9 +184,9 @@
                                     <div class="col-12">
                                         <div class="border rounded p-2 bg-light small">
                                             <div class="text-center">
-                                                <strong class="text-info">보안 안내</strong>
+                                                <strong class="text-info">Firebase 보안</strong>
                                                 <br>
-                                                <small class="text-muted">• 안전한 로그인 • 데이터 암호화 • 접근 권한 관리</small>
+                                                <small class="text-muted">• Google 수준 보안 • 자동 비밀번호 관리 • 안전한 인증</small>
                                             </div>
                                         </div>
                                     </div>
@@ -161,7 +200,7 @@
             <div class="text-center mt-4">
                 <small class="text-muted">
                     <i class="bi bi-shield-check me-1"></i>
-                    안전한 학습 데이터 관리 시스템
+                    Firebase 기반 안전한 학습 데이터 관리 시스템
                 </small>
             </div>
         </div>
@@ -171,54 +210,99 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-    // 로그인 입력 필드 기능
+    // Firebase 설정
+    const firebaseConfig = {{ firebase_config | tojson }};
+    
+    // Firebase 초기화
+    firebase.initializeApp(firebaseConfig);
+    
+    
+    // Firebase Auth UI 설정
+    const ui = new firebaseui.auth.AuthUI(firebase.auth());
+    
+    // UI 설정
+    const uiConfig = {
+        signInOptions: [
+            {
+                provider: firebase.auth.EmailAuthProvider.PROVIDER_ID,
+                requireDisplayName: false
+            }
+        ],
+        signInFlow: 'popup',
+        callbacks: {
+            signInSuccessWithAuthResult: function(authResult, redirectUrl) {
+                // 로딩 스피너 표시
+                document.getElementById('loadingSpinner').style.display = 'block';
+                document.getElementById('firebaseui-auth-container').style.display = 'none';
+                
+                // Firebase 토큰을 서버로 전송
+                authResult.user.getIdToken().then(function(idToken) {
+                    fetch('/firebase-login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({token: idToken})
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // 성공 메시지 표시
+                            document.getElementById('successMessage').style.display = 'block';
+                            document.getElementById('successText').textContent = 'Firebase 인증 성공! 대시보드로 이동합니다...';
+                            
+                            // 잠시 후 리다이렉트
+                            setTimeout(function() {
+                                window.location.href = data.redirect;
+                            }, 1500);
+                        } else {
+                            // 에러 메시지 표시
+                            document.getElementById('errorMessage').style.display = 'block';
+                            document.getElementById('errorText').textContent = '로그인 실패: ' + data.error;
+                            document.getElementById('firebaseui-auth-container').style.display = 'block';
+                            document.getElementById('loadingSpinner').style.display = 'none';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        document.getElementById('errorMessage').style.display = 'block';
+                        document.getElementById('errorText').textContent = '서버 연결 오류가 발생했습니다.';
+                        document.getElementById('firebaseui-auth-container').style.display = 'block';
+                        document.getElementById('loadingSpinner').style.display = 'none';
+                    });
+                });
+                
+                // Firebase UI의 기본 리다이렉트 방지
+                return false;
+            },
+            signInFailure: function(error) {
+                console.error('Firebase Auth Error:', error);
+                document.getElementById('errorMessage').style.display = 'block';
+                document.getElementById('errorText').textContent = 'Firebase 인증 오류: ' + error.message;
+            }
+        }
+    };
+    
+    // Firebase Auth UI 시작
     document.addEventListener('DOMContentLoaded', function() {
-        const usernameInput = document.getElementById('username');
-        const passwordInput = document.getElementById('password');
-        
-        // 아이디 입력 필드
-        if (usernameInput) {
-            usernameInput.addEventListener('focus', function() {
-                this.setAttribute('data-placeholder', this.placeholder);
-                this.placeholder = '';
-            });
-            
-            usernameInput.addEventListener('blur', function() {
-                if (this.value === '') {
-                    this.placeholder = this.getAttribute('data-placeholder');
-                }
-            });
+        try {
+            ui.start('#firebaseui-auth-container', uiConfig);
+            console.log('✅ Firebase Auth UI 초기화 완료');
+        } catch (error) {
+            console.error('❌ Firebase Auth UI 초기화 실패:', error);
+            document.getElementById('errorMessage').style.display = 'block';
+            document.getElementById('errorText').textContent = 'Firebase 초기화 실패: ' + error.message;
         }
-        
-        // 비밀번호 입력 필드
-        if (passwordInput) {
-            passwordInput.addEventListener('focus', function() {
-                this.setAttribute('data-placeholder', this.placeholder);
-                this.placeholder = '';
-            });
-            
-            passwordInput.addEventListener('blur', function() {
-                if (this.value === '') {
-                    this.placeholder = this.getAttribute('data-placeholder');
-                }
-            });
+    });
+    
+    // Firebase Auth 상태 변화 감지
+    firebase.auth().onAuthStateChanged(function(user) {
+        if (user) {
+            console.log('✅ 사용자 로그인됨:', user.email);
+        } else {
+            console.log('❌ 사용자 로그아웃됨');
         }
-        
-        // 엔터키 로그인
-        const form = document.querySelector('form');
-        if (form) {
-            form.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    this.submit();
-                }
-            });
-        }
-        
-        // 테스트용: 페이지 로드 시 확인
-        console.log('로그인 페이지 로드됨');
-        console.log('아이디 필드:', usernameInput);
-        console.log('비밀번호 필드:', passwordInput);
     });
     </script>
 </body>
-</html> 
+</html>

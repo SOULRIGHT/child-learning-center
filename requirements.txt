@@ -29,5 +29,9 @@ pandas==2.2.3
 openpyxl==3.1.5
 schedule==1.2.2
 
+# Firebase Authentication
+firebase-admin==7.1.0
+PyJWT==2.10.1
+
 # 배포용 (Render.com)
 gunicorn==21.2.0
