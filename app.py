@@ -418,14 +418,14 @@ def login():
                 print(f"✅ 새 Firebase 사용자 생성: {email}")
             
             # Firebase 사용자로 로그인
-            login_user(user)
+                login_user(user)
             flash(f'{user.name}님, Firebase 인증으로 로그인되었습니다!', 'success')
             
             if request.is_json:
                 return jsonify({'success': True, 'redirect': url_for('dashboard')})
             else:
                 return redirect(url_for('dashboard'))
-        else:
+            else:
             flash('Firebase 인증에 실패했습니다.', 'error')
             if request.is_json:
                 return jsonify({'success': False, 'error': 'Invalid Firebase token'})
@@ -484,7 +484,7 @@ def firebase_login():
             })
         else:
             return jsonify({'success': False, 'error': 'Invalid Firebase token'})
-            
+    
     except Exception as e:
         print(f"Firebase login error: {e}")
         return jsonify({'success': False, 'error': str(e)})
@@ -1823,14 +1823,14 @@ def update_cumulative_points(child_id, commit=True):
         if child:
             child.cumulative_points = total_cumulative
             if commit:
-                db.session.commit()
+            db.session.commit()
             print(f"📊 {child.name}의 누적 포인트 업데이트: {total_cumulative}점")
             return total_cumulative
             
     except Exception as e:
         print(f"❌ 누적 포인트 업데이트 오류: {e}")
         if commit:
-            db.session.rollback()
+        db.session.rollback()
         raise e
 
 @app.route('/points/statistics')
