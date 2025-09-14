@@ -9,6 +9,10 @@ from firebase_admin import auth, credentials
 import os
 import json
 from datetime import datetime
+from dotenv import load_dotenv
+
+# .env 파일 로드
+load_dotenv()
 
 def initialize_firebase():
     """Firebase Admin SDK 초기화 - 환경변수 기반"""
@@ -18,13 +22,24 @@ def initialize_firebase():
             firebase_credentials_json = os.environ.get('FIREBASE_CREDENTIALS_JSON')
             
             if firebase_credentials_json:
+                print("🔍 환경변수에서 Firebase 서비스 계정 정보 로드 중...")
+                print(f"📝 JSON 길이: {len(firebase_credentials_json)} 문자")
+                
                 # JSON 문자열을 딕셔너리로 변환
-                cred_dict = json.loads(firebase_credentials_json)
-                cred = credentials.Certificate(cred_dict)
+                try:
+                    cred_dict = json.loads(firebase_credentials_json)
+                    print("✅ JSON 파싱 성공")
+                    cred = credentials.Certificate(cred_dict)
+                except json.JSONDecodeError as e:
+                    print(f"❌ JSON 파싱 오류: {e}")
+                    print(f"📄 JSON 내용 (처음 100자): {firebase_credentials_json[:100]}...")
+                    raise Exception(f"JSON 파싱 실패: {e}")
             else:
+                print("⚠️ FIREBASE_CREDENTIALS_JSON 환경변수가 설정되지 않음")
                 # 로컬 개발용 서비스 계정 파일 사용 (개발 환경에서만)
                 service_account_path = os.path.join(os.path.dirname(__file__), 'firebase-service-account.json')
                 if os.path.exists(service_account_path):
+                    print("📁 로컬 서비스 계정 파일 사용")
                     cred = credentials.Certificate(service_account_path)
                 else:
                     raise Exception("Firebase 서비스 계정 키를 찾을 수 없습니다. 환경변수 FIREBASE_CREDENTIALS_JSON을 설정하세요.")
@@ -56,12 +71,20 @@ def get_user_role_from_email(email):
     email_lower = email.lower()
     
     # 이메일 패턴 기반 역할 매핑
-    if 'center_head' in email_lower or '센터장' in email_lower:
+    if 'center' in email_lower or '센터장' in email_lower:
         return '센터장'
     elif 'teacher' in email_lower or '선생님' in email_lower:
         return '돌봄선생님'
     elif 'social_worker' in email_lower or '사회복무' in email_lower:
-        return '사회복무요원'
+        # 숫자 패턴으로 구분
+        if '1' in email_lower:
+            return '사회복무요원1'
+        elif '2' in email_lower:
+            return '사회복무요원2'
+        elif '3' in email_lower:
+            return '사회복무요원3'
+        else:
+            return '사회복무요원'  # 기본값
     elif 'developer' in email_lower or '개발자' in email_lower:
         return '개발자'
     else:
@@ -115,5 +138,6 @@ FIREBASE_CONFIG = {
     "projectId": os.environ.get('FIREBASE_PROJECT_ID', 'your-project-id'),
     "storageBucket": os.environ.get('FIREBASE_STORAGE_BUCKET', 'your-project.firebasestorage.app'),
     "messagingSenderId": os.environ.get('FIREBASE_MESSAGING_SENDER_ID', ''),
-    "appId": os.environ.get('FIREBASE_APP_ID', '')
+    "appId": os.environ.get('FIREBASE_APP_ID', ''),
+    "measurementId": os.environ.get('FIREBASE_MEASUREMENT_ID', '')  # Analytics용 (선택사항)
 }

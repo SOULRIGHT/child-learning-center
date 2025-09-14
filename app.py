@@ -190,6 +190,14 @@ def check_permission(required_roles=None, excluded_roles=None):
     
     return True
 
+# 사용 예시:
+# @app.route('/admin')
+# @login_required
+# def admin_page():
+#     if not check_permission(required_roles=['센터장', '개발자']):
+#         abort(403)
+#     return render_template('admin.html')
+
 # 데이터베이스 초기화 함수
 def init_db():
     """⚠️ 주의: 이 함수는 개발/테스트 환경에서만 사용하세요!"""
@@ -685,7 +693,7 @@ def delete_child(child_id):
     child_name = child.name
     
     # 권한 확인 (센터장과 돌봄선생님만 삭제 가능)
-    if current_user.role not in ['센터장', '돌봄선생님']:
+    if current_user.role not in ['개발자']:
         flash('아동 삭제 권한이 없습니다.', 'error')
         return redirect(url_for('children_list'))
     
@@ -1113,7 +1121,7 @@ def delete_score(record_id):
     child_id = record.child_id
     
     # 권한 확인 (센터장과 돌봄선생님만 삭제 가능)
-    if current_user.role not in ['센터장', '돌봄선생님']:
+    if current_user.role not in ['개발자']:
         flash('점수 기록 삭제 권한이 없습니다.', 'error')
         return redirect(url_for('child_detail', child_id=child_id))
     
@@ -3002,7 +3010,7 @@ def delete_multiple_notifications_route():
 @login_required
 def test_notifications():
     """테스트 알림 생성 (개발용)"""
-    if not current_user.role == '센터장':
+    if not current_user.role == '개발자':
         return redirect(url_for('dashboard'))
     
     # 테스트 알림들 생성
