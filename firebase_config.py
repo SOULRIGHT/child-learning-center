@@ -65,29 +65,44 @@ def verify_firebase_token(token):
 
 def get_user_role_from_email(email):
     """이메일을 기반으로 사용자 역할 결정"""
+    print(f"🐛 DEBUG: get_user_role_from_email 호출됨!")
+    print(f"🐛 DEBUG: 입력 이메일: '{email}'")
+    
     if not email:
+        print("🐛 DEBUG: 이메일이 없음 → 일반사용자")
         return '일반사용자'
     
     email_lower = email.lower()
+    print(f"🐛 DEBUG: 소문자 변환: '{email_lower}'")
     
     # 이메일 패턴 기반 역할 매핑
     if 'center' in email_lower or '센터장' in email_lower:
+        print(f"🐛 DEBUG: CENTER 매칭! → 센터장")
         return '센터장'
     elif 'teacher' in email_lower or '선생님' in email_lower:
+        print(f"🐛 DEBUG: TEACHER 매칭! → 돌봄선생님")
         return '돌봄선생님'
-    elif 'social_worker' in email_lower or '사회복무' in email_lower:
+    elif 'sowo' in email_lower or '사회복무' in email_lower:
+        print(f"🐛 DEBUG: SOWO 매칭!")
         # 숫자 패턴으로 구분
         if '1' in email_lower:
+            print(f"🐛 DEBUG: 숫자 1 발견 → 사회복무요원1")
             return '사회복무요원1'
         elif '2' in email_lower:
+            print(f"🐛 DEBUG: 숫자 2 발견 → 사회복무요원2")
             return '사회복무요원2'
         elif '3' in email_lower:
+            print(f"🐛 DEBUG: 숫자 3 발견 → 사회복무요원3")
             return '사회복무요원3'
         else:
-            return '사회복무요원'  # 기본값
-    elif 'developer' in email_lower or '개발자' in email_lower:
+            print(f"🐛 DEBUG: 기본 사회복무요원")
+            return '사회복무요원'
+    elif 'dev' in email_lower or '개발자' in email_lower:
+        print(f"🐛 DEBUG: DEV 매칭! → 개발자")
         return '개발자'
     else:
+        print(f"🐛 DEBUG: 모든 패턴 실패 → 일반사용자")
+        print(f"🐛 DEBUG: 체크 결과 - dev in email: {'dev' in email_lower}")
         return '일반사용자'
 
 def create_firebase_user(email, password, display_name=None):
