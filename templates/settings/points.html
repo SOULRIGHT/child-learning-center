@@ -1,131 +1,190 @@
 {% extends "base.html" %}
 
-{% block title %}포인트 시스템 설정 - 설정{% endblock %}
+{% block title %}수동 포인트 관리 - 설정{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <!-- 페이지 헤더 -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h4 class="fw-bold text-dark mb-1">포인트 시스템 설정</h4>
-            <p class="text-muted mb-0">포인트 기준 및 과목 설정을 관리합니다.</p>
+            <h4 class="fw-bold text-dark mb-1">수동 포인트 관리</h4>
+            <p class="text-muted mb-0">연필, 지우개 구매, 교재 완료 등 수동으로 포인트를 추가/차감합니다.</p>
         </div>
         <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left me-2"></i>설정으로 돌아가기
         </a>
     </div>
 
-    <!-- 포인트 기준 설정 -->
+    <!-- 수동 포인트 입력 -->
     <div class="card">
         <div class="card-header">
             <h5 class="card-title mb-0">
-                <i class="bi bi-star me-2"></i>포인트 기준 설정
+                <i class="bi bi-plus-circle-fill me-2"></i>수동 포인트 입력
             </h5>
         </div>
         <div class="card-body">
-            <form>
+            <form id="manualPointsForm">
                 <div class="row">
-                    <div class="col-md-4">
-                        <label class="form-label">완벽한 학습 (현재: 200점)</label>
-                        <input type="number" class="form-control" value="200" min="0" max="1000">
-                        <small class="text-muted">모든 문제를 맞춘 경우</small>
+                    <div class="col-md-3">
+                        <label class="form-label">아동 선택</label>
+                        <select class="form-select" id="childSelect" required>
+                            <option value="">아동을 선택하세요</option>
+                            {% for child in children %}
+                            <option value="{{ child.id }}">{{ child.name }} ({{ child.grade }}학년)</option>
+                            {% endfor %}
+                        </select>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">부분 학습 (현재: 100점)</label>
-                        <input type="number" class="form-control" value="100" min="0" max="1000">
-                        <small class="text-muted">일부 문제를 맞춘 경우</small>
+                    <div class="col-md-3">
+                        <label class="form-label">과목명</label>
+                        <input type="text" class="form-control" id="subjectName" placeholder="연필, 지우개, 교재 완료 등" required>
+                        <div class="mt-1">
+                            <small class="text-muted">빠른 입력:</small>
+                            <button type="button" class="btn btn-sm btn-outline-danger ms-1" onclick="setQuickInput('연필', -300, '연필 구매')">연필</button>
+                            <button type="button" class="btn btn-sm btn-outline-warning ms-1" onclick="setQuickInput('지우개', -500, '지우개 구매')">지우개</button>
+                            <button type="button" class="btn btn-sm btn-outline-success ms-1" onclick="setQuickInput('교재 완료', 3000, '교재완료(어떤 교재)')">교재 완료</button>
+                        </div>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">미완성 (현재: 0점)</label>
-                        <input type="number" class="form-control" value="0" min="0" max="1000">
-                        <small class="text-muted">학습하지 않은 경우</small>
+                    <div class="col-md-2">
+                        <label class="form-label">점수</label>
+                        <input type="number" class="form-control" id="points" placeholder="50" min="-5000" max="5000" required>
+                        <small class="text-muted">음수 입력시 차감</small>
                     </div>
-                </div>
-                <div class="mt-3">
-                    <button type="submit" class="btn btn-success">
-                        <i class="bi bi-check-circle me-2"></i>포인트 기준 저장
-                    </button>
+                    <div class="col-md-3">
+                        <label class="form-label">사유</label>
+                        <input type="text" class="form-control" id="reason" placeholder="연필 구매, 교재완료(국어) 등" required>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-check-circle me-1"></i>입력
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- 과목 설정 -->
+    <!-- 최근 수동 포인트 히스토리 -->
     <div class="card mt-4">
-        <div class="card-header">
+        <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="card-title mb-0">
-                <i class="bi bi-book me-2"></i>과목 설정
+                <i class="bi bi-clock-history me-2"></i>최근 수동 포인트 내역
             </h5>
+            <small class="text-muted">최근 20개 항목만 표시됩니다</small>
         </div>
         <div class="card-body">
-            <div class="row">
-                <div class="col-md-6">
-                    <h6 class="fw-bold mb-3">현재 과목</h6>
-                    <div class="list-group">
-                        <div class="list-group-item d-flex justify-content-between align-items-center">
-                            <div>
-                                <i class="bi bi-check-circle text-success me-2"></i>
-                                <strong>국어</strong>
-                                <small class="text-muted ms-2">활성화됨</small>
-                            </div>
-                            <button class="btn btn-sm btn-outline-danger" disabled>
-                                비활성화
-                            </button>
-                        </div>
-                        <div class="list-group-item d-flex justify-content-between align-items-center">
-                            <div>
-                                <i class="bi bi-check-circle text-success me-2"></i>
-                                <strong>수학</strong>
-                                <small class="text-muted ms-2">활성화됨</small>
-                            </div>
-                            <button class="btn btn-sm btn-outline-danger" disabled>
-                                비활성화
-                            </button>
-                        </div>
-                        <div class="list-group-item d-flex justify-content-between align-items-center">
-                            <div>
-                                <i class="bi bi-check-circle text-success me-2"></i>
-                                <strong>쎈 수학</strong>
-                                <small class="text-muted ms-2">활성화됨</small>
-                            </div>
-                            <button class="btn btn-sm btn-outline-danger" disabled>
-                                비활성화
-                            </button>
-                        </div>
-                        <div class="list-group-item d-flex justify-content-between align-items-center">
-                            <div>
-                                <i class="bi bi-check-circle text-success me-2"></i>
-                                <strong>독서</strong>
-                                <small class="text-muted ms-2">활성화됨</small>
-                            </div>
-                            <button class="btn btn-sm btn-outline-danger" disabled>
-                                비활성화
-                            </button>
-                        </div>
-                    </div>
-                    <div class="alert alert-info mt-3">
-                        <i class="bi bi-info-circle me-2"></i>
-                        <strong>참고:</strong> 현재 4개 과목이 모두 활성화되어 있습니다. 과목을 비활성화하면 해당 과목의 포인트 입력이 불가능해집니다.
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <h6 class="fw-bold mb-3">새 과목 추가</h6>
-                    <form>
-                        <div class="mb-3">
-                            <label class="form-label">과목명</label>
-                            <input type="text" class="form-control" placeholder="예: 영어, 과학">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">설명</label>
-                            <textarea class="form-control" rows="2" placeholder="과목에 대한 설명"></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-plus-circle me-2"></i>과목 추가
-                        </button>
-                    </form>
-                </div>
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>아동명</th>
+                            <th>과목명</th>
+                            <th>점수</th>
+                            <th>사유</th>
+                            <th>입력자</th>
+                            <th>입력시간</th>
+                            <th>작업</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentHistory">
+                        <!-- JavaScript로 동적 로딩 -->
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 </div>
-{% endblock %} 
+
+<script>
+// 빠른 입력 설정 (과목명, 점수, 사유 모두 자동 채우기)
+function setQuickInput(subject, points, reason) {
+    document.getElementById('subjectName').value = subject;
+    document.getElementById('points').value = points;
+    document.getElementById('reason').value = reason;
+}
+
+// 폼 제출 처리
+document.getElementById('manualPointsForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = {
+        child_id: document.getElementById('childSelect').value,
+        subject: document.getElementById('subjectName').value,
+        points: parseInt(document.getElementById('points').value),
+        reason: document.getElementById('reason').value
+    };
+    
+    fetch('/api/manual-points', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('수동 포인트가 성공적으로 추가되었습니다!');
+            document.getElementById('manualPointsForm').reset();
+            loadRecentHistory();
+        } else {
+            alert('오류: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('처리 중 오류가 발생했습니다.');
+    });
+});
+
+// 최근 히스토리 로딩
+function loadRecentHistory() {
+    fetch('/api/manual-points/recent')
+    .then(response => response.json())
+    .then(data => {
+        const tbody = document.getElementById('recentHistory');
+        tbody.innerHTML = '';
+        
+        data.history.forEach(item => {
+            const row = tbody.insertRow();
+            row.innerHTML = `
+                <td><strong>${item.child_name}</strong></td>
+                <td><span class="badge bg-secondary">${item.subject}</span></td>
+                <td><span class="badge ${item.points > 0 ? 'bg-success' : 'bg-danger'}">${item.points > 0 ? '+' : ''}${item.points}</span></td>
+                <td>${item.reason}</td>
+                <td>${item.created_by}</td>
+                <td>${item.created_at}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteManualPoint(${item.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+        });
+    });
+}
+
+// 수동 포인트 삭제
+function deleteManualPoint(id) {
+    if (confirm('이 수동 포인트 내역을 삭제하시겠습니까?')) {
+        fetch(`/api/manual-points/${id}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('삭제되었습니다.');
+                loadRecentHistory();
+            } else {
+                alert('삭제 실패: ' + data.error);
+            }
+        });
+    }
+}
+
+// 페이지 로드시 히스토리 로딩
+document.addEventListener('DOMContentLoaded', function() {
+    loadRecentHistory();
+});
+</script>
+{% endblock %}

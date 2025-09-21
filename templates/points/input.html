@@ -239,6 +239,32 @@
                     </form>
                 </div>
             </div>
+            
+            <!-- 수동 포인트 관리 바로가기 카드 -->
+            <div class="card mt-4">
+                <div class="card-body text-center py-4">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <h6 class="mb-2 text-dark">
+                                <i class="fas fa-plus-circle text-success me-2"></i>
+                                특별한 포인트가 더 필요하신가요?
+                            </h6>
+                            <p class="text-muted mb-0 small">
+                                연필, 지우개 구매, 교재 완료 등 수동으로 포인트를 추가하거나 차감할 수 있습니다.
+                            </p>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="{{ url_for('settings_points') }}" 
+                               class="btn btn-outline-success btn-lg" 
+                               data-role="manual-points"
+                               aria-label="수동 포인트 관리 페이지로 이동">
+                                <i class="fas fa-arrow-right me-2"></i>
+                                수동 포인트 입력
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -373,6 +399,21 @@ document.querySelector('form').addEventListener('submit', function(e) {
     }
 });
 
+// 수동 포인트 버튼 클릭 이벤트 (template-javascript-safety 규칙 준수)
+document.addEventListener('click', function(e) {
+    if (e.target.matches('[data-role="manual-points"]') || e.target.closest('[data-role="manual-points"]')) {
+        e.preventDefault();
+        const button = e.target.closest('[data-role="manual-points"]');
+        try {
+            console.log('🔗 수동 포인트 관리 페이지로 이동합니다...');
+            window.location.href = button.href;
+        } catch (error) {
+            console.error('❌ 페이지 이동 중 오류:', error);
+            alert('페이지 이동 중 오류가 발생했습니다.');
+        }
+    }
+});
+
 // 배열 합계 함수
 function sum(arr) {
     return arr.reduce((sum, val) => sum + val, 0);
@@ -385,6 +426,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 디버깅 정보 출력
     console.log('🚀 포인트 입력 페이지 로드 완료');
     console.log('📊 실시간 포인트 계산 시스템 활성화');
+    console.log('🔗 수동 포인트 입력 기능 연결됨');
 });
 </script>
-{% endblock %} 
+{% endblock %}

@@ -508,7 +508,7 @@ def firebase_login():
             })
         else:
             return jsonify({'success': False, 'error': 'Invalid Firebase token'})
-            
+    
     except Exception as e:
         print(f"Firebase login error: {e}")
         return jsonify({'success': False, 'error': str(e)})
@@ -1690,15 +1690,15 @@ def points_input(child_id):
             math_points = int(request.form.get('math_points', 0))
             ssen_points = int(request.form.get('ssen_points', 0))
             reading_points = int(request.form.get('reading_points', 0))
-
+        
             # 새 과목들 (2025-09-17 추가)
             piano_points = int(request.form.get('piano_points', 0))
             english_points = int(request.form.get('english_points', 0))
             advanced_math_points = int(request.form.get('advanced_math_points', 0))
             writing_points = int(request.form.get('writing_points', 0))
 
-            # 수동 포인트 (기본값 0, 나중에 별도 관리)
-            manual_points = 0  # 현재는 0으로 고정, 나중에 수동 관리 기능에서 처리
+            # 수동 포인트 (기존 값 보존)
+            manual_points = existing_record.manual_points if existing_record else 0
         
             # 값 검증: 음수 방지만 방지
             if any(points < 0 for points in [korean_points, math_points, ssen_points, reading_points, piano_points, english_points, advanced_math_points, writing_points]):
@@ -2432,8 +2432,219 @@ def settings_users():
 @app.route('/settings/points')
 @login_required
 def settings_points():
-    """포인트 시스템 설정 페이지"""
-    return render_template('settings/points.html')
+    """수동 포인트 관리 페이지"""
+    children = Child.query.filter_by(include_in_stats=True).order_by(Child.grade, Child.name).all()
+    return render_template('settings/points.html', children=children)
+
+# 수동 포인트 관리 API
+@app.route('/api/manual-points', methods=['POST'])
+@login_required
+def add_manual_points():
+    """수동 포인트 추가 API"""
+    try:
+        data = request.get_json()
+        child_id = data.get('child_id')
+        subject = data.get('subject')
+        points = data.get('points')
+        reason = data.get('reason')
+        
+        # 입력 검증
+        if not all([child_id, subject, points is not None, reason]):
+            return jsonify({'success': False, 'error': '모든 필드를 입력해주세요.'})
+        
+        # 아동 확인
+        child = Child.query.get(child_id)
+        if not child:
+            return jsonify({'success': False, 'error': '아동을 찾을 수 없습니다.'})
+        
+        # 오늘 날짜의 기록 찾기 또는 생성
+        today = datetime.now().date()
+        daily_record = DailyPoints.query.filter_by(child_id=child_id, date=today).first()
+        
+        if not daily_record:
+            # 새 기록 생성
+            daily_record = DailyPoints(
+                child_id=child_id,
+                date=today,
+                korean_points=0,
+                math_points=0,
+                ssen_points=0,
+                reading_points=0,
+                piano_points=0,
+                english_points=0,
+                advanced_math_points=0,
+                writing_points=0,
+                manual_points=0,
+                manual_history='[]',
+                total_points=0,
+                created_by=current_user.id
+            )
+            db.session.add(daily_record)
+        
+        # 수동 히스토리 업데이트
+        import json
+        try:
+            history = json.loads(daily_record.manual_history) if daily_record.manual_history else []
+        except:
+            history = []
+        
+        # 새 히스토리 항목 추가
+        new_history_item = {
+            'id': len(history) + 1,
+            'subject': subject,
+            'points': points,
+            'reason': reason,
+            'created_by': current_user.name or current_user.username,
+            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        history.append(new_history_item)
+        
+        # 수동 포인트 총합 계산
+        manual_total = sum(item['points'] for item in history)
+        
+        # 기록 업데이트
+        daily_record.manual_history = json.dumps(history, ensure_ascii=False)
+        daily_record.manual_points = manual_total
+        
+        # 총 포인트 재계산
+        daily_record.total_points = (
+            daily_record.korean_points + daily_record.math_points + 
+            daily_record.ssen_points + daily_record.reading_points +
+            daily_record.piano_points + daily_record.english_points +
+            daily_record.advanced_math_points + daily_record.writing_points +
+            daily_record.manual_points
+        )
+        
+        # 포인트 히스토리에도 기록 (변경 이력 페이지용)
+        change_type = '추가' if points > 0 else '차감'
+        points_history = PointsHistory(
+            child_id=child_id,
+            date=today,
+            old_korean_points=0, old_math_points=0, old_ssen_points=0, old_reading_points=0, old_total_points=daily_record.total_points - points,
+            new_korean_points=0, new_math_points=0, new_ssen_points=0, new_reading_points=0, new_total_points=daily_record.total_points,
+            change_type=change_type,
+            changed_by=current_user.id,
+            change_reason=f'수동 {change_type}: {subject} ({reason})'
+        )
+        db.session.add(points_history)
+        
+        # 누적 포인트 자동 업데이트
+        update_cumulative_points(child_id, commit=False)
+        
+        db.session.commit()
+        
+        # 실시간 백업 호출
+        try:
+            realtime_backup(child_id, "manual_update")
+        except Exception as backup_error:
+            print(f"백업 실패: {backup_error}")
+        
+        return jsonify({'success': True, 'message': f'수동 포인트가 {change_type}되었습니다.'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"수동 포인트 추가 오류: {str(e)}")
+        return jsonify({'success': False, 'error': f'처리 중 오류가 발생했습니다: {str(e)}'})
+
+@app.route('/api/manual-points/recent')
+@login_required
+def get_recent_manual_points():
+    """최근 수동 포인트 내역 조회 API"""
+    try:
+        import json
+        
+        # 최근 20개 기록 조회
+        recent_records = DailyPoints.query.filter(
+            DailyPoints.manual_history != '[]',
+            DailyPoints.manual_history.isnot(None)
+        ).order_by(DailyPoints.date.desc()).limit(20).all()
+        
+        history_items = []
+        
+        for record in recent_records:
+            try:
+                history = json.loads(record.manual_history) if record.manual_history else []
+                child = Child.query.get(record.child_id)
+                
+                for item in reversed(history):  # 최신순으로
+                    history_items.append({
+                        'id': f"{record.id}_{item['id']}",  # 고유 ID
+                        'child_name': child.name if child else '알 수 없음',
+                        'subject': item['subject'],
+                        'points': item['points'],
+                        'reason': item['reason'],
+                        'created_by': item['created_by'],
+                        'created_at': item['created_at']
+                    })
+            except:
+                continue
+        
+        # 날짜순으로 정렬 후 20개만
+        history_items.sort(key=lambda x: x['created_at'], reverse=True)
+        history_items = history_items[:20]
+        
+        return jsonify({'success': True, 'history': history_items})
+        
+    except Exception as e:
+        print(f"수동 포인트 조회 오류: {str(e)}")
+        return jsonify({'success': False, 'error': f'조회 중 오류가 발생했습니다: {str(e)}'})
+
+@app.route('/api/manual-points/<item_id>', methods=['DELETE'])
+@login_required
+def delete_manual_point(item_id):
+    """수동 포인트 삭제 API"""
+    try:
+        # item_id는 "record_id_history_id" 형태
+        record_id, history_id = item_id.split('_')
+        record_id = int(record_id)
+        history_id = int(history_id)
+        
+        daily_record = DailyPoints.query.get(record_id)
+        if not daily_record:
+            return jsonify({'success': False, 'error': '기록을 찾을 수 없습니다.'})
+        
+        import json
+        try:
+            history = json.loads(daily_record.manual_history) if daily_record.manual_history else []
+        except:
+            return jsonify({'success': False, 'error': '히스토리 데이터 오류'})
+        
+        # 해당 항목 삭제
+        history = [item for item in history if item['id'] != history_id]
+        
+        # 수동 포인트 총합 재계산
+        manual_total = sum(item['points'] for item in history)
+        
+        # 기록 업데이트
+        daily_record.manual_history = json.dumps(history, ensure_ascii=False)
+        daily_record.manual_points = manual_total
+        
+        # 총 포인트 재계산
+        daily_record.total_points = (
+            daily_record.korean_points + daily_record.math_points + 
+            daily_record.ssen_points + daily_record.reading_points +
+            daily_record.piano_points + daily_record.english_points +
+            daily_record.advanced_math_points + daily_record.writing_points +
+            daily_record.manual_points
+        )
+        
+        # 누적 포인트 자동 업데이트
+        update_cumulative_points(daily_record.child_id, commit=False)
+        
+        db.session.commit()
+        
+        # 실시간 백업 호출
+        try:
+            realtime_backup(daily_record.child_id, "manual_delete")
+        except Exception as backup_error:
+            print(f"백업 실패: {backup_error}")
+        
+        return jsonify({'success': True, 'message': '수동 포인트가 삭제되었습니다.'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"수동 포인트 삭제 오류: {str(e)}")
+        return jsonify({'success': False, 'error': f'삭제 중 오류가 발생했습니다: {str(e)}'})
 
 @app.route('/settings/data')
 @login_required
@@ -3227,6 +3438,12 @@ def get_backup_data():
                 'math_points': point.math_points,
                 'ssen_points': point.ssen_points,
                 'reading_points': point.reading_points,
+                'piano_points': point.piano_points,
+                'english_points': point.english_points,
+                'advanced_math_points': point.advanced_math_points,
+                'writing_points': point.writing_points,
+                'manual_points': point.manual_points,
+                'manual_history': point.manual_history,
                 'total_points': point.total_points,
                 'created_by': point.created_by,
                 'created_at': point.created_at.isoformat() if point.created_at else None,
@@ -3357,7 +3574,7 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
         
         # 포인트 기록 시트
         ws_points = wb.create_sheet("포인트기록")
-        ws_points.append(['ID', '아동ID', '날짜', '국어', '수학', '쎈수학', '독서', '총점', '입력자', '생성일'])
+        ws_points.append(['ID', '아동ID', '날짜', '국어', '수학', '쎈수학', '독서', '피아노', '영어', '고학년수학', '쓰기', '수동포인트', '수동히스토리', '총점', '입력자', '생성일'])
         
         for point in backup_data['daily_points']:
             ws_points.append([
@@ -3368,6 +3585,12 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
                 point['math_points'],
                 point['ssen_points'],
                 point['reading_points'],
+                point.get('piano_points', 0),
+                point.get('english_points', 0),
+                point.get('advanced_math_points', 0),
+                point.get('writing_points', 0),
+                point.get('manual_points', 0),
+                point.get('manual_history', '[]'),
                 point['total_points'],
                 point['created_by'],
                 point['created_at']
