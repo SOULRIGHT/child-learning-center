@@ -77,14 +77,28 @@ def set_security_headers(response):
     response.headers['X-XSS-Protection'] = '1; mode=block'  # XSS 공격 방지
     
     # === Content Security Policy (CSP) ===
-    # XSS 공격 완전 차단을 위한 엄격한 CSP
+    # 모든 환경에서 동일한 CSP 적용 (로컬=배포 일관성)
     csp_policy = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://cdn.jsdelivr.net; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com; "
+        # JavaScript: Firebase SDK + Bootstrap + CDN
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+        "https://www.gstatic.com https://apis.google.com https://www.googleapis.com "
+        "https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+        # 스타일시트: Bootstrap + Google Fonts + Firebase UI + CDN
+        "style-src 'self' 'unsafe-inline' "
+        "https://cdn.jsdelivr.net https://fonts.googleapis.com https://cdnjs.cloudflare.com "
+        "https://www.gstatic.com; "
+        # 폰트: Bootstrap Icons + Google Fonts + CDN
+        "font-src 'self' data: "
+        "https://fonts.gstatic.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+        # 이미지: 모든 HTTPS 소스 허용
         "img-src 'self' data: https:; "
-        "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; "
+        # 연결: Firebase 모든 엔드포인트 + CDN
+        "connect-src 'self' "
+        "https://identitytoolkit.googleapis.com https://securetoken.googleapis.com "
+        "https://www.googleapis.com https://firebase.googleapis.com "
+        "https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+        # 보안 정책
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
         "form-action 'self'"
@@ -2966,6 +2980,11 @@ def profile():
         flash('프로필 페이지에 접근할 권한이 없습니다.', 'error')
         return redirect(url_for('dashboard'))
     return render_template('profile.html')
+
+@app.route('/privacy-policy')
+def privacy_policy():
+    """개인정보보호 및 시스템 보안 정책 페이지"""
+    return render_template('privacy_policy.html')
 
 @app.route('/settings/system')
 @login_required

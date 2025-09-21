@@ -9,30 +9,13 @@
     --accent-blue: #60a5fa;
     --light-blue: #dbeafe;
     --background-gray: #f8fafc;
-    --sidebar-width: 260px;
+    --sidebar-width: 220px;
     --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     --card-shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
-/* 개발 브랜치용 테마 */
-.dev-branch {
-    --primary-blue: #ff6b35;
-    --primary-blue-dark: #d35400;
-    --primary-blue-light: #ffb997;
-    --sidebar-width: 260px;
-    background: linear-gradient(180deg, #ff6b35 0%, #d35400 100%) !important;
-}
+/* 개발 브랜치용 테마 - 제거됨 */
 
-.branch-indicator {
-    margin-top: 0.5rem;
-}
-
-.branch-indicator .badge {
-    font-size: 0.85rem;
-    padding: 0.4em 0.8em;
-    border-radius: 8px;
-    letter-spacing: 1px;
-}
 
 /* 기본 스타일 */
 * {
@@ -696,8 +679,8 @@ body {
     .sidebar {
         position: fixed;
         top: 0;
-        left: -260px; /* 숨김 상태 */
-        width: 260px;
+        left: -220px; /* 숨김 상태 */
+        width: 220px;
         height: 100vh;
         z-index: 1050;
         transition: left 0.3s ease;
@@ -731,8 +714,8 @@ body {
     }
     
     .sidebar {
-        width: 240px;
-        left: -240px;
+        width: 200px;
+        left: -200px;
     }
     
     .page-title {

@@ -31,14 +31,9 @@
         
         <!-- 사이드바 -->
         <div class="sidebar" id="sidebar">
-            <div class="sidebar-brand dev-branch">
+            <div class="sidebar-brand">
                 <h3><i class="bi bi-house-heart-fill me-2"></i>지역아동센터</h3>
                 <p>학습관리 시스템</p>
-                <div class="branch-indicator">
-                    <span class="badge bg-warning text-dark">
-                        <i class="bi bi-code-slash"></i> DEV BRANCH
-                    </span>
-                </div>
             </div>
             
             <nav class="sidebar-nav">
@@ -95,12 +90,6 @@
                 </div>
                 -->
                 
-                <div class="nav-item">
-                    <a href="{{ url_for('reports_overview') }}" class="nav-link {% if request.endpoint and 'reports' in request.endpoint %}active{% endif %}">
-                        <i class="bi bi-clipboard-data"></i>
-                        리포트
-                    </a>
-                </div>
                 <div class="nav-item">
                     <a href="{{ url_for('notifications') }}" class="nav-link {% if request.endpoint and 'notifications' in request.endpoint %}active{% endif %}">
                         <i class="bi bi-bell"></i>
@@ -163,6 +152,18 @@
             <div class="content-area">
                 {% block content %}{% endblock %}
             </div>
+            
+            <!-- Footer (메인 콘텐츠 영역 내에서 가운데 정렬) -->
+            <footer class="border-top mt-auto py-3">
+                <div class="text-center">
+                    <small class="text-muted">
+                        © 2025 지역아동센터 학습관리 시스템 | 
+                        <a href="{{ url_for('privacy_policy') }}" class="text-muted" style="text-decoration: underline;">
+                            <i class="fas fa-shield-alt me-1"></i>개인정보보호정책
+                        </a>
+                    </small>
+                </div>
+            </footer>
         </div>
     {% endif %}
 
@@ -212,6 +213,7 @@
             }
         });
     </script>
+    
     
     {% block extra_js %}{% endblock %}
 </body>

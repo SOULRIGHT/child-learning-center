@@ -90,6 +90,28 @@
             margin: 1rem 0;
             border: 1px solid #c3e6cb;
         }
+        
+        /* 폼 레이블 왼쪽 정렬 */
+        .custom-login-form .form-label {
+            text-align: left !important;
+        }
+        
+        .custom-login-form form {
+            text-align: left;
+        }
+        
+        .custom-login-form .btn {
+            text-align: center !important;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        /* Flexbox로 버튼 가운데 정렬 */
+        .custom-login-form .btn-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
@@ -147,17 +169,15 @@
                         </div>
 
             <div class="mt-4">
-                <div class="text-center mb-3">
-                    <small class="text-muted">시스템 정보</small>
-                </div>
-                
                 <div class="accordion" id="systemInfoAccordion">
                     <div class="accordion-item border-0">
-                        <h2 class="accordion-header">
-                            <button class="btn btn-outline-info btn-sm w-100" type="button" data-bs-toggle="collapse" data-bs-target="#collapseInfo">
-                                <i class="bi bi-info-circle me-2"></i>시스템 정보
-                            </button>
-                        </h2>
+                         <h2 class="accordion-header">
+                             <div class="text-center">
+                                 <button class="btn btn-outline-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#collapseInfo">
+                                     <i class="bi bi-info-circle me-2"></i>시스템 정보
+                                 </button>
+                             </div>
+                         </h2>
                         <div id="collapseInfo" class="accordion-collapse collapse" data-bs-parent="#systemInfoAccordion">
                             <div class="accordion-body p-3">
                                 <div class="row g-2">
@@ -223,7 +243,6 @@
         const container = document.getElementById('firebaseui-auth-container');
         container.innerHTML = `
             <div class="custom-login-form">
-                <h3 class="mb-4">로그인</h3>
                 <form id="loginForm">
                     <div class="mb-3">
                         <label for="email" class="form-label">이메일</label>
@@ -234,6 +253,15 @@
                         <input type="password" class="form-control" id="password" required>
                     </div>
                     <button type="submit" class="btn btn-primary w-100">로그인</button>
+                    
+                    <!-- 개인정보보호정책 링크 -->
+                    <div class="text-center mt-3">
+                        <small class="text-muted">
+                            <a href="/privacy-policy" class="text-muted" style="text-decoration: underline;">
+                                <i class="fas fa-shield-alt me-1"></i>개인정보보호정책
+                            </a>
+                        </small>
+                    </div>
                 </form>
             </div>
         `;

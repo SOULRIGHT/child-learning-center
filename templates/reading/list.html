@@ -21,18 +21,18 @@
     <div class="card mb-4">
         <div class="card-body">
             <form method="GET" class="row g-3">
-                <div class="col-md-4">
+                <div class="col-md-5">
                     <label for="search" class="form-label">아동 검색</label>
                     <div class="input-group">
                         <span class="input-group-text"><i class="bi bi-search"></i></span>
                         <input type="text" class="form-control" id="search" name="search" 
-                               value="{{ search }}" placeholder="아동 이름을 입력해주세요">
+                               value="{{ search }}" placeholder="이름 입력">
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label for="grade" class="form-label">학년</label>
                     <select class="form-select" id="grade" name="grade">
-                        <option value="">전체 학년</option>
+                        <option value="">전체</option>
                         {% for grade in grade_list %}
                         <option value="{{ grade }}" {% if grade_filter|string == grade|string %}selected{% endif %}>
                             {{ grade }}학년
@@ -40,13 +40,16 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-3 d-flex align-items-end">
-                    <button type="submit" class="btn btn-outline-primary me-2">
-                        <i class="bi bi-search"></i> 검색
-                    </button>
-                    <a href="{{ url_for('reading_list') }}" class="btn btn-outline-secondary">
-                        <i class="bi bi-arrow-clockwise"></i> 초기화
-                    </a>
+                <div class="col-md-5">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="bi bi-search me-1"></i>검색
+                        </button>
+                        <a href="{{ url_for('reading_list') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-clockwise me-1"></i>초기화
+                        </a>
+                    </div>
                 </div>
             </form>
         </div>
