@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+
+{% block title %}포인트 입력 - 아동 선택{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <!-- 페이지 헤더 -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-star me-2"></i>포인트 입력 - 아동 선택
+                    </h4>
+                    <p class="mb-0 mt-2">포인트를 입력할 아동을 선택해주세요</p>
+                </div>
+            </div>
+            
+            <!-- 아동 선택 카드 -->
+            <div class="card">
+                <div class="card-body">
+                    <!-- 데스크톱/태블릿 레이아웃 -->
+                    <div class="row d-none d-md-flex">
+                        <div class="col-md-4">
+                            <label for="gradeFilter" class="form-label">
+                                <i class="fas fa-filter me-2 text-primary"></i>학년 필터
+                            </label>
+                            <select id="gradeFilter" class="form-select">
+                                <option value="">전체 학년</option>
+                                <option value="1">1학년</option>
+                                <option value="2">2학년</option>
+                                <option value="3">3학년</option>
+                                <option value="4">4학년</option>
+                                <option value="5">5학년</option>
+                                <option value="6">6학년</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="childSelector" class="form-label">
+                                <i class="fas fa-user me-2 text-success"></i>아동 선택
+                            </label>
+                            <select id="childSelector" class="form-select">
+                                <option value="">아동을 선택하세요</option>
+                                <!-- JavaScript로 동적 로딩 -->
+                            </select>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button id="goToInput" class="btn btn-primary w-100 py-2 d-flex justify-content-center align-items-center">
+                                입력
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 모바일 레이아웃 -->
+                    <div class="d-md-none">
+                        <div class="mb-3">
+                            <label for="gradeFilterMobile" class="form-label">
+                                <i class="fas fa-filter me-2 text-primary"></i>학년 필터
+                            </label>
+                            <select id="gradeFilterMobile" class="form-select">
+                                <option value="">전체 학년</option>
+                                <option value="1">1학년</option>
+                                <option value="2">2학년</option>
+                                <option value="3">3학년</option>
+                                <option value="4">4학년</option>
+                                <option value="5">5학년</option>
+                                <option value="6">6학년</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="childSelectorMobile" class="form-label">
+                                <i class="fas fa-user me-2 text-success"></i>아동 선택
+                            </label>
+                            <select id="childSelectorMobile" class="form-select">
+                                <option value="">아동을 선택하세요</option>
+                                <!-- JavaScript로 동적 로딩 -->
+                            </select>
+                        </div>
+                        <div class="d-grid">
+                            <button id="goToInputMobile" class="btn btn-primary btn-lg py-3 d-flex justify-content-center align-items-center">
+                                입력
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 안내 메시지 -->
+            <div class="alert alert-info mt-4">
+                <h6><i class="fas fa-info-circle me-2"></i>안내사항</h6>
+                <ul class="mb-0">
+                    <li>학년을 선택하면 해당 학년 아동만 표시됩니다</li>
+                    <li>아동을 선택한 후 "입력하기" 버튼을 클릭하세요</li>
+                    <li>매일 한 번씩 포인트를 입력하는 것을 권장합니다</li>
+                </ul>
+            </div>
+            
+            <!-- 빠른 액세스 -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-lightning-bolt me-2 text-warning"></i>빠른 액세스
+                    </h6>
+                </div>
+                <div class="card-body" id="quickAccessContainer">
+                    <!-- JavaScript로 최근 아동들 표시 -->
+                    <div class="text-center text-muted">
+                        <i class="fas fa-spinner fa-spin me-2"></i>로딩 중...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 학년별 아동 목록 로딩 함수
+async function loadChildrenByGrade(grade = '') {
+    try {
+        console.log(`📋 아동 목록 로딩... (학년: ${grade || '전체'})`);
+        
+        const url = grade ? `/api/children/by-grade?grade=${grade}` : '/api/children/by-grade';
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        const selector = document.getElementById('childSelector');
+        selector.innerHTML = '<option value="">아동을 선택하세요</option>';
+        
+        if (data.success && data.children.length > 0) {
+            data.children.forEach(child => {
+                const option = document.createElement('option');
+                option.value = child.id;
+                option.textContent = child.display_name;
+                selector.appendChild(option);
+            });
+            console.log(`✅ ${data.children.length}명의 아동 로딩 완료`);
+        } else {
+            console.log('⚠️ 조건에 맞는 아동이 없습니다');
+        }
+    } catch (error) {
+        console.error('❌ 아동 목록 로딩 오류:', error);
+        alert('아동 목록을 불러오는 중 오류가 발생했습니다.');
+    }
+}
+
+// 학년별 아동 목록 로딩 함수 (모바일)
+async function loadChildrenByGradeMobile(grade = '') {
+    try {
+        console.log(`📋 아동 목록 로딩 (모바일)... (학년: ${grade || '전체'})`);
+        
+        const url = grade ? `/api/children/by-grade?grade=${grade}` : '/api/children/by-grade';
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        const selector = document.getElementById('childSelectorMobile');
+        selector.innerHTML = '<option value="">아동을 선택하세요</option>';
+        
+        if (data.success && data.children.length > 0) {
+            data.children.forEach(child => {
+                const option = document.createElement('option');
+                option.value = child.id;
+                option.textContent = child.display_name;
+                selector.appendChild(option);
+            });
+            console.log(`✅ ${data.children.length}명의 아동 로딩 완료 (모바일)`);
+        } else {
+            console.log('⚠️ 조건에 맞는 아동이 없습니다 (모바일)');
+        }
+    } catch (error) {
+        console.error('❌ 아동 목록 로딩 오류 (모바일):', error);
+        alert('아동 목록을 불러오는 중 오류가 발생했습니다.');
+    }
+}
+
+// 빠른 액세스 아동 목록 로딩
+async function loadQuickAccess() {
+    try {
+        const response = await fetch('/api/children/by-grade');
+        const data = await response.json();
+        
+        const container = document.getElementById('quickAccessContainer');
+        
+        if (data.success && data.children.length > 0) {
+            // 학년별로 그룹화
+            const gradeGroups = {};
+            data.children.forEach(child => {
+                if (!gradeGroups[child.grade]) {
+                    gradeGroups[child.grade] = [];
+                }
+                gradeGroups[child.grade].push(child);
+            });
+            
+            let html = '';
+            Object.keys(gradeGroups).sort().forEach(grade => {
+                html += `<div class="mb-3">`;
+                html += `<h6 class="text-muted mb-2">${grade}학년</h6>`;
+                html += `<div class="d-flex flex-wrap gap-2">`;
+                
+                gradeGroups[grade].forEach(child => {
+                    html += `
+                        <button class="btn btn-outline-primary btn-sm quick-child-btn" 
+                                data-child-id="${child.id}" 
+                                data-child-name="${child.name}">
+                            ${child.name}
+                        </button>
+                    `;
+                });
+                
+                html += `</div></div>`;
+            });
+            
+            container.innerHTML = html;
+            
+            // 빠른 선택 버튼 이벤트 추가 (확인 메시지 없이 바로 이동)
+            document.querySelectorAll('.quick-child-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const childId = this.dataset.childId;
+                    const childName = this.dataset.childName;
+                    
+                    console.log(`🎯 빠른 선택: ${childName} (ID: ${childId})`);
+                    window.location.href = `/points/input/${childId}`;
+                });
+            });
+        } else {
+            container.innerHTML = '<p class="text-muted text-center">등록된 아동이 없습니다.</p>';
+        }
+    } catch (error) {
+        console.error('❌ 빠른 액세스 로딩 오류:', error);
+        const container = document.getElementById('quickAccessContainer');
+        container.innerHTML = '<p class="text-danger text-center">로딩 중 오류가 발생했습니다.</p>';
+    }
+}
+
+// 페이지 로드 시 초기화
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 아동 선택 페이지 로드 완료');
+    
+    // 전체 아동 목록 로딩 (데스크톱 & 모바일)
+    loadChildrenByGrade();
+    loadChildrenByGradeMobile();
+    
+    // 빠른 액세스 로딩
+    loadQuickAccess();
+    
+    // 학년 필터 변경 이벤트 (데스크톱)
+    document.getElementById('gradeFilter').addEventListener('change', function() {
+        const selectedGrade = this.value;
+        console.log(`🔄 학년 필터 변경: ${selectedGrade || '전체'}`);
+        loadChildrenByGrade(selectedGrade);
+        
+        // 모바일 버전도 동기화
+        document.getElementById('gradeFilterMobile').value = selectedGrade;
+        loadChildrenByGradeMobile(selectedGrade);
+    });
+    
+    // 학년 필터 변경 이벤트 (모바일)
+    document.getElementById('gradeFilterMobile').addEventListener('change', function() {
+        const selectedGrade = this.value;
+        console.log(`🔄 학년 필터 변경 (모바일): ${selectedGrade || '전체'}`);
+        loadChildrenByGradeMobile(selectedGrade);
+        
+        // 데스크톱 버전도 동기화
+        document.getElementById('gradeFilter').value = selectedGrade;
+        loadChildrenByGrade(selectedGrade);
+    });
+    
+    // 입력 버튼 클릭 이벤트 (데스크톱)
+    document.getElementById('goToInput').addEventListener('click', function() {
+        const selectedChildId = document.getElementById('childSelector').value;
+        
+        if (!selectedChildId) {
+            alert('아동을 선택해주세요.');
+            return;
+        }
+        
+        const childSelector = document.getElementById('childSelector');
+        const selectedChildName = childSelector.options[childSelector.selectedIndex].text;
+        
+        console.log(`🎯 선택된 아동: ${selectedChildName} (ID: ${selectedChildId})`);
+        window.location.href = `/points/input/${selectedChildId}`;
+    });
+    
+    // 입력 버튼 클릭 이벤트 (모바일)
+    document.getElementById('goToInputMobile').addEventListener('click', function() {
+        const selectedChildId = document.getElementById('childSelectorMobile').value;
+        
+        if (!selectedChildId) {
+            alert('아동을 선택해주세요.');
+            return;
+        }
+        
+        const childSelector = document.getElementById('childSelectorMobile');
+        const selectedChildName = childSelector.options[childSelector.selectedIndex].text;
+        
+        console.log(`🎯 선택된 아동 (모바일): ${selectedChildName} (ID: ${selectedChildId})`);
+        window.location.href = `/points/input/${selectedChildId}`;
+    });
+});
+</script>
+{% endblock %}

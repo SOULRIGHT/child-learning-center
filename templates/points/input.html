@@ -6,6 +6,18 @@
 <div class="container mt-4">
     <div class="row">
         <div class="col-md-8 mx-auto">
+            <!-- 다른 아동 선택 링크 -->
+            <div class="alert alert-info d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-info-circle me-2"></i>
+                    현재 선택: <strong>{{ child.name }} ({{ child.grade }}학년)</strong>
+                    <span class="text-muted ms-3">{{ today_record.date.strftime('%Y년 %m월 %d일') if today_record else today_date }}</span>
+                </div>
+                <a href="{{ url_for('points_input_select') }}" class="btn btn-outline-primary btn-sm">
+                    <i class="fas fa-exchange-alt me-2"></i>다른 아동 선택
+                </a>
+            </div>
+            
             <div class="card">
                 <div class="card-header">
                     <h4>{{ child.name }} ({{ child.grade }}학년) - 포인트 입력</h4>
@@ -108,7 +120,17 @@
                                 </label>
                             </div>
 
-                        <!-- 피아노 -->
+                        <!-- 추가 과목들 토글 버튼 -->
+                        <div class="text-center mt-4 mb-3">
+                            <button type="button" class="btn btn-info btn-sm" id="toggleAdditionalSubjects">
+                                <i class="fas fa-chevron-down me-2" id="toggleIcon"></i>
+                                <span id="toggleText">추가 과목 보기 (피아노, 영어, 고학년수학, 쓰기)</span>
+                            </button>
+                        </div>
+
+                        <!-- 추가 과목들 (접이식) -->
+                        <div id="additionalSubjects" class="collapse">
+                            <!-- 피아노 -->
                         <div class="mb-4">
                             <h5 class="text-info">피아노</h5>
                             <div class="btn-group w-100" role="group">
@@ -178,6 +200,7 @@
                                     <i class="fas fa-times-circle"></i> 미완료 (0점)
                                 </label>
                             </div>
+                        </div>
                         </div>
                         </div>
 
@@ -270,6 +293,25 @@
 </div>
 
 <script>
+// 추가 과목 토글 기능
+document.getElementById('toggleAdditionalSubjects').addEventListener('click', function() {
+    const additionalSubjects = document.getElementById('additionalSubjects');
+    const toggleIcon = document.getElementById('toggleIcon');
+    const toggleText = document.getElementById('toggleText');
+    
+    if (additionalSubjects.classList.contains('show')) {
+        // 접기
+        additionalSubjects.classList.remove('show');
+        toggleIcon.className = 'fas fa-chevron-down me-2';
+        toggleText.textContent = '추가 과목 보기 (피아노, 영어, 고학년수학, 쓰기)';
+    } else {
+        // 펼치기
+        additionalSubjects.classList.add('show');
+        toggleIcon.className = 'fas fa-chevron-up me-2';
+        toggleText.textContent = '추가 과목 숨기기';
+    }
+});
+
 // 총점 계산 함수 (강화된 버전)
 function updateTotalScore() {
     try {
@@ -427,6 +469,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 포인트 입력 페이지 로드 완료');
     console.log('📊 실시간 포인트 계산 시스템 활성화');
     console.log('🔗 수동 포인트 입력 기능 연결됨');
+    console.log('📋 접이식 추가 과목 기능 활성화');
 });
 </script>
 {% endblock %}

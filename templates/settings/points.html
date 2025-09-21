@@ -95,6 +95,52 @@
     </div>
 </div>
 
+<!-- 포인트 추가 확인 Modal -->
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmModalLabel">
+                    <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                    포인트 변경 확인
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center">
+                    <div class="alert alert-info mb-3">
+                        <h6 class="mb-2">
+                            <i class="fas fa-user me-2"></i>
+                            아동: <span id="confirmChildName" class="fw-bold"></span>
+                        </h6>
+                        <h6 class="mb-2">
+                            <i class="fas fa-book me-2"></i>
+                            과목: <span id="confirmSubject" class="fw-bold"></span>
+                        </h6>
+                        <h6 class="mb-2">
+                            <i class="fas fa-calculator me-2"></i>
+                            점수: <span id="confirmPoints" class="fw-bold"></span>
+                        </h6>
+                        <h6 class="mb-0">
+                            <i class="fas fa-comment me-2"></i>
+                            사유: <span id="confirmReason" class="fw-bold"></span>
+                        </h6>
+                    </div>
+                    <p class="text-muted mb-0">정말로 진행하시겠습니까?</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>취소
+                </button>
+                <button type="button" class="btn btn-primary" id="confirmSubmit">
+                    <i class="fas fa-check me-2"></i>확인
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 // 빠른 입력 설정 (과목명, 점수, 사유 모두 자동 채우기)
 function setQuickInput(subject, points, reason) {
@@ -103,38 +149,107 @@ function setQuickInput(subject, points, reason) {
     document.getElementById('reason').value = reason;
 }
 
-// 폼 제출 처리
+// 전역 변수로 폼 데이터 저장
+let pendingFormData = null;
+
+// 폼 제출 처리 (확인 Modal 표시)
 document.getElementById('manualPointsForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
-    const formData = {
-        child_id: document.getElementById('childSelect').value,
-        subject: document.getElementById('subjectName').value,
-        points: parseInt(document.getElementById('points').value),
-        reason: document.getElementById('reason').value
+    const childId = document.getElementById('childSelect').value;
+    const subjectName = document.getElementById('subjectName').value;
+    const points = parseInt(document.getElementById('points').value);
+    const reason = document.getElementById('reason').value;
+    
+    if (!childId || !subjectName || !points || !reason) {
+        alert('모든 필드를 입력해주세요.');
+        return;
+    }
+    
+    // 폼 데이터 임시 저장
+    pendingFormData = {
+        child_id: childId,
+        subject: subjectName,
+        points: points,
+        reason: reason
     };
     
-    fetch('/api/manual-points', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
-    })
-    .then(response => response.json())
-    .then(data => {
+    // 선택된 아동 이름 가져오기
+    const childSelect = document.getElementById('childSelect');
+    const childName = childSelect.options[childSelect.selectedIndex].text;
+    
+    // Modal에 정보 표시
+    document.getElementById('confirmChildName').textContent = childName;
+    document.getElementById('confirmSubject').textContent = subjectName;
+    
+    // 점수에 따라 색상과 텍스트 변경
+    const pointsSpan = document.getElementById('confirmPoints');
+    if (points > 0) {
+        pointsSpan.textContent = `+${points}점 (추가)`;
+        pointsSpan.className = 'fw-bold text-success';
+    } else {
+        pointsSpan.textContent = `${points}점 (차감)`;
+        pointsSpan.className = 'fw-bold text-danger';
+    }
+    
+    document.getElementById('confirmReason').textContent = reason;
+    
+    // Modal 표시
+    const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+    modal.show();
+});
+
+// Modal 확인 버튼 클릭 시 실제 API 호출
+document.getElementById('confirmSubmit').addEventListener('click', async function() {
+    if (!pendingFormData) {
+        alert('처리할 데이터가 없습니다.');
+        return;
+    }
+    
+    // 버튼 비활성화 및 로딩 표시
+    const confirmBtn = this;
+    const originalText = confirmBtn.innerHTML;
+    confirmBtn.disabled = true;
+    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>처리중...';
+    
+    try {
+        const response = await fetch('/api/manual-points', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(pendingFormData)
+        });
+        
+        const data = await response.json();
+        
         if (data.success) {
-            alert('수동 포인트가 성공적으로 추가되었습니다!');
+            // Modal 닫기
+            const modal = bootstrap.Modal.getInstance(document.getElementById('confirmModal'));
+            modal.hide();
+            
+            // 성공 메시지
+            alert('✅ 수동 포인트가 성공적으로 추가되었습니다!');
+            
+            // 폼 초기화
             document.getElementById('manualPointsForm').reset();
+            
+            // 최근 내역 새로고침
             loadRecentHistory();
+            
+            // 임시 데이터 클리어
+            pendingFormData = null;
         } else {
-            alert('오류: ' + data.error);
+            alert('❌ 오류: ' + data.error);
         }
-    })
-    .catch(error => {
+    } catch (error) {
         console.error('Error:', error);
-        alert('처리 중 오류가 발생했습니다.');
-    });
+        alert('❌ 처리 중 오류가 발생했습니다.');
+    } finally {
+        // 버튼 복원
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = originalText;
+    }
 });
 
 // 최근 히스토리 로딩

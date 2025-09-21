@@ -41,10 +41,17 @@ load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production-firebase-auth')
 
+# === 🔐 보안 설정 (2025-09-21 추가) ===
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)  # 30분 세션 타임아웃
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # JavaScript로 쿠키 접근 차단
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # 기본 CSRF 공격 방지
+app.config['SESSION_COOKIE_SECURE'] = False  # 개발환경: False, 프로덕션: True
+
 # 데이터베이스 설정
 if os.environ.get('DATABASE_URL'):
     # Railway 또는 프로덕션 환경
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+    app.config['SESSION_COOKIE_SECURE'] = True  # 프로덕션에서는 HTTPS 강제
 else:
     # 개발 환경 - SQLite 사용
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///child_center.db'
@@ -58,6 +65,79 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = '로그인이 필요합니다.'
+
+# === 🛡️ 보안 헤더 설정 ===
+@app.after_request
+def set_security_headers(response):
+    """모든 응답에 보안 헤더 추가"""
+    response.headers['X-Content-Type-Options'] = 'nosniff'  # MIME 타입 스니핑 방지
+    response.headers['X-Frame-Options'] = 'DENY'  # 클릭재킹 방지
+    response.headers['X-XSS-Protection'] = '1; mode=block'  # XSS 공격 방지
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'  # 리퍼러 정책
+    return response
+
+# === ⏰ 세션 영구화 ===
+@app.before_request
+def make_session_permanent():
+    """모든 세션을 영구 세션으로 설정하여 타임아웃 적용"""
+    session.permanent = True
+
+# === 🛡️ 브루트포스 공격 방지 시스템 ===
+# IP별 로그인 시도 추적 (메모리 기반)
+failed_login_attempts = {}
+blocked_ips = {}
+
+def get_client_ip():
+    """클라이언트 실제 IP 주소 가져오기 (프록시 고려)"""
+    if request.environ.get('HTTP_X_FORWARDED_FOR'):
+        return request.environ['HTTP_X_FORWARDED_FOR'].split(',')[0].strip()
+    elif request.environ.get('HTTP_X_REAL_IP'):
+        return request.environ['HTTP_X_REAL_IP']
+    else:
+        return request.remote_addr
+
+def is_ip_blocked(ip_address):
+    """IP가 차단되었는지 확인"""
+    if ip_address in blocked_ips:
+        block_time = blocked_ips[ip_address]
+        # 30분(1800초) 후 자동 해제
+        if datetime.utcnow() - block_time < timedelta(minutes=30):
+            return True
+        else:
+            # 차단 해제
+            del blocked_ips[ip_address]
+            if ip_address in failed_login_attempts:
+                del failed_login_attempts[ip_address]
+    return False
+
+def record_failed_login(ip_address):
+    """로그인 실패 기록"""
+    current_time = datetime.utcnow()
+    
+    if ip_address not in failed_login_attempts:
+        failed_login_attempts[ip_address] = []
+    
+    # 최근 1시간 내 실패 기록만 유지
+    failed_login_attempts[ip_address] = [
+        attempt_time for attempt_time in failed_login_attempts[ip_address]
+        if current_time - attempt_time < timedelta(hours=1)
+    ]
+    
+    # 새로운 실패 기록 추가
+    failed_login_attempts[ip_address].append(current_time)
+    
+    # 5회 이상 실패 시 IP 차단
+    if len(failed_login_attempts[ip_address]) >= 5:
+        blocked_ips[ip_address] = current_time
+        print(f"🚨 IP {ip_address} 차단됨 (5회 연속 로그인 실패)")
+        return True
+    
+    return False
+
+def clear_failed_login(ip_address):
+    """로그인 성공 시 실패 기록 초기화"""
+    if ip_address in failed_login_attempts:
+        del failed_login_attempts[ip_address]
 
 # 컨텍스트 프로세서: 모든 템플릿에서 센터 정보 사용 가능
 @app.context_processor
@@ -81,10 +161,41 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     login_attempts = db.Column(db.Integer, default=0)
     last_attempt = db.Column(db.DateTime)
+    is_locked = db.Column(db.Boolean, default=False)  # 계정 잠금 상태
+    locked_until = db.Column(db.DateTime, nullable=True)  # 잠금 해제 시간
     
     # Firebase Auth 전용 필드들
     email = db.Column(db.String(120), unique=True, nullable=True)
     firebase_uid = db.Column(db.String(128), unique=True, nullable=True)
+    
+    def is_account_locked(self):
+        """계정이 잠겨있는지 확인"""
+        if not self.is_locked:
+            return False
+        
+        if self.locked_until and datetime.utcnow() > self.locked_until:
+            # 잠금 시간이 지났으면 자동 해제
+            self.is_locked = False
+            self.locked_until = None
+            self.login_attempts = 0
+            db.session.commit()
+            return False
+        
+        return self.is_locked
+    
+    def lock_account(self, minutes=30):
+        """계정 잠금"""
+        self.is_locked = True
+        self.locked_until = datetime.utcnow() + timedelta(minutes=minutes)
+        self.login_attempts += 1
+        db.session.commit()
+    
+    def unlock_account(self):
+        """계정 잠금 해제"""
+        self.is_locked = False
+        self.locked_until = None
+        self.login_attempts = 0
+        db.session.commit()
 
 class Child(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -409,6 +520,13 @@ def index():
 def login():
     """완전 Firebase Auth 기반 로그인"""
     if request.method == 'POST':
+        # === 🛡️ 브루트포스 공격 방지 체크 ===
+        client_ip = get_client_ip()
+        
+        if is_ip_blocked(client_ip):
+            flash('⚠️ 보안상 로그인이 일시적으로 제한되었습니다. 30분 후 다시 시도해주세요.', 'error')
+            return render_template('login.html', firebase_config=FIREBASE_CONFIG)
+        
         # Firebase 토큰 검증
         token = request.json.get('token') if request.is_json else request.form.get('token')
         
@@ -443,6 +561,10 @@ def login():
             
             # Firebase 사용자로 로그인
             login_user(user)
+            
+            # === 🛡️ 로그인 성공 시 실패 기록 초기화 ===
+            clear_failed_login(client_ip)
+            
             flash(f'{user.name}님, Firebase 인증으로 로그인되었습니다!', 'success')
             
             if request.is_json:
@@ -450,7 +572,13 @@ def login():
             else:
                 return redirect(url_for('dashboard'))
         else:
-            flash('Firebase 인증에 실패했습니다.', 'error')
+            # === 🛡️ 로그인 실패 시 실패 기록 ===
+            is_now_blocked = record_failed_login(client_ip)
+            if is_now_blocked:
+                flash('⚠️ 연속된 로그인 실패로 인해 30분간 로그인이 제한됩니다.', 'error')
+            else:
+                flash('Firebase 인증에 실패했습니다.', 'error')
+            
             if request.is_json:
                 return jsonify({'success': False, 'error': 'Invalid Firebase token'})
     
@@ -461,6 +589,12 @@ def login():
 def firebase_login():
     """Firebase Auth API 엔드포인트"""
     try:
+        # === 🛡️ 브루트포스 공격 방지 체크 ===
+        client_ip = get_client_ip()
+        
+        if is_ip_blocked(client_ip):
+            return jsonify({'success': False, 'error': '보안상 로그인이 일시적으로 제한되었습니다. 30분 후 다시 시도해주세요.'})
+        
         data = request.get_json()
         token = data.get('token')
         
@@ -495,6 +629,9 @@ def firebase_login():
             # Firebase 사용자로 로그인
             login_user(user)
             
+            # === 🛡️ 로그인 성공 시 실패 기록 초기화 ===
+            clear_failed_login(client_ip)
+            
             return jsonify({
                 'success': True, 
                 'redirect': url_for('dashboard'),
@@ -507,10 +644,15 @@ def firebase_login():
                 }
             })
         else:
+            # === 🛡️ 로그인 실패 시 실패 기록 ===
+            record_failed_login(client_ip)
             return jsonify({'success': False, 'error': 'Invalid Firebase token'})
     
     except Exception as e:
         print(f"Firebase login error: {e}")
+        # === 🛡️ 오류 시에도 실패 기록 ===
+        client_ip = get_client_ip()
+        record_failed_login(client_ip)
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/logout')
@@ -1668,6 +1810,12 @@ def points_list():
     points_records = DailyPoints.query.order_by(DailyPoints.created_at.desc()).limit(20).all()
     return render_template('points/list.html', points_records=points_records)
 
+@app.route('/points/input/select')
+@login_required
+def points_input_select():
+    """포인트 입력할 아동 선택 페이지"""
+    return render_template('points/select.html')
+
 @app.route('/points/input/<int:child_id>', methods=['GET', 'POST'])
 @login_required
 def points_input(child_id):
@@ -2435,6 +2583,47 @@ def settings_points():
     """수동 포인트 관리 페이지"""
     children = Child.query.filter_by(include_in_stats=True).order_by(Child.grade, Child.name).all()
     return render_template('settings/points.html', children=children)
+
+@app.route('/api/children/by-grade')
+@login_required
+def get_children_by_grade():
+    """학년별 아동 목록 조회 API"""
+    try:
+        grade = request.args.get('grade', type=int)
+        
+        # 통계에 포함된 아동들만 조회
+        query = Child.query.filter_by(include_in_stats=True)
+        
+        # 학년 필터 적용 (선택사항)
+        if grade:
+            query = query.filter_by(grade=grade)
+        
+        # 학년, 이름 순으로 정렬
+        children = query.order_by(Child.grade, Child.name).all()
+        
+        # JSON 형태로 반환
+        children_data = []
+        for child in children:
+            children_data.append({
+                'id': child.id,
+                'name': child.name,
+                'grade': child.grade,
+                'display_name': f"{child.name} ({child.grade}학년)"
+            })
+        
+        return jsonify({
+            'success': True,
+            'children': children_data,
+            'total': len(children_data)
+        })
+        
+    except Exception as e:
+        print(f"❌ 아동 목록 조회 오류: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'children': []
+        })
 
 # 수동 포인트 관리 API
 @app.route('/api/manual-points', methods=['POST'])
