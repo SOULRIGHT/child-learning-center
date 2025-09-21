@@ -98,6 +98,7 @@ class Child(db.Model):
     # 관계 설정
     learning_records = db.relationship('LearningRecord', backref='child', lazy=True, cascade='all, delete-orphan')
     notes = db.relationship('ChildNote', backref='child', lazy=True, cascade='all, delete-orphan')
+    daily_points = db.relationship('DailyPoints', backref='child_ref', lazy=True, cascade='all, delete-orphan')
     include_in_stats = db.Column(db.Boolean, default=True) # 통계에 포함할지 여부
 
 class LearningRecord(db.Model):
@@ -152,6 +153,16 @@ class DailyPoints(db.Model):
     ssen_points = db.Column(db.Integer, default=0)
     reading_points = db.Column(db.Integer, default=0)
     
+    # 새 과목들 (2025-09-17 추가)
+    piano_points = db.Column(db.Integer, default=0)        # 피아노
+    english_points = db.Column(db.Integer, default=0)      # 영어
+    advanced_math_points = db.Column(db.Integer, default=0) # 고학년수학
+    writing_points = db.Column(db.Integer, default=0)      # 쓰기
+    
+    # 수동 포인트 관리
+    manual_points = db.Column(db.Integer, default=0)       # 수동 추가/차감 합계
+    manual_history = db.Column(db.Text, default='[]')     # JSON 형태 히스토리
+    
     # 총 포인트
     total_points = db.Column(db.Integer, default=0)
     
@@ -161,7 +172,7 @@ class DailyPoints(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # 관계 설정
-    child = db.relationship('Child', backref='daily_points', lazy=True)
+    child = db.relationship('Child', lazy=True)
     creator = db.relationship('User', backref='points_records', lazy=True)
 
 @login_manager.user_loader
@@ -362,7 +373,7 @@ def init_db():
                 math_points = random.choice([0, 100, 200])
                 ssen_points = random.choice([0, 100, 200])
                 reading_points = random.choice([0, 100, 200])
-                total_points = korean_points + math_points + ssen_points + reading_points
+                total_points = korean_points + math_points + ssen_points + reading_points + piano_points + english_points + advanced_math_points + writing_points + manual_points
                 
                 # 일부 날짜는 기록 없음 (더 현실적인 데이터)
                 if random.random() > 0.3:  # 70% 확률로 기록 생성
@@ -373,6 +384,11 @@ def init_db():
                         math_points=math_points,
                         ssen_points=ssen_points,
                         reading_points=reading_points,
+                piano_points=piano_points,
+                english_points=english_points,
+                advanced_math_points=advanced_math_points,
+                writing_points=writing_points,
+                manual_points=manual_points,
                         total_points=total_points,
                         created_by=1
                     )
@@ -705,7 +721,9 @@ def delete_child(child_id):
         flash(f'{child_name} 아동과 관련 기록이 모두 삭제되었습니다.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash('삭제 중 오류가 발생했습니다. 다시 시도해주세요.', 'error')
+        print(f"🐛 DEBUG: 아동 삭제 오류 - {str(e)}")
+        print(f"🐛 DEBUG: child_id: {child_id}, child_name: {child_name}")
+        flash(f'삭제 중 오류가 발생했습니다: {str(e)}', 'error')
     
     return redirect(url_for('children_list'))
 
@@ -1131,7 +1149,9 @@ def delete_score(record_id):
         flash(f'{child_name} 아동의 {record.date.strftime("%Y-%m-%d")} 학습 기록이 삭제되었습니다.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash('삭제 중 오류가 발생했습니다. 다시 시도해주세요.', 'error')
+        print(f"🐛 DEBUG: 학습 기록 삭제 오류 - {str(e)}")
+        print(f"🐛 DEBUG: record_id: {record_id}, child_id: {child_id}")
+        flash(f'삭제 중 오류가 발생했습니다: {str(e)}', 'error')
     
     return redirect(url_for('child_detail', child_id=child_id))
 
@@ -1670,17 +1690,26 @@ def points_input(child_id):
             math_points = int(request.form.get('math_points', 0))
             ssen_points = int(request.form.get('ssen_points', 0))
             reading_points = int(request.form.get('reading_points', 0))
+
+            # 새 과목들 (2025-09-17 추가)
+            piano_points = int(request.form.get('piano_points', 0))
+            english_points = int(request.form.get('english_points', 0))
+            advanced_math_points = int(request.form.get('advanced_math_points', 0))
+            writing_points = int(request.form.get('writing_points', 0))
+
+            # 수동 포인트 (기본값 0, 나중에 별도 관리)
+            manual_points = 0  # 현재는 0으로 고정, 나중에 수동 관리 기능에서 처리
         
             # 값 검증: 음수 방지만 방지
-            if any(points < 0 for points in [korean_points, math_points, ssen_points, reading_points]):
+            if any(points < 0 for points in [korean_points, math_points, ssen_points, reading_points, piano_points, english_points, advanced_math_points, writing_points]):
                 flash('❌ 포인트는 음수일 수 없습니다. 0 이상의 값을 입력해주세요.', 'error')
                 return redirect(url_for('points_input', child_id=child_id))
             
             # 총 포인트 계산 (검증된 값으로)
-            total_points = korean_points + math_points + ssen_points + reading_points
+            total_points = korean_points + math_points + ssen_points + reading_points + piano_points + english_points + advanced_math_points + writing_points + manual_points
             
             # 계산 결과 검증
-            expected_total = sum([korean_points, math_points, ssen_points, reading_points])
+            expected_total = sum([korean_points, math_points, ssen_points, reading_points, piano_points, english_points, advanced_math_points, writing_points, manual_points])
             if total_points != expected_total:
                 flash(f'❌ 포인트 계산 오류가 발생했습니다. 예상: {expected_total}, 계산: {total_points}', 'error')
                 return redirect(url_for('points_input', child_id=child_id))
@@ -1692,18 +1721,28 @@ def points_input(child_id):
                 old_math = existing_record.math_points
                 old_ssen = existing_record.ssen_points
                 old_reading = existing_record.reading_points
+                old_piano = existing_record.piano_points
+                old_english = existing_record.english_points
+                old_advanced_math = existing_record.advanced_math_points
+                old_writing = existing_record.writing_points
+                old_manual = existing_record.manual_points
                 
                 # 기존 기록 업데이트
                 existing_record.korean_points = korean_points
                 existing_record.math_points = math_points
                 existing_record.ssen_points = ssen_points
                 existing_record.reading_points = reading_points
+                existing_record.piano_points = piano_points
+                existing_record.english_points = english_points
+                existing_record.advanced_math_points = advanced_math_points
+                existing_record.writing_points = writing_points
+                existing_record.manual_points = manual_points
                 existing_record.total_points = total_points
                 existing_record.updated_at = datetime.utcnow()
                 
                 # 변경 이력 기록 (PointsHistory 테이블) - 변경사항이 있을 때만
                 if (old_korean != korean_points or old_math != math_points or 
-                    old_ssen != ssen_points or old_reading != reading_points):
+                    old_ssen != ssen_points or old_reading != reading_points or old_piano != piano_points or old_english != english_points or old_advanced_math != advanced_math_points or old_writing != writing_points or old_manual != manual_points):
                     
                     history_record = PointsHistory(
                         child_id=child_id,

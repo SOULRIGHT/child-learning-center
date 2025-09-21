@@ -150,7 +150,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                         <i class="bi {% if child.include_in_stats %}bi-graph-down{% else %}bi-graph-up{% endif %}"></i>
                                     </button>
                                 </form>
-                                {% if current_user.role in ['센터장', '돌봄선생님'] %}
+                                {% if current_user.role == '개발자' %}
                                 <button type="button" class="btn btn-sm btn-outline-danger delete-btn" 
                                         data-child-id="{{ child.id }}" data-child-name="{{ child.name }}" title="삭제">
                                     <i class="bi bi-trash"></i>

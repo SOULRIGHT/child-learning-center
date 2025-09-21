@@ -107,6 +107,78 @@
                                     <i class="fas fa-times-circle"></i> 미완료 (0점)
                                 </label>
                             </div>
+
+                        <!-- 피아노 -->
+                        <div class="mb-4">
+                            <h5 class="text-info">피아노</h5>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="piano_points" id="piano_100" value="100" 
+                                       {% if today_record and today_record.piano_points == 100 %}checked{% endif %}>
+                                <label class="btn btn-outline-success" for="piano_100">
+                                    <i class="fas fa-check-circle"></i> 완료 (100점)
+                                </label>
+                                
+                                <input type="radio" class="btn-check" name="piano_points" id="piano_0" value="0" 
+                                       {% if not today_record or today_record.piano_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary" for="piano_0">
+                                    <i class="fas fa-times-circle"></i> 미완료 (0점)
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 영어 -->
+                        <div class="mb-4">
+                            <h5 class="text-primary">영어</h5>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="english_points" id="english_100" value="100" 
+                                       {% if today_record and today_record.english_points == 100 %}checked{% endif %}>
+                                <label class="btn btn-outline-success" for="english_100">
+                                    <i class="fas fa-check-circle"></i> 완료 (100점)
+                                </label>
+                                
+                                <input type="radio" class="btn-check" name="english_points" id="english_0" value="0" 
+                                       {% if not today_record or today_record.english_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary" for="english_0">
+                                    <i class="fas fa-times-circle"></i> 미완료 (0점)
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 고학년수학 -->
+                        <div class="mb-4">
+                            <h5 class="text-danger">고학년수학</h5>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="advanced_math_points" id="advanced_math_300" value="300" 
+                                       {% if today_record and today_record.advanced_math_points == 300 %}checked{% endif %}>
+                                <label class="btn btn-outline-success" for="advanced_math_300">
+                                    <i class="fas fa-check-circle"></i> 완료 (300점)
+                                </label>
+                                
+                                <input type="radio" class="btn-check" name="advanced_math_points" id="advanced_math_0" value="0" 
+                                       {% if not today_record or today_record.advanced_math_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary" for="advanced_math_0">
+                                    <i class="fas fa-times-circle"></i> 미완료 (0점)
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 쓰기 -->
+                        <div class="mb-4">
+                            <h5 class="text-secondary">쓰기</h5>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="writing_points" id="writing_100" value="100" 
+                                       {% if today_record and today_record.writing_points == 100 %}checked{% endif %}>
+                                <label class="btn btn-outline-success" for="writing_100">
+                                    <i class="fas fa-check-circle"></i> 완료 (100점)
+                                </label>
+                                
+                                <input type="radio" class="btn-check" name="writing_points" id="writing_0" value="0" 
+                                       {% if not today_record or today_record.writing_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary" for="writing_0">
+                                    <i class="fas fa-times-circle"></i> 미완료 (0점)
+                                </label>
+                            </div>
+                        </div>
                         </div>
 
                         <!-- 총점 미리보기 -->
@@ -128,6 +200,24 @@
                                 <div class="col-md-3">
                                     <small class="text-muted">독서:</small>
                                     <span id="reading_preview">0</span>점
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-3">
+                                    <small class="text-muted">피아노:</small>
+                                    <span id="piano_preview">0</span>점
+                                </div>
+                                <div class="col-md-3">
+                                    <small class="text-muted">영어:</small>
+                                    <span id="english_preview">0</span>점
+                                </div>
+                                <div class="col-md-3">
+                                    <small class="text-muted">고학년수학:</small>
+                                    <span id="advanced_math_preview">0</span>점
+                                </div>
+                                <div class="col-md-3">
+                                    <small class="text-muted">쓰기:</small>
+                                    <span id="writing_preview">0</span>점
                                 </div>
                             </div>
                             <hr>
@@ -162,18 +252,23 @@ function updateTotalScore() {
         const math = parseInt(document.querySelector('input[name="math_points"]:checked')?.value || 0);
         const ssen = parseInt(document.querySelector('input[name="ssen_points"]:checked')?.value || 0);
         const reading = parseInt(document.querySelector('input[name="reading_points"]:checked')?.value || 0);
+        const piano = parseInt(document.querySelector('input[name="piano_points"]:checked')?.value || 0);
+        const english = parseInt(document.querySelector('input[name="english_points"]:checked')?.value || 0);
+        const advanced_math = parseInt(document.querySelector('input[name="advanced_math_points"]:checked')?.value || 0);
+        const writing = parseInt(document.querySelector('input[name="writing_points"]:checked')?.value || 0);
         
         // 값 검증: NaN 체크
-        if (isNaN(korean) || isNaN(math) || isNaN(ssen) || isNaN(reading)) {
+        if (isNaN(korean) || isNaN(math) || isNaN(ssen) || isNaN(reading) || isNaN(piano) || isNaN(english) || isNaN(advanced_math) || isNaN(writing)) {
             console.error('❌ 잘못된 포인트 값이 감지되었습니다.');
             return;
         }
         
-        // 값 검증: 범위 체크 (0-200)
-        const values = [korean, math, ssen, reading];
+        // 값 검증: 범위 체크 (각 과목별 최대값 다름)
+        const values = [korean, math, ssen, reading, piano, english, advanced_math, writing];
+        const maxValues = [200, 200, 200, 200, 100, 100, 300, 100]; // 각 과목별 최대값
         for (let i = 0; i < values.length; i++) {
-            if (values[i] < 0 || values[i] > 200) {
-                console.error(`❌ 포인트 값이 범위를 벗어났습니다: ${values[i]}`);
+            if (values[i] < 0 || values[i] > maxValues[i]) {
+                console.error(`❌ 포인트 값이 범위를 벗어났습니다: ${values[i]} (최대: ${maxValues[i]})`);
                 return;
             }
         }
@@ -182,7 +277,7 @@ function updateTotalScore() {
         const total = values.reduce((sum, val) => sum + val, 0);
         
         // 계산 결과 검증
-        const expectedTotal = korean + math + ssen + reading;
+        const expectedTotal = korean + math + ssen + reading + piano + english + advanced_math + writing;
         if (total !== expectedTotal) {
             console.error(`❌ 포인트 계산 오류: 예상 ${expectedTotal}, 계산 ${total}`);
             return;
@@ -193,6 +288,10 @@ function updateTotalScore() {
         document.getElementById('math_preview').textContent = math;
         document.getElementById('ssen_preview').textContent = ssen;
         document.getElementById('reading_preview').textContent = reading;
+        document.getElementById('piano_preview').textContent = piano;
+        document.getElementById('english_preview').textContent = english;
+        document.getElementById('advanced_math_preview').textContent = advanced_math;
+        document.getElementById('writing_preview').textContent = writing;
         document.getElementById('total_preview').textContent = total;
         
         // 총점 색상 변경 (시각적 피드백)
@@ -205,7 +304,7 @@ function updateTotalScore() {
             totalElement.className = 'text-danger fw-bold';
         }
         
-        console.log(`✅ 포인트 계산 완료: 국어(${korean}) + 수학(${math}) + 쎈수학(${ssen}) + 독서(${reading}) = ${total}`);
+        console.log(`✅ 포인트 계산 완료: 국어(${korean}) + 수학(${math}) + 쎈수학(${ssen}) + 독서(${reading}) + 피아노(${piano}) + 영어(${english}) + 고학년수학(${advanced_math}) + 쓰기(${writing}) = ${total}`);
         
     } catch (error) {
         console.error('❌ 포인트 계산 중 오류 발생:', error);
@@ -241,17 +340,21 @@ document.querySelector('form').addEventListener('submit', function(e) {
         const math = parseInt(document.querySelector('input[name="math_points"]:checked')?.value || 0);
         const ssen = parseInt(document.querySelector('input[name="ssen_points"]:checked')?.value || 0);
         const reading = parseInt(document.querySelector('input[name="reading_points"]:checked')?.value || 0);
+        const piano = parseInt(document.querySelector('input[name="piano_points"]:checked')?.value || 0);
+        const english = parseInt(document.querySelector('input[name="english_points"]:checked')?.value || 0);
+        const advanced_math = parseInt(document.querySelector('input[name="advanced_math_points"]:checked')?.value || 0);
+        const writing = parseInt(document.querySelector('input[name="writing_points"]:checked')?.value || 0);
         
         // 최종 검증
-        if (isNaN(korean) || isNaN(math) || isNaN(ssen) || isNaN(reading)) {
+        if (isNaN(korean) || isNaN(math) || isNaN(ssen) || isNaN(reading) || isNaN(piano) || isNaN(english) || isNaN(advanced_math) || isNaN(writing)) {
             e.preventDefault();
             alert('❌ 모든 과목의 포인트를 선택해주세요.');
             return false;
         }
         
         // 총점 재계산 및 검증
-        const total = korean + math + ssen + reading;
-        const expectedTotal = sum([korean, math, ssen, reading]);
+        const total = korean + math + ssen + reading + piano + english + advanced_math + writing;
+        const expectedTotal = korean + math + ssen + reading + piano + english + advanced_math + writing;
         
         if (total !== expectedTotal) {
             e.preventDefault();
