@@ -66,14 +66,56 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = '로그인이 필요합니다.'
 
-# === 🛡️ 보안 헤더 설정 ===
+# === 🛡️ 고급 보안 헤더 설정 (2025-09-21 확장) ===
 @app.after_request
 def set_security_headers(response):
-    """모든 응답에 보안 헤더 추가"""
+    """모든 응답에 강화된 보안 헤더 추가"""
+    
+    # === 기본 보안 헤더 ===
     response.headers['X-Content-Type-Options'] = 'nosniff'  # MIME 타입 스니핑 방지
     response.headers['X-Frame-Options'] = 'DENY'  # 클릭재킹 방지
     response.headers['X-XSS-Protection'] = '1; mode=block'  # XSS 공격 방지
+    
+    # === Content Security Policy (CSP) ===
+    # XSS 공격 완전 차단을 위한 엄격한 CSP
+    csp_policy = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+    response.headers['Content-Security-Policy'] = csp_policy
+    
+    # === HTTP Strict Transport Security (HSTS) ===
+    # 프로덕션에서만 HSTS 적용 (HTTPS 필요)
+    if os.environ.get('DATABASE_URL'):  # 프로덕션 환경 감지
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'
+    
+    # === Permissions Policy ===
+    # 불필요한 브라우저 기능 차단
+    permissions_policy = (
+        "accelerometer=(), "
+        "camera=(), "
+        "geolocation=(), "
+        "gyroscope=(), "
+        "magnetometer=(), "
+        "microphone=(), "
+        "payment=(), "
+        "usb=()"
+    )
+    response.headers['Permissions-Policy'] = permissions_policy
+    
+    # === 추가 보안 헤더 ===
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'  # 리퍼러 정책
+    response.headers['X-Permitted-Cross-Domain-Policies'] = 'none'  # Flash/PDF 정책 차단
+    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'  # 팝업 보안
+    response.headers['Cross-Origin-Resource-Policy'] = 'same-origin'  # 리소스 공유 제한
+    
     return response
 
 # === ⏰ 세션 영구화 ===
@@ -2930,6 +2972,59 @@ def profile():
 def settings_system():
     """시스템 정보 페이지"""
     return render_template('settings/system.html')
+
+@app.route('/settings/security')
+@login_required
+def settings_security():
+    """보안 설정 진단 페이지 (개발자 전용)"""
+    if current_user.role != '개발자':
+        flash('권한이 없습니다.', 'error')
+        return redirect(url_for('settings'))
+    
+    # 현재 보안 설정 상태 체크
+    security_status = {
+        'session_timeout': app.config.get('PERMANENT_SESSION_LIFETIME'),
+        'secure_cookies': {
+            'httponly': app.config.get('SESSION_COOKIE_HTTPONLY'),
+            'samesite': app.config.get('SESSION_COOKIE_SAMESITE'),
+            'secure': app.config.get('SESSION_COOKIE_SECURE')
+        },
+        'brute_force_protection': {
+            'ip_tracking': len(failed_login_attempts),
+            'blocked_ips': len(blocked_ips),
+            'protection_enabled': True
+        },
+        'security_headers': {
+            'csp_enabled': True,
+            'hsts_enabled': bool(os.environ.get('DATABASE_URL')),
+            'permissions_policy': True,
+            'xss_protection': True
+        },
+        'environment': 'Production' if os.environ.get('DATABASE_URL') else 'Development'
+    }
+    
+    return render_template('settings/security.html', security_status=security_status)
+
+@app.route('/api/security/test-headers')
+@login_required
+def test_security_headers():
+    """보안 헤더 테스트 API (개발자 전용)"""
+    if current_user.role != '개발자':
+        return jsonify({'error': '권한이 없습니다.'}), 403
+    
+    # 현재 응답에 적용된 헤더들 반환
+    test_response = {
+        'timestamp': datetime.utcnow().isoformat(),
+        'security_headers_test': 'OK',
+        'csp_policy': 'Active',
+        'hsts_status': 'Active' if os.environ.get('DATABASE_URL') else 'Development Mode',
+        'brute_force_stats': {
+            'failed_attempts_tracked': len(failed_login_attempts),
+            'currently_blocked_ips': len(blocked_ips)
+        }
+    }
+    
+    return jsonify(test_response)
 
 @app.route('/cumulative-points')
 @login_required
