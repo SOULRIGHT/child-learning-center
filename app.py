@@ -616,7 +616,7 @@ def login():
                 print(f"✅ 새 Firebase 사용자 생성: {email}")
             
             # Firebase 사용자로 로그인
-            login_user(user)
+                login_user(user)
             
             # === 🛡️ 로그인 성공 시 실패 기록 초기화 ===
             clear_failed_login(client_ip)
@@ -627,7 +627,7 @@ def login():
                 return jsonify({'success': True, 'redirect': url_for('dashboard')})
             else:
                 return redirect(url_for('dashboard'))
-        else:
+            else:
             # === 🛡️ 로그인 실패 시 실패 기록 ===
             is_now_blocked = record_failed_login(client_ip)
             if is_now_blocked:
@@ -2012,34 +2012,34 @@ def points_input(child_id):
                 )
                 db.session.add(history_record)
                 
-            # 새 기록 생성
-            new_record = DailyPoints(
-                child_id=child_id,
-                date=today,
-                korean_points=korean_points,
-                math_points=math_points,
-                ssen_points=ssen_points,
-                reading_points=reading_points,
-                total_points=total_points,
-                created_by=current_user.id
-            )
-            db.session.add(new_record)
-            
-            # 누적 포인트 자동 업데이트 (커밋 없이)
-            update_cumulative_points(child_id, commit=False)
-            
-            # 모든 변경사항을 한 번에 커밋
-            db.session.commit()
-            
-            # 실시간 백업 호출 (백업 실패가 포인트 입력에 영향 주지 않도록)
-            try:
-                realtime_backup(child_id, "create")
-            except Exception as backup_error:
-                print(f"백업 실패: {backup_error}")
-                # 백업 실패는 포인트 입력 성공에 영향을 주지 않음
-            
-            flash(f'✅ {child.name} 아이의 포인트가 저장되었습니다. (총점: {total_points}점)', 'success')
-            return redirect(url_for('points_list'))
+                # 새 기록 생성
+                new_record = DailyPoints(
+                    child_id=child_id,
+                    date=today,
+                    korean_points=korean_points,
+                    math_points=math_points,
+                    ssen_points=ssen_points,
+                    reading_points=reading_points,
+                    total_points=total_points,
+                    created_by=current_user.id
+                )
+                db.session.add(new_record)
+                
+                # 누적 포인트 자동 업데이트 (커밋 없이)
+                update_cumulative_points(child_id, commit=False)
+                
+                # 모든 변경사항을 한 번에 커밋
+                db.session.commit()
+                
+                # 실시간 백업 호출 (백업 실패가 포인트 입력에 영향 주지 않도록)
+                try:
+                    realtime_backup(child_id, "create")
+                except Exception as backup_error:
+                    print(f"백업 실패: {backup_error}")
+                    # 백업 실패는 포인트 입력 성공에 영향을 주지 않음
+                
+                flash(f'✅ {child.name} 아이의 포인트가 저장되었습니다. (총점: {total_points}점)', 'success')
+                return redirect(url_for('points_list'))
             
         except ValueError as e:
             flash('❌ 잘못된 포인트 값이 입력되었습니다. 숫자만 입력해주세요.', 'error')
@@ -4025,45 +4025,45 @@ def daily_backup():
         
         # Flask 앱 컨텍스트 내에서 실행
         with app.app_context():
-            # 백업 디렉토리 생성
-            backup_dir = create_backup_directory()
-            
-            # 백업 데이터 수집
-            backup_data, error = get_backup_data()
-            if error:
+        # 백업 디렉토리 생성
+        backup_dir = create_backup_directory()
+        
+        # 백업 데이터 수집
+        backup_data, error = get_backup_data()
+        if error:
                 error_msg = f"일일 백업 데이터 수집 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('일일', 'failed', error_msg)
-                return False
-            
-            # JSON 백업 생성
-            json_path, error = create_json_backup(backup_data, backup_dir, 'daily')
-            if error:
+            return False
+        
+        # JSON 백업 생성
+        json_path, error = create_json_backup(backup_data, backup_dir, 'daily')
+        if error:
                 error_msg = f"일일 JSON 백업 생성 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('일일', 'failed', error_msg)
-                return False
-            
-            # Excel 백업 생성
-            excel_path, error = create_excel_backup(backup_data, backup_dir, 'daily')
-            if error:
+            return False
+        
+        # Excel 백업 생성
+        excel_path, error = create_excel_backup(backup_data, backup_dir, 'daily')
+        if error:
                 error_msg = f"일일 Excel 백업 생성 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('일일', 'failed', error_msg)
-                return False
-            
-            # 데이터베이스 백업 생성
-            db_path, error = create_database_backup(backup_dir, 'daily')
-            if error:
+            return False
+        
+        # 데이터베이스 백업 생성
+        db_path, error = create_database_backup(backup_dir, 'daily')
+        if error:
                 error_msg = f"일일 데이터베이스 백업 생성 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('일일', 'failed', error_msg)
-                return False
-            
+            return False
+        
             success_msg = f"일일 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}"
             print(f"✅ {success_msg}")
             create_backup_notification('일일', 'success', success_msg)
-            return True
+        return True
         
     except Exception as e:
         error_msg = f"일일 백업 실행 중 오류: {str(e)}"
@@ -4078,45 +4078,45 @@ def monthly_backup():
         
         # Flask 앱 컨텍스트 내에서 실행
         with app.app_context():
-            # 백업 디렉토리 생성
-            backup_dir = create_backup_directory()
-            
-            # 백업 데이터 수집
-            backup_data, error = get_backup_data()
-            if error:
+        # 백업 디렉토리 생성
+        backup_dir = create_backup_directory()
+        
+        # 백업 데이터 수집
+        backup_data, error = get_backup_data()
+        if error:
                 error_msg = f"월간 백업 데이터 수집 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('월간', 'failed', error_msg)
-                return False
-            
-            # JSON 백업 생성
-            json_path, error = create_json_backup(backup_data, backup_dir, 'monthly')
-            if error:
+            return False
+        
+        # JSON 백업 생성
+        json_path, error = create_json_backup(backup_data, backup_dir, 'monthly')
+        if error:
                 error_msg = f"월간 JSON 백업 생성 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('월간', 'failed', error_msg)
-                return False
-            
-            # Excel 백업 생성
-            excel_path, error = create_excel_backup(backup_data, backup_dir, 'monthly')
-            if error:
+            return False
+        
+        # Excel 백업 생성
+        excel_path, error = create_excel_backup(backup_data, backup_dir, 'monthly')
+        if error:
                 error_msg = f"월간 Excel 백업 생성 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('월간', 'failed', error_msg)
-                return False
-            
-            # 데이터베이스 백업 생성
-            db_path, error = create_database_backup(backup_dir, 'monthly')
-            if error:
+            return False
+        
+        # 데이터베이스 백업 생성
+        db_path, error = create_database_backup(backup_dir, 'monthly')
+        if error:
                 error_msg = f"월간 데이터베이스 백업 생성 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('월간', 'failed', error_msg)
-                return False
-            
+            return False
+        
             success_msg = f"월간 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}"
             print(f"✅ {success_msg}")
             create_backup_notification('월간', 'success', success_msg)
-            return True
+        return True
         
     except Exception as e:
         error_msg = f"월간 백업 실행 중 오류: {str(e)}"
