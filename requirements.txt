@@ -1,3 +1,5 @@
+python-version==3.11.0
+
 # Flask 웹 프레임워크
 Flask==3.1.1
 Flask-Login==0.6.3

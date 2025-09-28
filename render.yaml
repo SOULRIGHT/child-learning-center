@@ -1,49 +1,49 @@
-services:
-  - type: web
-    name: child-learning-center
-    env: python
-    buildCommand: pip install -r rrequirements.txt
-    startCommand: gunicorn app:app
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
-      - key: SECRET_KEY
-        value: f454244dd79d991bca7218b0bc7674d3520c77003ce609d7f08de49d9432188e
-      - key: DATABASE_URL
-        value: sqlite:///child_center.db
-      - key: FLASK_ENV
-        value: production
-      - key: FLASK_DEBUG
-        value: false
-      - key: CENTER_NAME
-        value: 지역아동센터
-      - key: CENTER_DESCRIPTION
-        value: 학습관리 시스템
-      - key: CENTER_LOCATION
-        value: 서울시
-      - key: CHILDREN_GRADE1
-        value: 김철수,박영희,이민수,최지영,정현우
-      - key: CHILDREN_GRADE2
-        value: 강서진,윤하은,임준호,한소희,조민재
-      - key: CHILDREN_GRADE3
-        value: 신동현,오유진,권태현,배수빈,남준영
-      - key: CHILDREN_GRADE4
-        value: 김지원,이승우,박소연,최민석,정하나
-      - key: CHILDREN_GRADE5
-        value: 강현준,윤지민,임서연,한도현,조유진
-      - key: CHILDREN_GRADE6
-        value: 신태현,오준호,권소희,배민재,남수빈
-      - key: DEFAULT_USERS
-        value: developer,center_head,care_teacher,social_worker1,social_worker2,assistant,test_user
-      - key: DEFAULT_PASSWORDS
-        value: dev123,center123!,care123!,social123!,social456!,assist123!,test_kohi
-      - key: DEFAULT_USER_ROLES
-        value: 개발자,센터장,돌봄선생님,사회복무요원,사회복무요원,보조교사,테스트사용자
-      - key: TEST_DATA_ENABLED
-        value: true
-      - key: TEST_CHILDREN_COUNT
-        value: 4
-      - key: THEME_COLOR
-        value: "#ff6b35"
-      - key: BRANCH_INDICATOR_ENABLED
-        value: true 
+# services:
+#   - type: web
+#     name: child-learning-center
+#     env: python
+#     buildCommand: pip install -r rrequirements.txt
+#     startCommand: gunicorn app:app
+#     envVars:
+#       - key: PYTHON_VERSION
+#         value: 3.11.0
+#       - key: SECRET_KEY
+#         value: f454244dd79d991bca7218b0bc7674d3520c77003ce609d7f08de49d9432188e
+#       - key: DATABASE_URL
+#         value: sqlite:///child_center.db
+#       - key: FLASK_ENV
+#         value: production
+#       - key: FLASK_DEBUG
+#         value: false
+#       - key: CENTER_NAME
+#         value: 지역아동센터
+#       - key: CENTER_DESCRIPTION
+#         value: 학습관리 시스템
+#       - key: CENTER_LOCATION
+#         value: 서울시
+#       - key: CHILDREN_GRADE1
+#         value: 김철수,박영희,이민수,최지영,정현우
+#       - key: CHILDREN_GRADE2
+#         value: 강서진,윤하은,임준호,한소희,조민재
+#       - key: CHILDREN_GRADE3
+#         value: 신동현,오유진,권태현,배수빈,남준영
+#       - key: CHILDREN_GRADE4
+#         value: 김지원,이승우,박소연,최민석,정하나
+#       - key: CHILDREN_GRADE5
+#         value: 강현준,윤지민,임서연,한도현,조유진
+#       - key: CHILDREN_GRADE6
+#         value: 신태현,오준호,권소희,배민재,남수빈
+#       - key: DEFAULT_USERS
+#         value: developer,center_head,care_teacher,social_worker1,social_worker2,assistant,test_user
+#       - key: DEFAULT_PASSWORDS
+#         value: dev123,center123!,care123!,social123!,social456!,assist123!,test_kohi
+#       - key: DEFAULT_USER_ROLES
+#         value: 개발자,센터장,돌봄선생님,사회복무요원,사회복무요원,보조교사,테스트사용자
+#       - key: TEST_DATA_ENABLED
+#         value: true
+#       - key: TEST_CHILDREN_COUNT
+#         value: 4
+#       - key: THEME_COLOR
+#         value: "#ff6b35"
+#       - key: BRANCH_INDICATOR_ENABLED
+#         value: true 
