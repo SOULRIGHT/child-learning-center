@@ -132,6 +132,27 @@ def set_security_headers(response):
     
     return response
 
+# === 수동 포인트 안전 계산 함수 (2024-09-28 추가) ===
+def get_manual_points_from_history(record):
+    """manual_history에서 안전하게 manual_points 계산 - 데이터 일관성 보장"""
+    if not record or not record.manual_history:
+        return 0
+    
+    try:
+        history = json.loads(record.manual_history)
+        if not isinstance(history, list):
+            return 0
+        
+        total = 0
+        for item in history:
+            if isinstance(item, dict) and 'points' in item:
+                total += item.get('points', 0)
+        
+        return total
+    except Exception as e:
+        print(f"❌ manual_history 파싱 오류: {e}")
+        return 0
+
 # === ⏰ 세션 영구화 ===
 @app.before_request
 def make_session_permanent():
@@ -616,7 +637,7 @@ def login():
                 print(f"✅ 새 Firebase 사용자 생성: {email}")
             
             # Firebase 사용자로 로그인
-            login_user(user)
+                login_user(user)
             
             # === 🛡️ 로그인 성공 시 실패 기록 초기화 ===
             clear_failed_login(client_ip)
@@ -1901,8 +1922,8 @@ def points_input(child_id):
             advanced_math_points = int(request.form.get('advanced_math_points', 0))
             writing_points = int(request.form.get('writing_points', 0))
 
-            # 수동 포인트 (기존 값 보존)
-            manual_points = existing_record.manual_points if existing_record else 0
+            # 수동 포인트 (manual_history에서 실시간 계산)
+            manual_points = get_manual_points_from_history(existing_record)
         
             # 값 검증: 음수 방지만 방지
             if any(points < 0 for points in [korean_points, math_points, ssen_points, reading_points, piano_points, english_points, advanced_math_points, writing_points]):
@@ -1940,7 +1961,7 @@ def points_input(child_id):
                 existing_record.english_points = english_points
                 existing_record.advanced_math_points = advanced_math_points
                 existing_record.writing_points = writing_points
-                existing_record.manual_points = manual_points
+                # existing_record.manual_points = manual_points  # 제거: manual_history에서 실시간 계산
                 existing_record.total_points = total_points
                 existing_record.updated_at = datetime.utcnow()
                 
@@ -2020,6 +2041,10 @@ def points_input(child_id):
                 math_points=math_points,
                 ssen_points=ssen_points,
                 reading_points=reading_points,
+                piano_points=piano_points,
+                english_points=english_points,
+                advanced_math_points=advanced_math_points,
+                writing_points=writing_points,
                 total_points=total_points,
                 created_by=current_user.id
             )
@@ -2751,13 +2776,14 @@ def add_manual_points():
         daily_record.manual_history = json.dumps(history, ensure_ascii=False)
         daily_record.manual_points = manual_total
         
-        # 총 포인트 재계산
+        # 총 포인트 재계산 (manual_history에서 실시간 계산)
+        manual_points_calculated = get_manual_points_from_history(daily_record)
         daily_record.total_points = (
             daily_record.korean_points + daily_record.math_points + 
             daily_record.ssen_points + daily_record.reading_points +
             daily_record.piano_points + daily_record.english_points +
             daily_record.advanced_math_points + daily_record.writing_points +
-            daily_record.manual_points
+            manual_points_calculated
         )
         
         # 포인트 히스토리에도 기록 (변경 이력 페이지용)
@@ -2864,13 +2890,14 @@ def delete_manual_point(item_id):
         daily_record.manual_history = json.dumps(history, ensure_ascii=False)
         daily_record.manual_points = manual_total
         
-        # 총 포인트 재계산
+        # 총 포인트 재계산 (manual_history에서 실시간 계산)
+        manual_points_calculated = get_manual_points_from_history(daily_record)
         daily_record.total_points = (
             daily_record.korean_points + daily_record.math_points + 
             daily_record.ssen_points + daily_record.reading_points +
             daily_record.piano_points + daily_record.english_points +
             daily_record.advanced_math_points + daily_record.writing_points +
-            daily_record.manual_points
+            manual_points_calculated
         )
         
         # 누적 포인트 자동 업데이트
@@ -3164,11 +3191,23 @@ class PointsHistory(db.Model):
     old_reading_points = db.Column(db.Integer, default=0)
     old_total_points = db.Column(db.Integer, default=0)
     
+    old_piano_points = db.Column(db.Integer, default=0)
+    old_english_points = db.Column(db.Integer, default=0) 
+    old_advanced_math_points = db.Column(db.Integer, default=0)
+    old_writing_points = db.Column(db.Integer, default=0)
+    old_total_points = db.Column(db.Integer, default=0)
+    
     # 변경 후 포인트
     new_korean_points = db.Column(db.Integer, default=0)
     new_math_points = db.Column(db.Integer, default=0)
     new_ssen_points = db.Column(db.Integer, default=0)
     new_reading_points = db.Column(db.Integer, default=0)
+    new_total_points = db.Column(db.Integer, default=0)
+
+    new_piano_points = db.Column(db.Integer, default=0)
+    new_english_points = db.Column(db.Integer, default=0)
+    new_advanced_math_points = db.Column(db.Integer, default=0)
+    new_writing_points = db.Column(db.Integer, default=0)
     new_total_points = db.Column(db.Integer, default=0)
     
     # 변경 정보
