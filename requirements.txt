@@ -35,4 +35,4 @@ PyJWT==2.10.1
 
 # 배포용 (Render.com)
 gunicorn==21.2.0
-psycopg2-binary 
+psycopg2-binary==2.9.9
