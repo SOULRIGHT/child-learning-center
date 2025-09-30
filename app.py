@@ -620,8 +620,11 @@ def login():
             email = decoded_token['email']
             name = decoded_token.get('name', email.split('@')[0])
             
-            # Firebase 사용자로 로그인 처리
-            user = User.query.filter_by(firebase_uid=firebase_uid).first()
+            # Firebase 사용자로 로그인 처리 (firebase_uid 또는 email로 찾기)
+            user = User.query.filter(
+                (User.firebase_uid == firebase_uid) | (User.email == email)
+            ).first()
+            
             if not user:
                 # 새 Firebase 사용자 생성
                 user = User(
@@ -635,9 +638,14 @@ def login():
                 db.session.add(user)
                 db.session.commit()
                 print(f"✅ 새 Firebase 사용자 생성: {email}")
+            elif not user.firebase_uid:
+                # 기존 사용자에 firebase_uid 추가
+                user.firebase_uid = firebase_uid
+                db.session.commit()
+                print(f"✅ 기존 사용자 Firebase UID 업데이트: {email}")
             
             # Firebase 사용자로 로그인
-                login_user(user)
+            login_user(user)
             
             # === 🛡️ 로그인 성공 시 실패 기록 초기화 ===
             clear_failed_login(client_ip)
@@ -687,8 +695,11 @@ def firebase_login():
             email = decoded_token['email']
             name = decoded_token.get('name', email.split('@')[0])
             
-            # Firebase 사용자로 로그인 처리
-            user = User.query.filter_by(firebase_uid=firebase_uid).first()
+            # Firebase 사용자로 로그인 처리 (firebase_uid 또는 email로 찾기)
+            user = User.query.filter(
+                (User.firebase_uid == firebase_uid) | (User.email == email)
+            ).first()
+            
             if not user:
                 # 새 Firebase 사용자 생성
                 user = User(
@@ -702,6 +713,11 @@ def firebase_login():
                 db.session.add(user)
                 db.session.commit()
                 print(f"✅ 새 Firebase 사용자 생성: {email}")
+            elif not user.firebase_uid:
+                # 기존 사용자에 firebase_uid 추가
+                user.firebase_uid = firebase_uid
+                db.session.commit()
+                print(f"✅ 기존 사용자 Firebase UID 업데이트: {email}")
             
             # Firebase 사용자로 로그인
             login_user(user)
@@ -2295,18 +2311,29 @@ def points_visualization():
     
     today = datetime.utcnow().date()
     
-    # 1. 주간 트렌드 (최근 4주)
+    # 1. 주간 트렌드 (최근 4주) - 배치 쿼리로 최적화
+    date_range = [today - timedelta(days=i) for i in range(28, -1, -1)]
+    weekly_points = DailyPoints.query.filter(
+        DailyPoints.date.in_(date_range)
+    ).all()
+    
     weekly_data = []
-    for i in range(28, -1, -1):  # 최근 28일
-        date = today - timedelta(days=i)
-        daily_points = DailyPoints.query.filter_by(date=date).all()
-        total_points = sum(record.total_points for record in daily_points)
+    for date in date_range:
+        day_points = [p for p in weekly_points if p.date == date]
+        total_points = sum(record.total_points for record in day_points)
         weekly_data.append({
             'date': date.strftime('%m/%d'),
             'points': total_points
         })
     
-    # 2. 월별 합계 (올해 전체)
+    # 2. 월별 합계 (올해 전체) - 배치 쿼리로 최적화
+    year_start = datetime(today.year, 1, 1).date()
+    year_end = datetime(today.year, 12, 31).date()
+    all_year_points = DailyPoints.query.filter(
+        DailyPoints.date >= year_start,
+        DailyPoints.date <= year_end
+    ).all()
+    
     monthly_data = []
     for month in range(1, 13):
         month_start = datetime(today.year, month, 1).date()
@@ -2315,10 +2342,8 @@ def points_visualization():
         else:
             month_end = datetime(today.year, month + 1, 1).date() - timedelta(days=1)
         
-        month_points = DailyPoints.query.filter(
-            DailyPoints.date >= month_start,
-            DailyPoints.date <= month_end
-        ).all()
+        month_points = [p for p in all_year_points 
+                       if month_start <= p.date <= month_end]
         total_month_points = sum(record.total_points for record in month_points)
         
         monthly_data.append({
@@ -2326,28 +2351,32 @@ def points_visualization():
             'points': total_month_points
         })
     
-    # 3. 과목별 분포 (전체 기간)
-    all_points = DailyPoints.query.all()
+    # 3. 과목별 분포 (전체 기간) - 기존 all_points 재사용
     subject_totals = {
-        '국어': sum(record.korean_points for record in all_points),
-        '수학': sum(record.math_points for record in all_points),
-        '쎈수학': sum(record.ssen_points for record in all_points),
-        '독서': sum(record.reading_points for record in all_points)
+        '국어': sum(record.korean_points for record in all_year_points),
+        '수학': sum(record.math_points for record in all_year_points),
+        '쎈수학': sum(record.ssen_points for record in all_year_points),
+        '독서': sum(record.reading_points for record in all_year_points)
     }
     
-    # 4. 학년별 평균
+    # 4. 학년별 평균 - 배치 쿼리로 최적화
+    all_children = Child.query.filter_by(include_in_stats=True).all()
+    child_ids = [child.id for child in all_children]
+    all_children_points = DailyPoints.query.filter(
+        DailyPoints.child_id.in_(child_ids)
+    ).all() if child_ids else []
+    
     grade_averages = {}
     for grade_num in [1, 2, 3, 4, 5, 6]:
         grade_str = f'{grade_num}학년'
-        grade_children = Child.query.filter_by(grade=grade_num, include_in_stats=True).all()
+        grade_children = [child for child in all_children if child.grade == grade_num]
+        
         if grade_children:
-            grade_total_points = 0
-            grade_total_records = 0
+            grade_child_ids = [child.id for child in grade_children]
+            grade_points = [p for p in all_children_points if p.child_id in grade_child_ids]
             
-            for child in grade_children:
-                child_points = DailyPoints.query.filter_by(child_id=child.id).all()
-                grade_total_points += sum(record.total_points for record in child_points)
-                grade_total_records += len(child_points)
+            grade_total_points = sum(record.total_points for record in grade_points)
+            grade_total_records = len(grade_points)
             
             if grade_total_records > 0:
                 # 평균 = 총 포인트 / 총 기록 수 (각 기록당 평균 포인트)
