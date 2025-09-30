@@ -316,9 +316,9 @@
                     <div class="text-center py-5">
                         <i class="bi bi-inbox" style="font-size: 3rem; color: #dee2e6;"></i>
                         <p class="text-muted mt-3 mb-0">아직 기록이 없습니다.</p>
-                        <button class="btn btn-primary btn-sm mt-2" onclick="alert('곧 구현됩니다!')">
+                        <a href="{{ url_for('points_input_select') }}" class="btn btn-primary btn-sm mt-2">
                             첫 기록 추가하기
-                        </button>
+                        </a>
                     </div>
                 {% endif %}
             </div>
