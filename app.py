@@ -52,6 +52,23 @@ if os.environ.get('DATABASE_URL'):
     # Railway 또는 프로덕션 환경
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
     app.config['SESSION_COOKIE_SECURE'] = True  # 프로덕션에서는 HTTPS 강제
+    
+    # 🔧 연결 풀 설정 (간헐적 연결 오류 해결)
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_size': 5,            # 기본 연결 풀 크기 (메모리 절약)
+        'max_overflow': 10,        # 추가 연결 허용 (메모리 절약)
+        'pool_timeout': 30,        # 연결 대기 시간 (초)
+        'pool_recycle': 300,      # 연결 재사용 시간 (5분)
+        'pool_pre_ping': True,     # 연결 유효성 사전 검사
+        'connect_args': {
+    'connect_timeout': 10,
+    'keepalives': 1,
+    'keepalives_idle': 30,
+    'keepalives_interval': 10,
+    'keepalives_count': 5,
+    'application_name': 'child-learning-center'
+}
+    }
 else:
     # 개발 환경 - SQLite 사용
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///child_center.db'
@@ -360,7 +377,7 @@ class DailyPoints(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # 관계 설정
-    child = db.relationship('Child', lazy=True)
+    child = db.relationship('Child', lazy=True, overlaps='child_ref,daily_points')
     creator = db.relationship('User', backref='points_records', lazy=True)
 
 @login_manager.user_loader
@@ -4146,7 +4163,7 @@ def monthly_backup():
         
         # Flask 앱 컨텍스트 내에서 실행
         with app.app_context():
-            # 백업 디렉토리 생성
+        # 백업 디렉토리 생성
             backup_dir = create_backup_directory()
         
             # 백업 데이터 수집
@@ -4155,7 +4172,7 @@ def monthly_backup():
                 error_msg = f"월간 백업 데이터 수집 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('월간', 'failed', error_msg)
-            return False
+                return False
         
             # JSON 백업 생성
             json_path, error = create_json_backup(backup_data, backup_dir, 'monthly')
