@@ -1,30 +1,30 @@
-# Flask 웹 프레임워크
+# Flask Web Framework
 Flask==3.1.1
 Flask-Login==0.6.3
 Flask-SQLAlchemy==3.1.1
 Flask-Migrate==4.1.0
 
-# 데이터베이스
+# Database
 SQLAlchemy==2.0.41
 Alembic==1.16.4
 
-# 환경변수 관리
+# Environment Variables
 python-dotenv==1.1.1
 
-# 보안
+# Security
 Werkzeug==3.1.3
 
-# 템플릿 엔진
+# Template Engine
 Jinja2==3.1.6
 MarkupSafe==3.0.2
 
-# 유틸리티
+# Utilities
 click==8.2.1
 itsdangerous==2.2.0
 blinker==1.9.0
 Mako==1.3.10
 
-# 데이터 처리 및 백업
+# Data Processing & Backup
 pandas==2.2.3
 openpyxl==3.1.5
 schedule==1.2.2
@@ -33,6 +33,6 @@ schedule==1.2.2
 firebase-admin==7.1.0
 PyJWT==2.10.1
 
-# 배포용 (Render.com)
+# Deployment (Render.com)
 gunicorn==21.2.0
 psycopg2-binary==2.9.9
