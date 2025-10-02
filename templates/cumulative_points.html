@@ -158,12 +158,40 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
+{% block extra_js %}
 <script>
+console.log('✅ 스크립트 로드됨');
+
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('✅ DOM 로드 완료');
+    
+    // 요소 확인
+    const bulkForm = document.getElementById('bulkForm');
+    const saveIndividualBtn = document.getElementById('saveIndividual');
+    const childSelect = document.getElementById('childSelect');
+    const individualPoints = document.getElementById('individualPoints');
+    
+    console.log('bulkForm:', bulkForm);
+    console.log('saveIndividualBtn:', saveIndividualBtn);
+    console.log('childSelect:', childSelect);
+    console.log('individualPoints:', individualPoints);
+    
+    if (!bulkForm) {
+        console.error('❌ bulkForm을 찾을 수 없습니다!');
+        alert('페이지 로딩 오류: bulkForm 없음');
+        return;
+    }
+    
+    if (!saveIndividualBtn) {
+        console.error('❌ saveIndividualBtn을 찾을 수 없습니다!');
+        alert('페이지 로딩 오류: saveIndividualBtn 없음');
+        return;
+    }
+    
     // 일괄 입력 폼 처리
-    document.getElementById('bulkForm').addEventListener('submit', function(e) {
+    bulkForm.addEventListener('submit', function(e) {
         e.preventDefault();
+        console.log('🔵 일괄 입력 폼 제출됨');
         
         const pointsData = [];
         const rows = document.querySelectorAll('tbody tr');
@@ -181,10 +209,15 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
+        console.log('📊 수집된 포인트 데이터:', pointsData);
+        
         if (pointsData.length === 0) {
+            console.warn('⚠️ 입력된 포인트가 없음');
             showModal('입력할 포인트가 없습니다. 모든 아동의 누적 포인트를 입력해주세요.', 'warning');
             return;
         }
+        
+        console.log('🚀 API 호출 시작...');
         
         // 상태 표시 업데이트
         rows.forEach(row => {
@@ -205,24 +238,31 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             body: JSON.stringify({ points_data: pointsData })
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('📥 응답 받음:', response);
+            return response.json();
+        })
         .then(data => {
+            console.log('📦 응답 데이터:', data);
             if (data.success) {
+                console.log('✅ 성공!');
                 showModal(data.message, 'success');
                 // 성공 시 현재 포인트 업데이트
                 updateCurrentPoints(pointsData);
                 // 상태 초기화
                 resetStatusBadges();
             } else {
+                console.error('❌ 실패:', data.message);
                 showModal(data.message, 'error');
                 if (data.errors) {
+                    console.error('오류 목록:', data.errors);
                     showErrorDetails(data.errors);
                 }
             }
         })
         .catch(error => {
-            console.error('Error:', error);
-            showModal('서버 오류가 발생했습니다.', 'error');
+            console.error('❌ 네트워크 오류:', error);
+            showModal('서버 오류가 발생했습니다: ' + error.message, 'error');
         })
         .finally(() => {
             // 상태 초기화
@@ -231,19 +271,28 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // 개별 입력 처리
-    document.getElementById('saveIndividual').addEventListener('click', function() {
-        const childId = document.getElementById('childSelect').value;
-        const points = document.getElementById('individualPoints').value.trim();
+    saveIndividualBtn.addEventListener('click', function() {
+        console.log('🔵 개별 입력 버튼 클릭됨');
+        
+        const childId = childSelect.value;
+        const points = individualPoints.value.trim();
+        
+        console.log('선택된 아동 ID:', childId);
+        console.log('입력된 포인트:', points);
         
         if (!childId) {
+            console.warn('⚠️ 아동이 선택되지 않음');
             showModal('아동을 선택해주세요.', 'warning');
             return;
         }
         
         if (!points) {
+            console.warn('⚠️ 포인트가 입력되지 않음');
             showModal('누적 포인트를 입력해주세요.', 'warning');
             return;
         }
+        
+        console.log('🚀 개별 입력 API 호출 시작...');
         
         // API 호출
         fetch('/cumulative-points/input', {
@@ -256,30 +305,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 cumulative_points: parseInt(points)
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('📥 개별 입력 응답 받음:', response);
+            return response.json();
+        })
         .then(data => {
+            console.log('📦 개별 입력 응답 데이터:', data);
             if (data.success) {
+                console.log('✅ 개별 입력 성공!');
                 showModal(data.message, 'success');
                 // 성공 시 현재 포인트 업데이트
                 updateIndividualPoints(parseInt(childId), parseInt(points));
                 // 폼 초기화
-                document.getElementById('childSelect').value = '';
-                document.getElementById('individualPoints').value = '';
+                childSelect.value = '';
+                individualPoints.value = '';
             } else {
+                console.error('❌ 개별 입력 실패:', data.message);
                 showModal(data.message, 'error');
             }
         })
         .catch(error => {
-            console.error('Error:', error);
-            showModal('서버 오류가 발생했습니다.', 'error');
+            console.error('❌ 개별 입력 네트워크 오류:', error);
+            showModal('서버 오류가 발생했습니다: ' + error.message, 'error');
         });
     });
     
     // 아동 선택 시 현재 포인트 표시
-    document.getElementById('childSelect').addEventListener('change', function() {
+    childSelect.addEventListener('change', function() {
+        console.log('🔵 아동 선택 변경됨');
         const selectedOption = this.options[this.selectedIndex];
         const currentPoints = selectedOption.dataset.currentPoints || 0;
-        document.getElementById('individualPoints').value = currentPoints;
+        console.log('현재 포인트:', currentPoints);
+        individualPoints.value = currentPoints;
     });
     
     // 현재 포인트 업데이트 함수
@@ -315,15 +372,31 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 모달 표시 함수
     function showModal(message, type) {
-        const modal = new bootstrap.Modal(document.getElementById('resultModal'));
-        const modalBody = document.getElementById('modalBody');
-        
-        let alertClass = 'alert-success';
-        if (type === 'error') alertClass = 'alert-danger';
-        else if (type === 'warning') alertClass = 'alert-warning';
-        
-        modalBody.innerHTML = `<div class="alert ${alertClass} mb-0">${message}</div>`;
-        modal.show();
+        console.log('📢 모달 표시:', message, '타입:', type);
+        try {
+            const modalElement = document.getElementById('resultModal');
+            console.log('모달 요소:', modalElement);
+            
+            if (!modalElement) {
+                console.error('❌ 모달 요소를 찾을 수 없습니다!');
+                alert(message); // 폴백: 모달이 없으면 alert 사용
+                return;
+            }
+            
+            const modal = new bootstrap.Modal(modalElement);
+            const modalBody = document.getElementById('modalBody');
+            
+            let alertClass = 'alert-success';
+            if (type === 'error') alertClass = 'alert-danger';
+            else if (type === 'warning') alertClass = 'alert-warning';
+            
+            modalBody.innerHTML = `<div class="alert ${alertClass} mb-0">${message}</div>`;
+            modal.show();
+            console.log('✅ 모달 표시됨');
+        } catch (error) {
+            console.error('❌ 모달 표시 오류:', error);
+            alert(message); // 폴백: 오류 시 alert 사용
+        }
     }
     
     // 오류 상세 표시 함수

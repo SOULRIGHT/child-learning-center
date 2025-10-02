@@ -708,8 +708,7 @@ def login():
             is_now_blocked = record_failed_login(client_ip)
             if is_now_blocked:
                 flash('⚠️ 연속된 로그인 실패로 인해 30분간 로그인이 제한됩니다.', 'error')
-            else:
-                flash('Firebase 인증에 실패했습니다.', 'error')
+            flash('Firebase 인증에 실패했습니다.', 'error')
             
             if request.is_json:
                 return jsonify({'success': False, 'error': 'Invalid Firebase token'})
@@ -2039,11 +2038,19 @@ def points_input(child_id):
                         old_math_points=old_math,
                         old_ssen_points=old_ssen,
                         old_reading_points=old_reading,
+                        old_piano_points=old_piano,
+                        old_english_points=old_english,
+                        old_advanced_math_points=old_advanced_math,
+                        old_writing_points=old_writing,
                         old_total_points=old_total,
                         new_korean_points=korean_points,
                         new_math_points=math_points,
                         new_ssen_points=ssen_points,
                         new_reading_points=reading_points,
+                        new_piano_points=piano_points,
+                        new_english_points=english_points,
+                        new_advanced_math_points=advanced_math_points,
+                        new_writing_points=writing_points,
                         new_total_points=total_points,
                         change_type='update',
                         changed_by=current_user.id,
@@ -2084,11 +2091,19 @@ def points_input(child_id):
                     old_math_points=0,
                     old_ssen_points=0,
                     old_reading_points=0,
+                    old_piano_points=0,
+                    old_english_points=0,
+                    old_advanced_math_points=0,
+                    old_writing_points=0,
                     old_total_points=0,
                     new_korean_points=korean_points,
                     new_math_points=math_points,
                     new_ssen_points=ssen_points,
                     new_reading_points=reading_points,
+                    new_piano_points=piano_points,
+                    new_english_points=english_points,
+                    new_advanced_math_points=advanced_math_points,
+                    new_writing_points=writing_points,
                     new_total_points=total_points,
                     change_type='create',
                     changed_by=current_user.id,
@@ -2867,8 +2882,12 @@ def add_manual_points():
         points_history = PointsHistory(
             child_id=child_id,
             date=today,
-            old_korean_points=0, old_math_points=0, old_ssen_points=0, old_reading_points=0, old_total_points=daily_record.total_points - points,
-            new_korean_points=0, new_math_points=0, new_ssen_points=0, new_reading_points=0, new_total_points=daily_record.total_points,
+            old_korean_points=0, old_math_points=0, old_ssen_points=0, old_reading_points=0, 
+            old_piano_points=0, old_english_points=0, old_advanced_math_points=0, old_writing_points=0,
+            old_total_points=daily_record.total_points - points,
+            new_korean_points=0, new_math_points=0, new_ssen_points=0, new_reading_points=0,
+            new_piano_points=0, new_english_points=0, new_advanced_math_points=0, new_writing_points=0,
+            new_total_points=daily_record.total_points,
             change_type=change_type,
             changed_by=current_user.id,
             change_reason=f'수동 {change_type}: {subject} ({reason})'
@@ -3180,12 +3199,42 @@ def input_cumulative_points():
         if not child:
             return jsonify({'success': False, 'message': '아동을 찾을 수 없습니다.'}), 404
         
-        child.cumulative_points = cumulative_points
-        db.session.commit()
+        # 기존 일일 포인트 기록들 삭제
+        deleted_count = DailyPoints.query.filter_by(child_id=child_id).delete()
+        print(f"🗑️ {child.name}의 기존 일일 포인트 기록 {deleted_count}개 삭제")
+        
+        # 누적 포인트를 일일 포인트 기록으로 변환 (과거 날짜로 생성하여 오늘 입력과 충돌 방지)
+        if cumulative_points > 0:
+            # 과거 날짜 사용 (어제 날짜)
+            from datetime import timedelta
+            yesterday = datetime.utcnow().date() - timedelta(days=1)
+            
+            cumulative_record = DailyPoints(
+                child_id=child_id,
+                date=yesterday,  # 어제 날짜로 설정
+                korean_points=0,
+                math_points=0,
+                ssen_points=0,
+                reading_points=0,
+                piano_points=0,
+                english_points=0,
+                advanced_math_points=0,
+                writing_points=0,
+                manual_points=0,
+                total_points=cumulative_points,
+                created_by=current_user.id,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            db.session.add(cumulative_record)
+            print(f"📝 {child.name}의 누적 포인트 {cumulative_points}점을 일일 포인트 기록으로 변환 (날짜: {yesterday})")
+        
+        # 누적 포인트 자동 업데이트 (일일 포인트 합계로 계산)
+        update_cumulative_points(child_id, commit=True)
         
         return jsonify({
             'success': True, 
-            'message': f'{child.name}의 누적 포인트가 {cumulative_points}점으로 설정되었습니다.',
+            'message': f'{child.name}의 누적 포인트가 {cumulative_points}점으로 설정되었습니다. (기존 기록 {deleted_count}개 삭제, 누적 포인트를 일일 기록으로 변환)',
             'child_name': child.name,
             'cumulative_points': cumulative_points
         })
@@ -3206,6 +3255,7 @@ def bulk_input_cumulative_points():
             return jsonify({'success': False, 'message': '입력할 데이터가 없습니다.'}), 400
         
         updated_count = 0
+        total_deleted = 0
         errors = []
         
         for item in points_data:
@@ -3230,7 +3280,39 @@ def bulk_input_cumulative_points():
                 errors.append(f'아동 ID {child_id}: 아동을 찾을 수 없습니다.')
                 continue
             
-            child.cumulative_points = cumulative_points
+            # 기존 일일 포인트 기록들 삭제
+            deleted_count = DailyPoints.query.filter_by(child_id=child_id).delete()
+            total_deleted += deleted_count
+            print(f"🗑️ {child.name}의 기존 일일 포인트 기록 {deleted_count}개 삭제")
+            
+            # 누적 포인트를 일일 포인트 기록으로 변환 (과거 날짜로 생성하여 오늘 입력과 충돌 방지)
+            if cumulative_points > 0:
+                # 과거 날짜 사용 (어제 날짜)
+                from datetime import timedelta
+                yesterday = datetime.utcnow().date() - timedelta(days=1)
+                
+                cumulative_record = DailyPoints(
+                    child_id=child_id,
+                    date=yesterday,  # 어제 날짜로 설정
+                    korean_points=0,
+                    math_points=0,
+                    ssen_points=0,
+                    reading_points=0,
+                    piano_points=0,
+                    english_points=0,
+                    advanced_math_points=0,
+                    writing_points=0,
+                    manual_points=0,
+                    total_points=cumulative_points,
+                    created_by=current_user.id,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.session.add(cumulative_record)
+                print(f"📝 {child.name}의 누적 포인트 {cumulative_points}점을 일일 포인트 기록으로 변환 (날짜: {yesterday})")
+            
+            # 누적 포인트 자동 업데이트 (일일 포인트 합계로 계산)
+            update_cumulative_points(child_id, commit=False)
             updated_count += 1
         
         if errors:
@@ -4156,7 +4238,7 @@ def daily_backup():
         
         # Flask 앱 컨텍스트 내에서 실행
         with app.app_context():
-        # 백업 디렉토리 생성
+            # 백업 디렉토리 생성
             backup_dir = create_backup_directory()
         
             # 백업 데이터 수집
@@ -4165,7 +4247,7 @@ def daily_backup():
                 error_msg = f"일일 백업 데이터 수집 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('일일', 'failed', error_msg)
-                return False
+            return False
         
             # JSON 백업 생성
             json_path, error = create_json_backup(backup_data, backup_dir, 'daily')
@@ -4173,7 +4255,7 @@ def daily_backup():
                 error_msg = f"일일 JSON 백업 생성 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('일일', 'failed', error_msg)
-                return False
+            return False
         
             # Excel 백업 생성
             excel_path, error = create_excel_backup(backup_data, backup_dir, 'daily')
@@ -4181,7 +4263,7 @@ def daily_backup():
                 error_msg = f"일일 Excel 백업 생성 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('일일', 'failed', error_msg)
-                return False
+            return False
         
             # 데이터베이스 백업 생성
             db_path, error = create_database_backup(backup_dir, 'daily')
@@ -4189,7 +4271,7 @@ def daily_backup():
                 error_msg = f"일일 데이터베이스 백업 생성 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('일일', 'failed', error_msg)
-                return False
+            return False
         
             success_msg = f"일일 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}"
             print(f"✅ {success_msg}")
@@ -4209,7 +4291,7 @@ def monthly_backup():
         
         # Flask 앱 컨텍스트 내에서 실행
         with app.app_context():
-        # 백업 디렉토리 생성
+            # 백업 디렉토리 생성
             backup_dir = create_backup_directory()
         
             # 백업 데이터 수집
@@ -4218,7 +4300,7 @@ def monthly_backup():
                 error_msg = f"월간 백업 데이터 수집 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('월간', 'failed', error_msg)
-                return False
+            return False
         
             # JSON 백업 생성
             json_path, error = create_json_backup(backup_data, backup_dir, 'monthly')
@@ -4226,7 +4308,7 @@ def monthly_backup():
                 error_msg = f"월간 JSON 백업 생성 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('월간', 'failed', error_msg)
-                return False
+            return False
         
             # Excel 백업 생성
             excel_path, error = create_excel_backup(backup_data, backup_dir, 'monthly')
@@ -4234,7 +4316,7 @@ def monthly_backup():
                 error_msg = f"월간 Excel 백업 생성 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('월간', 'failed', error_msg)
-                return False
+            return False
         
             # 데이터베이스 백업 생성
             db_path, error = create_database_backup(backup_dir, 'monthly')
@@ -4242,7 +4324,7 @@ def monthly_backup():
                 error_msg = f"월간 데이터베이스 백업 생성 실패: {error}"
                 print(f"❌ {error_msg}")
                 create_backup_notification('월간', 'failed', error_msg)
-                return False
+            return False
         
             success_msg = f"월간 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}"
             print(f"✅ {success_msg}")
@@ -4320,7 +4402,7 @@ def backup_manual():
             create_backup_notification('수동', 'failed', error_msg)
             return redirect(url_for('settings_data'))
         
-        # Excel 백업 생성
+            # Excel 백업 생성
         excel_path, error = create_excel_backup(backup_data, backup_dir, 'manual')
         if error:
             error_msg = f'Excel 백업 생성 실패: {error}'
@@ -4328,7 +4410,7 @@ def backup_manual():
             create_backup_notification('수동', 'failed', error_msg)
             return redirect(url_for('settings_data'))
         
-        # 데이터베이스 백업 생성
+            # 데이터베이스 백업 생성
         db_path, error = create_database_backup(backup_dir, 'manual')
         if error:
             error_msg = f'데이터베이스 백업 생성 실패: {error}'

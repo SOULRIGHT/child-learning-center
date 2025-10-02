@@ -31,10 +31,282 @@ MODIFICATIONS = [
         'max_matches': 1,
     },
     
-    # 2. daily_backup 함수의 with 블록 내부
+    # 2. 실시간 백업 함수의 with 블록 내부 (realtime_backup)
     {
         'pattern': r'^        # 백업 디렉토리 생성$',
-        'context_before': r'with app\.app_context\(\):',
+        'context_before': r'def realtime_backup\(child_id, action\):',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - 백업 디렉토리 생성',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        backup_dir = create_backup_directory\(\)$',
+        'context_before': r'# 백업 디렉토리 생성',
+        'context_after': r'# 백업 데이터 수집',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - backup_dir 생성',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        # 백업 데이터 수집$',
+        'context_before': r'backup_dir = create_backup_directory\(\)',
+        'context_after': r'backup_data, error = get_backup_data\(\)',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - 백업 데이터 수집 주석',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        backup_data, error = get_backup_data\(\)$',
+        'context_before': r'# 백업 데이터 수집',
+        'context_after': r'if error:',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - get_backup_data 호출',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        if error:$',
+        'context_before': r'backup_data, error = get_backup_data\(\)',
+        'context_after': r'error_msg = f"실시간 백업 데이터 수집 실패',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - error 체크',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            error_msg = f"실시간 백업 데이터 수집 실패: \{error\}"$',
+        'context_before': r'if error:',
+        'context_after': r'print\(f"❌ \{error_msg\}"\)',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - error_msg 설정',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            print\(f"❌ \{error_msg\}"\)$',
+        'context_before': r'error_msg = f"실시간 백업 데이터 수집 실패',
+        'context_after': r'create_backup_notification',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - print 에러',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            create_backup_notification\(\'실시간\', \'failed\', error_msg\)$',
+        'context_before': r'print\(f"❌ \{error_msg\}"\)',
+        'context_after': r'return False',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - create_backup_notification',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            return False$',
+        'context_before': r'create_backup_notification\(\'실시간\', \'failed\', error_msg\)',
+        'context_after': r'# JSON 백업 생성',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - return False',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        # JSON 백업 생성$',
+        'context_before': r'return False',
+        'context_after': r'json_path, error = create_json_backup',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - JSON 백업 생성 주석',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        json_path, error = create_json_backup\(backup_data, backup_dir, \'realtime\'\)$',
+        'context_before': r'# JSON 백업 생성',
+        'context_after': r'if error:',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - JSON 백업 생성 함수 호출',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        if error:$',
+        'context_before': r'json_path, error = create_json_backup\(backup_data, backup_dir, \'realtime\'\)',
+        'context_after': r'error_msg = f"실시간 JSON 백업 생성 실패',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - JSON 백업 에러 체크',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            error_msg = f"실시간 JSON 백업 생성 실패: \{error\}"$',
+        'context_before': r'if error:',
+        'context_after': r'print\(f"❌ \{error_msg\}"\)',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - JSON 백업 error_msg',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            print\(f"❌ \{error_msg\}"\)$',
+        'context_before': r'error_msg = f"실시간 JSON 백업 생성 실패',
+        'context_after': r'create_backup_notification',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - JSON 백업 print 에러',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            create_backup_notification\(\'실시간\', \'failed\', error_msg\)$',
+        'context_before': r'print\(f"❌ \{error_msg\}"\)',
+        'context_after': r'return False',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - JSON 백업 create_backup_notification',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            return False$',
+        'context_before': r'create_backup_notification\(\'실시간\', \'failed\', error_msg\)',
+        'context_after': r'# Excel 백업 생성',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - JSON 백업 return False',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        # Excel 백업 생성$',
+        'context_before': r'return False',
+        'context_after': r'excel_path, error = create_excel_backup',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - Excel 백업 생성 주석',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        excel_path, error = create_excel_backup\(backup_data, backup_dir, \'realtime\'\)$',
+        'context_before': r'# Excel 백업 생성',
+        'context_after': r'if error:',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - Excel 백업 생성 함수 호출',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        if error:$',
+        'context_before': r'excel_path, error = create_excel_backup\(backup_data, backup_dir, \'realtime\'\)',
+        'context_after': r'error_msg = f"실시간 Excel 백업 생성 실패',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - Excel 백업 에러 체크',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            error_msg = f"실시간 Excel 백업 생성 실패: \{error\}"$',
+        'context_before': r'if error:',
+        'context_after': r'print\(f"❌ \{error_msg\}"\)',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - Excel 백업 error_msg',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            print\(f"❌ \{error_msg\}"\)$',
+        'context_before': r'error_msg = f"실시간 Excel 백업 생성 실패',
+        'context_after': r'create_backup_notification',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - Excel 백업 print 에러',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            create_backup_notification\(\'실시간\', \'failed\', error_msg\)$',
+        'context_before': r'print\(f"❌ \{error_msg\}"\)',
+        'context_after': r'return False',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - Excel 백업 create_backup_notification',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            return False$',
+        'context_before': r'create_backup_notification\(\'실시간\', \'failed\', error_msg\)',
+        'context_after': r'# 데이터베이스 백업 생성',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - Excel 백업 return False',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        # 데이터베이스 백업 생성$',
+        'context_before': r'return False',
+        'context_after': r'db_path, error = create_database_backup',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - DB 백업 생성 주석',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        db_path, error = create_database_backup\(backup_dir, \'realtime\'\)$',
+        'context_before': r'# 데이터베이스 백업 생성',
+        'context_after': r'if error:',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - DB 백업 생성 함수 호출',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        if error:$',
+        'context_before': r'db_path, error = create_database_backup\(backup_dir, \'realtime\'\)',
+        'context_after': r'error_msg = f"실시간 데이터베이스 백업 생성 실패',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - DB 백업 에러 체크',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            error_msg = f"실시간 데이터베이스 백업 생성 실패: \{error\}"$',
+        'context_before': r'if error:',
+        'context_after': r'print\(f"❌ \{error_msg\}"\)',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - DB 백업 error_msg',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            print\(f"❌ \{error_msg\}"\)$',
+        'context_before': r'error_msg = f"실시간 데이터베이스 백업 생성 실패',
+        'context_after': r'create_backup_notification',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - DB 백업 print 에러',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            create_backup_notification\(\'실시간\', \'failed\', error_msg\)$',
+        'context_before': r'print\(f"❌ \{error_msg\}"\)',
+        'context_after': r'return False',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - DB 백업 create_backup_notification',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^            return False$',
+        'context_before': r'create_backup_notification\(\'실시간\', \'failed\', error_msg\)',
+        'context_after': r'success_msg = f"실시간 백업 완료',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - DB 백업 return False',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        success_msg = f"실시간 백업 완료:',
+        'context_before': r'return False',
+        'context_after': r'print\(f"✅ \{success_msg\}"\)',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - success_msg',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        print\(f"✅ \{success_msg\}"\)$',
+        'context_before': r'success_msg = f"실시간 백업 완료',
+        'context_after': r'create_backup_notification',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - print 성공',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        create_backup_notification\(\'실시간\', \'success\', success_msg\)$',
+        'context_before': r'print\(f"✅ \{success_msg\}"\)',
+        'context_after': r'return True',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - create_backup_notification 성공',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        return True$',
+        'context_before': r'create_backup_notification\(\'실시간\', \'success\', success_msg\)',
+        'indent_change': +4,
+        'description': 'realtime_backup with 블록 - return True',
+        'max_matches': 1,
+    },
+    
+    # 3. daily_backup 함수의 with 블록 내부
+    {
+        'pattern': r'^        # 백업 디렉토리 생성$',
+        'context_before': r'def daily_backup\(\):',
         'indent_change': +4,
         'description': 'daily_backup with 블록 - 백업 디렉토리 생성',
         'max_matches': 1,
@@ -42,6 +314,7 @@ MODIFICATIONS = [
     {
         'pattern': r'^        backup_dir = create_backup_directory\(\)$',
         'context_before': r'# 백업 디렉토리 생성',
+        'context_after': r'# 백업 데이터 수집',
         'indent_change': +4,
         'description': 'daily_backup with 블록 - backup_dir 생성',
         'max_matches': 1,
@@ -49,6 +322,7 @@ MODIFICATIONS = [
     {
         'pattern': r'^        # 백업 데이터 수집$',
         'context_before': r'backup_dir = create_backup_directory\(\)',
+        'context_after': r'backup_data, error = get_backup_data\(\)',
         'indent_change': +4,
         'description': 'daily_backup with 블록 - 백업 데이터 수집 주석',
         'max_matches': 1,
@@ -56,6 +330,7 @@ MODIFICATIONS = [
     {
         'pattern': r'^        backup_data, error = get_backup_data\(\)$',
         'context_before': r'# 백업 데이터 수집',
+        'context_after': r'if error:',
         'indent_change': +4,
         'description': 'daily_backup with 블록 - get_backup_data 호출',
         'max_matches': 1,
@@ -69,95 +344,208 @@ MODIFICATIONS = [
         'max_matches': 1,
     },
     
-    # 3. JSON/Excel/DB 백업 생성 블록들
+    # 4. JSON/Excel/DB 백업 생성 블록들 (daily_backup)
     {
         'pattern': r'^        # JSON 백업 생성$',
         'context_before': r'return False',
         'context_after': r'json_path, error = create_json_backup',
         'indent_change': +4,
-        'description': 'JSON 백업 생성 주석',
-        'max_matches': 2,  # daily_backup과 monthly_backup 둘 다
+        'description': 'daily_backup with 블록 - JSON 백업 생성 주석',
+        'max_matches': 1,
     },
     {
-        'pattern': r'^        json_path, error = create_json_backup\(backup_data, backup_dir, \'(daily|monthly)\'\)$',
+        'pattern': r'^        json_path, error = create_json_backup\(backup_data, backup_dir, \'daily\'\)$',
         'context_before': r'# JSON 백업 생성',
         'indent_change': +4,
-        'description': 'JSON 백업 생성 함수 호출',
-        'max_matches': 2,
+        'description': 'daily_backup with 블록 - JSON 백업 생성 함수 호출',
+        'max_matches': 1,
     },
     {
         'pattern': r'^        if error:$',
-        'context_before': r'json_path, error = create_json_backup',
-        'context_after': r'error_msg = f"(일일|월간) JSON 백업 생성 실패',
+        'context_before': r'json_path, error = create_json_backup\(backup_data, backup_dir, \'daily\'\)',
+        'context_after': r'error_msg = f"일일 JSON 백업 생성 실패',
         'indent_change': +4,
-        'description': 'JSON 백업 에러 체크',
-        'max_matches': 2,
+        'description': 'daily_backup with 블록 - JSON 백업 에러 체크',
+        'max_matches': 1,
     },
     {
         'pattern': r'^        # Excel 백업 생성$',
         'context_after': r'excel_path, error = create_excel_backup',
         'indent_change': +4,
-        'description': 'Excel 백업 생성 주석',
-        'max_matches': 2,
+        'description': 'daily_backup with 블록 - Excel 백업 생성 주석',
+        'max_matches': 1,
     },
     {
-        'pattern': r'^        excel_path, error = create_excel_backup\(backup_data, backup_dir, \'(daily|monthly)\'\)$',
+        'pattern': r'^        excel_path, error = create_excel_backup\(backup_data, backup_dir, \'daily\'\)$',
         'context_before': r'# Excel 백업 생성',
         'indent_change': +4,
-        'description': 'Excel 백업 생성 함수 호출',
-        'max_matches': 2,
+        'description': 'daily_backup with 블록 - Excel 백업 생성 함수 호출',
+        'max_matches': 1,
     },
     {
         'pattern': r'^        if error:$',
-        'context_before': r'excel_path, error = create_excel_backup',
-        'context_after': r'error_msg = f"(일일|월간) Excel 백업 생성 실패',
+        'context_before': r'excel_path, error = create_excel_backup\(backup_data, backup_dir, \'daily\'\)',
+        'context_after': r'error_msg = f"일일 Excel 백업 생성 실패',
         'indent_change': +4,
-        'description': 'Excel 백업 에러 체크',
-        'max_matches': 2,
+        'description': 'daily_backup with 블록 - Excel 백업 에러 체크',
+        'max_matches': 1,
     },
     {
         'pattern': r'^        # 데이터베이스 백업 생성$',
         'context_after': r'db_path, error = create_database_backup',
         'indent_change': +4,
-        'description': 'DB 백업 생성 주석',
-        'max_matches': 2,
+        'description': 'daily_backup with 블록 - DB 백업 생성 주석',
+        'max_matches': 1,
     },
     {
-        'pattern': r'^        db_path, error = create_database_backup\(backup_dir, \'(daily|monthly)\'\)$',
+        'pattern': r'^        db_path, error = create_database_backup\(backup_dir, \'daily\'\)$',
         'context_before': r'# 데이터베이스 백업 생성',
         'indent_change': +4,
-        'description': 'DB 백업 생성 함수 호출',
-        'max_matches': 2,
+        'description': 'daily_backup with 블록 - DB 백업 생성 함수 호출',
+        'max_matches': 1,
     },
     {
         'pattern': r'^        if error:$',
-        'context_before': r'db_path, error = create_database_backup',
-        'context_after': r'error_msg = f"(일일|월간) 데이터베이스 백업 생성 실패',
+        'context_before': r'db_path, error = create_database_backup\(backup_dir, \'daily\'\)',
+        'context_after': r'error_msg = f"일일 데이터베이스 백업 생성 실패',
         'indent_change': +4,
-        'description': 'DB 백업 에러 체크',
-        'max_matches': 2,
+        'description': 'daily_backup with 블록 - DB 백업 에러 체크',
+        'max_matches': 1,
     },
     {
-        'pattern': r'^        success_msg = f"(일일|월간) 백업 완료:',
+        'pattern': r'^        success_msg = f"일일 백업 완료:',
         'context_before': r'return False',
         'indent_change': +4,
-        'description': '백업 성공 메시지',
-        'max_matches': 2,
+        'description': 'daily_backup with 블록 - success_msg',
+        'max_matches': 1,
     },
     {
         'pattern': r'^        return True$',
         'context_before': r'create_backup_notification',
         'indent_change': +4,
-        'description': '백업 함수 return True',
-        'max_matches': 2,
+        'description': 'daily_backup with 블록 - return True',
+        'max_matches': 1,
     },
     
-    # 4. monthly_backup 함수의 with 블록
+    # 5. monthly_backup 함수의 with 블록
     {
         'pattern': r'^        # 백업 디렉토리 생성$',
         'context_before': r'월간 백업 시작',
         'indent_change': +4,
         'description': 'monthly_backup with 블록 - 백업 디렉토리 생성',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        backup_dir = create_backup_directory\(\)$',
+        'context_before': r'# 백업 디렉토리 생성',
+        'context_after': r'# 백업 데이터 수집',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - backup_dir 생성',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        # 백업 데이터 수집$',
+        'context_before': r'backup_dir = create_backup_directory\(\)',
+        'context_after': r'backup_data, error = get_backup_data\(\)',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - 백업 데이터 수집 주석',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        backup_data, error = get_backup_data\(\)$',
+        'context_before': r'# 백업 데이터 수집',
+        'context_after': r'if error:',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - get_backup_data 호출',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        if error:$',
+        'context_before': r'backup_data, error = get_backup_data\(\)',
+        'context_after': r'error_msg = f"월간 백업 데이터 수집 실패',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - error 체크',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        # JSON 백업 생성$',
+        'context_before': r'return False',
+        'context_after': r'json_path, error = create_json_backup',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - JSON 백업 생성 주석',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        json_path, error = create_json_backup\(backup_data, backup_dir, \'monthly\'\)$',
+        'context_before': r'# JSON 백업 생성',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - JSON 백업 생성 함수 호출',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        if error:$',
+        'context_before': r'json_path, error = create_json_backup\(backup_data, backup_dir, \'monthly\'\)',
+        'context_after': r'error_msg = f"월간 JSON 백업 생성 실패',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - JSON 백업 에러 체크',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        # Excel 백업 생성$',
+        'context_after': r'excel_path, error = create_excel_backup',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - Excel 백업 생성 주석',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        excel_path, error = create_excel_backup\(backup_data, backup_dir, \'monthly\'\)$',
+        'context_before': r'# Excel 백업 생성',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - Excel 백업 생성 함수 호출',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        if error:$',
+        'context_before': r'excel_path, error = create_excel_backup\(backup_data, backup_dir, \'monthly\'\)',
+        'context_after': r'error_msg = f"월간 Excel 백업 생성 실패',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - Excel 백업 에러 체크',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        # 데이터베이스 백업 생성$',
+        'context_after': r'db_path, error = create_database_backup',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - DB 백업 생성 주석',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        db_path, error = create_database_backup\(backup_dir, \'monthly\'\)$',
+        'context_before': r'# 데이터베이스 백업 생성',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - DB 백업 생성 함수 호출',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        if error:$',
+        'context_before': r'db_path, error = create_database_backup\(backup_dir, \'monthly\'\)',
+        'context_after': r'error_msg = f"월간 데이터베이스 백업 생성 실패',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - DB 백업 에러 체크',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        success_msg = f"월간 백업 완료:',
+        'context_before': r'return False',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - success_msg',
+        'max_matches': 1,
+    },
+    {
+        'pattern': r'^        return True$',
+        'context_before': r'create_backup_notification',
+        'indent_change': +4,
+        'description': 'monthly_backup with 블록 - return True',
         'max_matches': 1,
     },
 ]
@@ -280,6 +668,82 @@ def fix_indentation(file_path):
     
     # 수정된 내용 합치기
     content = '\n'.join(lines)
+    
+    # === 🔧 추가 수정: 중복된 else 블록 제거 ===
+    lines = content.split('\n')
+    modified = False
+    
+    # Firebase 로그인의 중복된 else 블록 찾기 및 제거
+    for i in range(len(lines)):
+        if i > 0 and lines[i].strip() == 'else:':
+            # 이전 줄에 else가 있는지 확인
+            for j in range(max(0, i-5), i):
+                if lines[j].strip() == 'else:':
+                    # 중복된 else 발견
+                    # 다음 줄의 들여쓰기가 잘못된 경우 수정
+                    if i + 1 < len(lines) and lines[i+1].strip():
+                        # flash 문장이 있는 경우 들여쓰기 수정
+                        if 'flash' in lines[i+1]:
+                            # 현재 들여쓰기 확인
+                            current_indent = len(lines[i+1]) - len(lines[i+1].lstrip(' '))
+                            # 12칸으로 수정
+                            lines[i+1] = '            ' + lines[i+1].strip()
+                    # 중복된 else 라인 제거
+                    lines.pop(i)
+                    modified = True
+                    modified_line_count += 1
+                    modification_details.append(
+                        f'  ✓ {i + 1}번 줄: 중복된 else 블록 제거'
+                    )
+                    break
+    
+    if modified:
+        content = '\n'.join(lines)
+    
+    # === 🔧 추가 수정: realtime_backup 함수의 과도한 들여쓰기 수정 ===
+    lines = content.split('\n')
+    in_realtime_backup = False
+    in_try_block = False
+    modified = False
+    
+    for i in range(len(lines)):
+        line = lines[i]
+        
+        # realtime_backup 함수 시작 감지
+        if 'def realtime_backup(' in line:
+            in_realtime_backup = True
+            in_try_block = False
+            continue
+        
+        # 다음 함수 시작 시 종료
+        if in_realtime_backup and line.strip().startswith('def ') and 'realtime_backup' not in line:
+            in_realtime_backup = False
+            in_try_block = False
+            continue
+        
+        # try 블록 시작
+        if in_realtime_backup and line.strip() == 'try:':
+            in_try_block = True
+            continue
+        
+        # except 블록 시작 시 try 블록 종료
+        if in_realtime_backup and in_try_block and line.strip().startswith('except '):
+            in_try_block = False
+            continue
+        
+        # try 블록 내부에서 12칸 들여쓰기를 8칸으로 수정
+        if in_realtime_backup and in_try_block:
+            if line.startswith('            ') and not line.startswith('                '):  # 정확히 12칸
+                # 8칸으로 변경
+                lines[i] = '        ' + line[12:]
+                modified = True
+                modified_line_count += 1
+                modification_details.append(
+                    f'  ✓ {i + 1}번 줄: realtime_backup try 블록 들여쓰기 수정 (12칸 -> 8칸)'
+                )
+    
+    if modified:
+        content = '\n'.join(lines)
     
     # 변경사항이 있는지 확인
     if content != original_content:
