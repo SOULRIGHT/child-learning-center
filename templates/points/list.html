@@ -39,7 +39,7 @@
                             <tbody>
                                 {% for record in points_records %}
                                 <tr>
-                                    <td>{{ record.date.strftime('%m/%d') }}</td>
+                                    <td>{{ record.date | kst_strftime('%m/%d') }}</td>
                                     <td>
                                         <a href="{{ url_for('child_detail', child_id=record.child.id) }}" class="text-decoration-none">
                                             {{ record.child.name }}

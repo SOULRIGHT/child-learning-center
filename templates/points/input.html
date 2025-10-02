@@ -11,7 +11,7 @@
                 <div>
                     <i class="fas fa-info-circle me-2"></i>
                     현재 선택: <strong>{{ child.name }} ({{ child.grade }}학년)</strong>
-                    <span class="text-muted ms-3">{{ today_record.date.strftime('%Y년 %m월 %d일') if today_record else today_date }}</span>
+                    <span class="text-muted ms-3">{{ today_record.date | kst_strftime('%Y년 %m월 %d일') if today_record else today_date }}</span>
                 </div>
                 <a href="{{ url_for('points_input_select') }}" class="btn btn-outline-primary btn-sm">
                     <i class="fas fa-exchange-alt me-2"></i>다른 아동 선택
@@ -21,7 +21,7 @@
             <div class="card">
                 <div class="card-header">
                     <h4>{{ child.name }} ({{ child.grade }}학년) - 포인트 입력</h4>
-                    <p class="text-muted mb-0">{{ today_record.date.strftime('%Y년 %m월 %d일') if today_record else today_date }}</p>
+                    <p class="text-muted mb-0">{{ today_record.date | kst_strftime('%Y년 %m월 %d일') if today_record else today_date }}</p>
                 </div>
                 <div class="card-body">
                     <form method="POST">

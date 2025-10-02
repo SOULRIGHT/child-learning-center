@@ -31,7 +31,7 @@
                                 </tr>
                                 <tr>
                                     <td><strong>가입일:</strong></td>
-                                    <td>{{ current_user.created_at.strftime('%Y년 %m월 %d일') }}</td>
+                                    <td>{{ current_user.created_at | kst_strftime('%Y년 %m월 %d일') }}</td>
                                 </tr>
                             </table>
                         </div>
@@ -43,7 +43,7 @@
                             </div>
                             <div class="alert alert-success">
                                 <i class="bi bi-check-circle me-2"></i>
-                                <strong>마지막 로그인:</strong> {{ current_user.created_at.strftime('%Y년 %m월 %d일 %H:%M') }}
+                                <strong>마지막 로그인:</strong> {{ current_user.created_at | kst_strftime('%Y년 %m월 %d일 %H:%M') }}
                             </div>
                         </div>
                     </div>

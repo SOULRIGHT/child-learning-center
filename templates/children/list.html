@@ -117,14 +117,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             <span class="badge bg-info">{{ child.grade }}학년</span>
                         </td>
                         <td class="align-middle">
-                            <small class="text-muted">{{ child.created_at.strftime('%Y-%m-%d') }}</small>
+                            <small class="text-muted">{{ child.created_at | kst_strftime('%Y-%m-%d') }}</small>
                         </td>
                         <td class="align-middle">
                             {% set latest_record = child.learning_records|selectattr('date')|list|sort(attribute='date', reverse=true)|first %}
                             {% if latest_record %}
                                 <small class="text-success">
                                     <i class="bi bi-check-circle me-1"></i>
-                                    {{ latest_record.date.strftime('%m/%d') }} 기록
+                                    {{ latest_record.date | kst_strftime('%m/%d') }} 기록
                                 </small>
                             {% else %}
                                 <small class="text-muted">

@@ -76,7 +76,7 @@
                                     <tbody>
                                         {% for record in child_points[:10] %}
                                         <tr>
-                                            <td>{{ record.date.strftime('%m/%d') }}</td>
+                                            <td>{{ record.date | kst_strftime('%m/%d') }}</td>
                                             <td>
                                                 {% if record.korean_points == 200 %}
                                                     <span class="badge bg-success">200</span>

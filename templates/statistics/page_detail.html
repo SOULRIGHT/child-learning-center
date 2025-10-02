@@ -124,7 +124,7 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        <small class="text-muted">{{ item.record.date.strftime('%m/%d') }}</small>
+                                        <small class="text-muted">{{ item.record.date | kst_strftime('%m/%d') }}</small>
                                     </td>
                                 </tr>
                                 {% endfor %}

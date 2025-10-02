@@ -52,7 +52,7 @@
                         </tr>
                         <tr>
                             <td><strong>등록일:</strong></td>
-                            <td>{{ current_user.created_at.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ current_user.created_at | kst_strftime('%Y-%m-%d') }}</td>
                         </tr>
                     </table>
                 </div>

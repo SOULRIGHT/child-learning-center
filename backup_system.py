@@ -105,6 +105,20 @@ def get_backup_data():
             }
             history_data.append(history_dict)
         
+        # 아동 메모 (ChildNote)
+        child_notes = ChildNote.query.all()
+        notes_data = []
+        for note in child_notes:
+            note_dict = {
+                'id': note.id,
+                'child_id': note.child_id,
+                'note': note.note,
+                'created_by': note.created_by,
+                'created_at': note.created_at.isoformat() if note.created_at else None,
+                'updated_at': note.updated_at.isoformat() if note.updated_at else None
+            }
+            notes_data.append(note_dict)
+        
         # 사용자 정보
         users = User.query.all()
         users_data = []
@@ -128,12 +142,14 @@ def get_backup_data():
                     'children': len(children_data),
                     'daily_points': len(daily_points_data),
                     'points_history': len(history_data),
+                    'child_notes': len(notes_data),
                     'users': len(users_data)
                 }
             },
             'children': children_data,
             'daily_points': daily_points_data,
             'points_history': history_data,
+            'child_notes': notes_data,
             'users': users_data
         }
         

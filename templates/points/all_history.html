@@ -36,7 +36,7 @@
                                     {% for record in history_records %}
                                     <tr class="{% if record.change_type == 'create' %}table-success{% elif record.change_type == 'update' %}table-warning{% endif %}">
                                         <td>
-                                            <strong>{{ record.date.strftime('%m월 %d일') }}</strong>
+                                            <strong>{{ record.date | kst_strftime('%m월 %d일') }}</strong>
                                         </td>
                                         <td>
                                             <strong>{{ record.child.name }}</strong>
@@ -88,7 +88,7 @@
                                             <small class="text-muted">{{ record.user.username }}</small>
                                         </td>
                                         <td>
-                                            <small class="text-muted">{{ record.changed_at.strftime('%m/%d %H:%M') }}</small>
+                                            <small class="text-muted">{{ record.changed_at | kst_strftime('%m/%d %H:%M') }}</small>
                                         </td>
                                     </tr>
                                     {% endfor %}

@@ -100,7 +100,7 @@
                                 </div>
                                 <div>
                                     <h6 class="mb-1">이번 주 통계</h6>
-                                    <a href="{{ url_for('period_report', start_date=(today - timedelta(days=7)).strftime('%Y-%m-%d'), end_date=today.strftime('%Y-%m-%d')) }}" class="btn btn-outline-warning btn-sm">
+                                    <a href="{{ url_for('period_report', start_date=(today - timedelta(days=7)) | kst_strftime('%Y-%m-%d'), end_date=today | kst_strftime('%Y-%m-%d')) }}" class="btn btn-outline-warning btn-sm">
                                         보기
                                     </a>
                                 </div>
@@ -113,7 +113,7 @@
                                 </div>
                                 <div>
                                     <h6 class="mb-1">이번 달 통계</h6>
-                                    <a href="{{ url_for('period_report', start_date=today.replace(day=1).strftime('%Y-%m-%d'), end_date=today.strftime('%Y-%m-%d')) }}" class="btn btn-outline-danger btn-sm">
+                                    <a href="{{ url_for('period_report', start_date=today.replace(day=1) | kst_strftime('%Y-%m-%d'), end_date=today | kst_strftime('%Y-%m-%d')) }}" class="btn btn-outline-danger btn-sm">
                                         보기
                                     </a>
                                 </div>

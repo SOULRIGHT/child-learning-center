@@ -177,7 +177,7 @@
                                 {% for record in records[:20] %}
                                 <tr>
                                     <td>
-                                        <span class="fw-medium">{{ record.date.strftime('%Y-%m-%d') }}</span>
+                                        <span class="fw-medium">{{ record.date | kst_strftime('%Y-%m-%d') }}</span>
                                     </td>
                                     <td>
                                         <a href="{{ url_for('child_detail', child_id=record.child.id) }}" class="text-decoration-none">

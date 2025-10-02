@@ -47,6 +47,9 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True  # JavaScript로 쿠키 접근 차�
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # 기본 CSRF 공격 방지
 app.config['SESSION_COOKIE_SECURE'] = False  # 개발환경: False, 프로덕션: True
 
+# === ⏰ 시간대 설정 (2025-10-01 추가) ===
+app.config['TIMEZONE'] = 'Asia/Seoul'  # 한국 시간대
+
 # 데이터베이스 설정
 if os.environ.get('DATABASE_URL'):
     # Railway 또는 프로덕션 환경
@@ -234,6 +237,33 @@ def clear_failed_login(ip_address):
         del failed_login_attempts[ip_address]
 
 # 컨텍스트 프로세서: 모든 템플릿에서 센터 정보 사용 가능
+# === ⏰ 시간대 변환 템플릿 필터 ===
+@app.template_filter('kst_strftime')
+def kst_strftime(dt, format_str='%Y-%m-%d %H:%M'):
+    """UTC 시간을 한국 시간(KST)으로 변환하여 포맷"""
+    if dt is None:
+        return ''
+    
+    # datetime.date 객체인 경우 그대로 포맷 (날짜만 있으므로 시간대 변환 불필요)
+    if hasattr(dt, 'date') and not hasattr(dt, 'hour'):
+        return dt.strftime(format_str)
+    
+    # datetime.datetime 객체인 경우에만 시간대 변환
+    if hasattr(dt, 'tzinfo'):
+        # UTC 시간을 KST(UTC+9)로 변환
+        kst_tz = timezone(timedelta(hours=9))
+        
+        # datetime이 naive(시간대 정보 없음)인 경우 UTC로 가정
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        
+        # KST로 변환
+        kst_dt = dt.astimezone(kst_tz)
+        return kst_dt.strftime(format_str)
+    
+    # 그 외의 경우 그대로 포맷
+    return dt.strftime(format_str)
+
 @app.context_processor
 def inject_center_info():
     """모든 템플릿에서 센터 정보를 사용할 수 있도록 컨텍스트에 추가"""
@@ -3864,6 +3894,20 @@ def get_backup_data():
             }
             history_data.append(history_dict)
         
+        # 아동 메모 (ChildNote)
+        child_notes = ChildNote.query.all()
+        notes_data = []
+        for note in child_notes:
+            note_dict = {
+                'id': note.id,
+                'child_id': note.child_id,
+                'note': note.note,
+                'created_by': note.created_by,
+                'created_at': note.created_at.isoformat() if note.created_at else None,
+                'updated_at': note.updated_at.isoformat() if note.updated_at else None
+            }
+            notes_data.append(note_dict)
+        
         # 사용자 정보
         users = User.query.all()
         users_data = []
@@ -3887,12 +3931,14 @@ def get_backup_data():
                     'children': len(children_data),
                     'daily_points': len(daily_points_data),
                     'points_history': len(history_data),
+                    'child_notes': len(notes_data),
                     'users': len(users_data)
                 }
             },
             'children': children_data,
             'daily_points': daily_points_data,
             'points_history': history_data,
+            'child_notes': notes_data,
             'users': users_data
         }
         

@@ -169,7 +169,7 @@
                                 {% for record in recent_records[:10] %}
                                 <tr>
                                     <td>
-                                        <span class="fw-medium">{{ record.date.strftime('%Y-%m-%d') }}</span>
+                                        <span class="fw-medium">{{ record.date | kst_strftime('%Y-%m-%d') }}</span>
                                     </td>
                                     <td>
                                         {% if record.korean_score > 0 %}

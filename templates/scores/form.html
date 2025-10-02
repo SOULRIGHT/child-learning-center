@@ -19,7 +19,7 @@
             <div>
                 <h4 class="fw-bold text-dark mb-1">
                     {% if record %}
-                        {{ record.child.name }} - {{ record.date.strftime('%Y년 %m월 %d일') }} 점수 수정
+                        {{ record.child.name }} - {{ record.date | kst_strftime('%Y년 %m월 %d일') }} 점수 수정
                     {% else %}
                         학습 점수 입력
                     {% endif %}
@@ -92,7 +92,7 @@
                                        class="form-control form-control-lg" 
                                        id="date" 
                                        name="date" 
-                                       value="{{ record.date.strftime('%Y-%m-%d') if record else '' }}"
+                                       value="{{ record.date | kst_strftime('%Y-%m-%d') if record else '' }}"
                                        required>
                                 <div class="form-text">
                                     <i class="bi bi-info-circle me-1"></i>

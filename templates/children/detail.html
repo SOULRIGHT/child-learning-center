@@ -17,7 +17,7 @@
             </div>
             <div>
                 <h3 class="fw-bold text-dark mb-1">{{ child.name }}</h3>
-                <p class="text-muted mb-0">{{ child.grade }}학년 • 등록일: {{ child.created_at.strftime('%Y.%m.%d') }}</p>
+                <p class="text-muted mb-0">{{ child.grade }}학년 • 등록일: {{ child.created_at | kst_strftime('%Y.%m.%d') }}</p>
             </div>
         </div>
     </div>
@@ -87,7 +87,7 @@
                 <div>
                     <div class="stat-number">
                         {% if latest_record %}
-                            {{ latest_record.date.strftime('%m/%d') }}
+                            {{ latest_record.date | kst_strftime('%m/%d') }}
                         {% else %}
                             -
                         {% endif %}
@@ -159,7 +159,7 @@
                         <tbody>
                             {% for record in recent_records %}
                             <tr>
-                                <td class="fw-bold">{{ record.date.strftime('%Y-%m-%d') }}</td>
+                                <td class="fw-bold">{{ record.date | kst_strftime('%Y-%m-%d') }}</td>
                                 <td class="text-center">
                                     {% if record.korean_points == 200 %}
                                         <span class="badge bg-success">200</span>
@@ -319,7 +319,7 @@
                                     <p class="mb-2" id="noteText{{ note.id }}">{{ note.note }}</p>
                                     <div class="d-flex justify-content-between align-items-center">
                                         <small class="text-muted">
-                                            {{ note.creator.name }} • {{ note.created_at.strftime('%m/%d %H:%M') }}
+                                            {{ note.creator.name }} • {{ note.created_at | kst_strftime('%m/%d %H:%M') }}
                                             {% if note.updated_at != note.created_at %}
                                                 <span class="badge bg-secondary ms-1">수정됨</span>
                                             {% endif %}
@@ -383,7 +383,7 @@
                             </div>
                             <div class="d-flex justify-content-between">
                                 <span>등록일:</span>
-                                <span>{{ child.created_at.strftime('%Y.%m.%d') }}</span>
+                                <span>{{ child.created_at | kst_strftime('%Y.%m.%d') }}</span>
                             </div>
                         </div>
                     </div>
@@ -394,7 +394,7 @@
                         <div class="mt-2">
                             <div class="d-flex justify-content-between">
                                 <span>입력일:</span>
-                                <span>{{ latest_record.date.strftime('%Y.%m.%d') }}</span>
+                                <span>{{ latest_record.date | kst_strftime('%Y.%m.%d') }}</span>
                             </div>
                             <div class="d-flex justify-content-between">
                                 <span>총점:</span>

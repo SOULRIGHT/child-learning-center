@@ -74,7 +74,7 @@
                 <div>
                     <div class="stat-number">
                         {% if recent_records %}
-                            {{ recent_records[0][0].date.strftime('%m/%d') }}
+                            {{ recent_records[0][0].date | kst_strftime('%m/%d') }}
                         {% else %}
                             -
                         {% endif %}
@@ -116,8 +116,8 @@
                     {% for record, child in recent_records %}
                     <tr>
                         <td class="align-middle">
-                            <div class="fw-bold">{{ record.date.strftime('%Y-%m-%d') }}</div>
-                            <small class="text-muted">{{ record.date.strftime('%A') }}</small>
+                            <div class="fw-bold">{{ record.date | kst_strftime('%Y-%m-%d') }}</div>
+                            <small class="text-muted">{{ record.date | kst_strftime('%A') }}</small>
                         </td>
                         <td class="align-middle">
                             <div class="d-flex align-items-center">
@@ -198,7 +198,7 @@
                                 <button type="button" class="btn btn-outline-danger btn-sm delete-btn" 
                                         data-record-id="{{ record.id }}" 
                                         data-child-name="{{ child.name }}"
-                                        data-date="{{ record.date.strftime('%Y-%m-%d') }}" 
+                                        data-date="{{ record.date | kst_strftime('%Y-%m-%d') }}" 
                                         title="삭제">
                                     <i class="bi bi-trash"></i>
                                 </button>

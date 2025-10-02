@@ -79,7 +79,7 @@
                         {% for record, child in records.items %}
                         <tr>
                             <td>
-                                <span class="fw-medium">{{ record.date.strftime('%Y-%m-%d') }}</span>
+                                <span class="fw-medium">{{ record.date | kst_strftime('%Y-%m-%d') }}</span>
                             </td>
                             <td>
                                 <a href="{{ url_for('child_detail', child_id=child.id) }}" class="text-decoration-none">
@@ -104,7 +104,7 @@
                                 <span class="fw-bold text-primary">{{ record.reading_score }}점</span>
                             </td>
                             <td>
-                                <small class="text-muted">{{ record.created_at.strftime('%m-%d %H:%M') }}</small>
+                                <small class="text-muted">{{ record.created_at | kst_strftime('%m-%d %H:%M') }}</small>
                             </td>
                             <td>
                                 <div class="btn-group btn-group-sm">
