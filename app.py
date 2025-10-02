@@ -334,6 +334,7 @@ class Child(db.Model):
     learning_records = db.relationship('LearningRecord', backref='child', lazy=True, cascade='all, delete-orphan')
     notes = db.relationship('ChildNote', backref='child', lazy=True, cascade='all, delete-orphan')
     daily_points = db.relationship('DailyPoints', backref='child_ref', lazy=True, cascade='all, delete-orphan')
+    points_history_records = db.relationship('PointsHistory', backref='child_record', lazy=True, cascade='all, delete-orphan')
     include_in_stats = db.Column(db.Boolean, default=True) # 통계에 포함할지 여부
 
 class LearningRecord(db.Model):
