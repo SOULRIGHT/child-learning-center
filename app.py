@@ -335,7 +335,7 @@ class Child(db.Model):
     learning_records = db.relationship('LearningRecord', backref='child', lazy=True, cascade='all, delete-orphan')
     notes = db.relationship('ChildNote', backref='child', lazy=True, cascade='all, delete-orphan')
     daily_points = db.relationship('DailyPoints', backref='child_ref', lazy=True, cascade='all, delete-orphan')
-    points_history_records = db.relationship('PointsHistory', backref='child_record', lazy=True, cascade='all, delete-orphan')
+    # points_history_records = db.relationship('PointsHistory', lazy=True, cascade='all, delete-orphan')
     include_in_stats = db.Column(db.Boolean, default=True) # 통계에 포함할지 여부
 
 class LearningRecord(db.Model):
@@ -3404,7 +3404,7 @@ class PointsHistory(db.Model):
     change_reason = db.Column(db.String(200))  # 변경 사유 (선택사항)
     
     # 관계 설정
-    child = db.relationship('Child', backref='points_history', lazy=True)
+    child = db.relationship('Child', lazy=True)
     user = db.relationship('User', backref='points_changes', lazy=True)
     
     def __repr__(self):
