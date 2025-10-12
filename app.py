@@ -4226,7 +4226,7 @@ def realtime_backup(child_id, action_type):
             # create_backup_notification('실시간', 'failed', error_msg)
             return False
         
-        success_msg = f"실시간 백업 완료 - {action_type}: {os.path.basename(json_path)}, {os.path.basename(excel_path)}"
+        success_msg = f"실시간 백업이 완료되었습니다. ({action_type})"
         print(f"✅ {success_msg}")
         # create_backup_notification('실시간', 'success', success_msg)
         return True
@@ -4302,7 +4302,7 @@ def daily_backup():
                 create_backup_notification('일일', 'failed', error_msg)
                 return False
             #여기 들여쓰기 안 되면 이제 일일백업멈춤
-            success_msg = f"일일 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}"
+            success_msg = "일일 백업이 완료되었습니다."
             print(f"✅ {success_msg}")
             create_backup_notification('일일', 'success', success_msg)
             return True
@@ -4355,7 +4355,7 @@ def monthly_backup():
                 create_backup_notification('월간', 'failed', error_msg)
                 return False
         
-            success_msg = f"월간 백업 완료: {os.path.basename(json_path)}, {os.path.basename(excel_path)}, {os.path.basename(db_path)}"
+            success_msg = "월간 백업이 완료되었습니다."
             print(f"✅ {success_msg}")
             create_backup_notification('월간', 'success', success_msg)
             return True
@@ -4447,7 +4447,7 @@ def backup_manual():
             create_backup_notification('수동', 'failed', error_msg)
             return redirect(url_for('settings_data'))
         
-        success_msg = f'백업이 완료되었습니다. JSON: {os.path.basename(json_path)}, Excel: {os.path.basename(excel_path)}, DB: {os.path.basename(db_path)}'
+        success_msg = '백업이 완료되었습니다.'
         flash(success_msg, 'success')
         create_backup_notification('수동', 'success', success_msg)
         return redirect(url_for('settings_data'))

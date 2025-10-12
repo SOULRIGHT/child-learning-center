@@ -147,18 +147,18 @@ document.addEventListener('DOMContentLoaded', function() {
                                    class="btn btn-sm btn-outline-success" title="수정">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <form method="POST" action="{{ url_for('toggle_child_stats', child_id=child.id) }}" class="d-inline">
-                                    <button type="submit" class="btn btn-sm {% if child.include_in_stats %}btn-outline-warning{% else %}btn-outline-info{% endif %}" 
-                                            title="{% if child.include_in_stats %}통계에서 제외{% else %}통계에 포함{% endif %}">
-                                        <i class="bi {% if child.include_in_stats %}bi-graph-down{% else %}bi-graph-up{% endif %}"></i>
-                                    </button>
-                                </form>
-                                {% if current_user.role == '개발자' %}
-                                <button type="button" class="btn btn-sm btn-outline-danger delete-btn" 
-                                        data-child-id="{{ child.id }}" data-child-name="{{ child.name }}" title="삭제">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                                {% endif %}
+                                 {% if current_user.role == '개발자' %}
+                                 <button type="button" class="btn btn-sm btn-outline-danger delete-btn" 
+                                         data-child-id="{{ child.id }}" data-child-name="{{ child.name }}" title="삭제">
+                                     <i class="bi bi-trash"></i>
+                                 </button>
+                                 {% endif %}
+                                 <form method="POST" action="{{ url_for('toggle_child_stats', child_id=child.id) }}" class="d-inline">
+                                     <button type="submit" class="btn btn-sm {% if child.include_in_stats %}btn-outline-warning{% else %}btn-outline-info{% endif %}" 
+                                             title="{% if child.include_in_stats %}통계에서 제외{% else %}통계에 포함{% endif %}">
+                                         <i class="bi bi-bar-chart"></i>
+                                     </button>
+                                 </form>
                             </div>
                         </td>
                     </tr>
@@ -297,18 +297,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         <span><strong>수정:</strong> 아동 정보 수정</span>
                     </div>
                 </div>
-                <div class="mb-3">
-                    <div class="d-flex align-items-center mb-2">
-                        <i class="bi bi-bar-chart text-info me-2"></i>
-                        <span><strong>통계 제외:</strong> 아동별 개별 관리</span>
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <div class="d-flex align-items-center mb-2">
-                        <i class="bi bi-trash text-danger me-2"></i>
-                        <span><strong>삭제:</strong> 아동 삭제 (주의!)</span>
-                    </div>
-                </div>
+                 <div class="mb-3">
+                     <div class="d-flex align-items-center mb-2">
+                         <i class="bi bi-bar-chart text-info me-2"></i>
+                         <span><strong>통계 제외:</strong> 아동별 개별 관리</span>
+                     </div>
+                 </div>
+                 <div class="mb-3">
+                     <div class="d-flex align-items-center mb-2">
+                         <i class="bi bi-trash text-danger me-2"></i>
+                         <span><strong>삭제:</strong> 아동 삭제 (주의!)</span>
+                     </div>
+                 </div>
             </div>
         </div>
         
