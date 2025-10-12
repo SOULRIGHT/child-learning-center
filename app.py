@@ -2164,7 +2164,16 @@ def points_input(child_id):
     # 오늘 날짜 문자열 계산
     today_date = datetime.utcnow().strftime('%Y년 %m월 %d일')
     
-    return render_template('points/input.html', child=child, today_record=today_record, today_date=today_date)
+    # 총 누적 포인트 계산
+    total_cumulative_points = db.session.query(
+        db.func.sum(DailyPoints.total_points)
+    ).filter_by(child_id=child_id).scalar() or 0
+    
+    return render_template('points/input.html', 
+                          child=child, 
+                          today_record=today_record, 
+                          today_date=today_date,
+                          total_cumulative_points=total_cumulative_points)
 
 def update_cumulative_points(child_id, commit=True):
     """아동의 누적 포인트를 자동으로 업데이트"""

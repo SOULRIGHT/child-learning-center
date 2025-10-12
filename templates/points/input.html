@@ -20,8 +20,18 @@
             
             <div class="card">
                 <div class="card-header">
-                    <h4>{{ child.name }} ({{ child.grade }}학년) - 포인트 입력</h4>
-                    <p class="text-muted mb-0">{{ today_record.date | kst_strftime('%Y년 %m월 %d일') if today_record else today_date }}</p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h4>{{ child.name }} ({{ child.grade }}학년) - 포인트 입력</h4>
+                            <p class="text-muted mb-0">{{ today_record.date | kst_strftime('%Y년 %m월 %d일') if today_record else today_date }}</p>
+                        </div>
+                        <div class="text-end">
+                            <div class="badge bg-primary fs-6 px-3 py-2">
+                                <i class="fas fa-star me-1"></i>
+                                총 포인트: <span id="header_total_points">{{ total_cumulative_points }}</span>점
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-body">
                     <form method="POST">
@@ -116,7 +126,7 @@
 
                         <!-- 추가 과목들 토글 버튼 -->
                         <div class="text-center mt-4 mb-3">
-                            <button type="button" class="btn btn-info btn-sm" id="toggleAdditionalSubjects">
+                            <button type="button" class="btn btn-sm" id="toggleAdditionalSubjects" style="background-color: #1A73E8; border-color: #1A73E8; color: white;">
                                 <i class="fas fa-chevron-down me-2" id="toggleIcon"></i>
                                 <span id="toggleText">추가 과목 보기 (피아노, 영어, 고학년수학, 쓰기)</span>
                             </button>
@@ -267,7 +277,7 @@
                                 특별한 포인트가 더 필요하신가요?
                             </h6>
                             <p class="text-muted mb-0 small">
-                                연필, 지우개 구매, 교재 완료 등 수동으로 포인트를 추가하거나 차감할 수 있습니다.
+                                연필, 지우개, 교재 완료 등 수동으로 포인트를 추가하거나 차감할 수 있습니다.
                             </p>
                         </div>
                         <div class="col-md-4">
@@ -276,7 +286,7 @@
                                data-role="manual-points"
                                aria-label="수동 포인트 관리 페이지로 이동">
                                 <i class="fas fa-arrow-right me-2"></i>
-                                수동 포인트 입력
+                                수동포인트<br>입력
                             </a>
                         </div>
                     </div>
