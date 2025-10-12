@@ -117,7 +117,8 @@ def set_security_headers(response):
         "connect-src 'self' "
         "https://identitytoolkit.googleapis.com https://securetoken.googleapis.com "
         "https://www.googleapis.com https://firebase.googleapis.com "
-        "https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+        "https://cdn.jsdelivr.net https://cdnjs.cloudflare.com "
+        "https://www.gstatic.com; "
         # 보안 정책
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
@@ -2598,6 +2599,24 @@ def child_point_analysis(child_id):
                          current_rank=current_rank,
                          total_children_in_grade=len(grade_comparison))
 
+@app.route('/points/grade-selection')
+@login_required
+def grade_selection():
+    """학년 선택 페이지 (대시보드 빠른작업용)"""
+    # 등록된 학년들만 조회 (통계 포함된 아동 기준)
+    grades = db.session.query(Child.grade).filter_by(include_in_stats=True).distinct().order_by(Child.grade).all()
+    available_grades = [grade[0] for grade in grades]
+    
+    # 각 학년별 아동 수 계산
+    grade_counts = {}
+    for grade in available_grades:
+        count = Child.query.filter_by(grade=grade, include_in_stats=True).count()
+        grade_counts[grade] = count
+    
+    return render_template('points/grade_selection.html', 
+                         available_grades=available_grades,
+                         grade_counts=grade_counts)
+
 @app.route('/points/grade-comparison/<int:grade>')
 @login_required
 def grade_point_comparison(grade):
@@ -4179,7 +4198,7 @@ def realtime_backup(child_id, action_type):
         if error:
             error_msg = f"실시간 백업 데이터 수집 실패: {error}"
             print(f"❌ {error_msg}")
-            create_backup_notification('실시간', 'failed', error_msg)
+            # create_backup_notification('실시간', 'failed', error_msg)
             return False
         
         # JSON 백업 생성
@@ -4187,7 +4206,7 @@ def realtime_backup(child_id, action_type):
         if error:
             error_msg = f"실시간 JSON 백업 생성 실패: {error}"
             print(f"❌ {error_msg}")
-            create_backup_notification('실시간', 'failed', error_msg)
+            # create_backup_notification('실시간', 'failed', error_msg)
             return False
         
         # Excel 백업 생성
@@ -4195,18 +4214,18 @@ def realtime_backup(child_id, action_type):
         if error:
             error_msg = f"실시간 Excel 백업 생성 실패: {error}"
             print(f"❌ {error_msg}")
-            create_backup_notification('실시간', 'failed', error_msg)
+            # create_backup_notification('실시간', 'failed', error_msg)
             return False
         
         success_msg = f"실시간 백업 완료 - {action_type}: {os.path.basename(json_path)}, {os.path.basename(excel_path)}"
         print(f"✅ {success_msg}")
-        create_backup_notification('실시간', 'success', success_msg)
+        # create_backup_notification('실시간', 'success', success_msg)
         return True
         
     except Exception as e:
         error_msg = f"실시간 백업 실행 중 오류: {str(e)}"
         print(f"❌ {error_msg}")
-        create_backup_notification('실시간', 'failed', error_msg)
+        # create_backup_notification('실시간', 'failed', error_msg)
         return False
 
 def create_database_backup(backup_dir, backup_type='manual'):

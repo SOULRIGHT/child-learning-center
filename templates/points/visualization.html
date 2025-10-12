@@ -16,6 +16,8 @@
                     <i class="bi bi-people"></i> 학년별 비교
                 </button>
                 <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="{{ url_for('grade_point_comparison', grade=1) }}">1학년 비교</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('grade_point_comparison', grade=2) }}">2학년 비교</a></li>
                     <li><a class="dropdown-item" href="{{ url_for('grade_point_comparison', grade=3) }}">3학년 비교</a></li>
                     <li><a class="dropdown-item" href="{{ url_for('grade_point_comparison', grade=4) }}">4학년 비교</a></li>
                     <li><a class="dropdown-item" href="{{ url_for('grade_point_comparison', grade=5) }}">5학년 비교</a></li>

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}학년별 포인트 비교{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header text-center">
+                    <h4>학년별 포인트 비교</h4>
+                    <p class="text-muted mb-0">비교하고 싶은 학년을 선택하세요</p>
+                </div>
+                <div class="card-body">
+                    {% if available_grades %}
+                    <div class="row g-3 justify-content-center">
+                        {% for grade in available_grades %}
+                        <div class="col-md-4 col-lg-4">
+                            <a href="{{ url_for('grade_point_comparison', grade=grade) }}" 
+                               class="text-decoration-none">
+                                <div class="card h-100 text-center grade-selection-card">
+                                    <div class="card-body">
+                                        <h3 class="card-title text-primary mb-2 text-center">{{ grade }}학년</h3>
+                                        <p class="card-text text-muted small text-center">
+                                            {{ grade_counts[grade] }}명의 아동
+                                        </p>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-exclamation-circle text-muted" style="font-size: 3rem;"></i>
+                        <h5 class="text-muted mt-3">등록된 아동이 없습니다</h5>
+                        <p class="text-muted">아동을 먼저 등록해주세요.</p>
+                        <a href="{{ url_for('children_list') }}" class="btn btn-primary">
+                            <i class="bi bi-people"></i> 아동 목록으로 이동
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.grade-selection-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+    border: 2px solid transparent;
+}
+
+.grade-selection-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    border-color: #0d6efd;
+}
+
+.grade-selection-card .card-body {
+    padding: 1.5rem 1rem;
+}
+
+.grade-selection-card h3 {
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+.grade-selection-card .text-muted {
+    font-size: 0.9rem;
+}
+
+.grade-selection-card .card-title,
+.grade-selection-card .card-text {
+    text-align: center !important;
+    width: 100% !important;
+    display: block !important;
+}
+
+.grade-selection-card h3,
+.grade-selection-card p {
+    text-align: center !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+</style>
+{% endblock %}

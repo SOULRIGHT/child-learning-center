@@ -77,16 +77,10 @@
                         <div class="mb-4">
                             <h5 class="text-info">쎈수학</h5>
                             <div class="btn-group w-100" role="group">
-                                <input type="radio" class="btn-check" name="ssen_points" id="ssen_200" value="200" 
-                                       {% if today_record and today_record.ssen_points == 200 %}checked{% endif %}>
-                                <label class="btn btn-outline-success" for="ssen_200">
-                                    <i class="fas fa-check-circle"></i> 완벽 (200점)
-                                </label>
-                                
                                 <input type="radio" class="btn-check" name="ssen_points" id="ssen_100" value="100" 
                                        {% if today_record and today_record.ssen_points == 100 %}checked{% endif %}>
-                                <label class="btn btn-outline-warning" for="ssen_100">
-                                    <i class="fas fa-exclamation-circle"></i> 부분 (100점)
+                                <label class="btn btn-outline-success" for="ssen_100">
+                                    <i class="fas fa-exclamation-circle"></i> 완벽 (100점)
                                 </label>
                                 
                                 <input type="radio" class="btn-check" name="ssen_points" id="ssen_0" value="0" 
