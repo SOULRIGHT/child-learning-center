@@ -261,7 +261,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="mb-3">
                     <div class="d-flex align-items-center mb-2">
                         <i class="bi bi-check-circle text-success me-2"></i>
-                        <span>포인트 시스템 (국어, 수학, 쎈, 독서)</span>
+                        <span>포인트 시스템 (국어, 수학, 쎈, 독서 등)</span>
                     </div>
                 </div>
                 <div class="mb-3">
@@ -299,6 +299,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
                 <div class="mb-3">
                     <div class="d-flex align-items-center mb-2">
+                        <i class="bi bi-bar-chart text-info me-2"></i>
+                        <span><strong>통계 제외:</strong> 아동별 개별 관리</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
                         <i class="bi bi-trash text-danger me-2"></i>
                         <span><strong>삭제:</strong> 아동 삭제 (주의!)</span>
                     </div>
@@ -312,7 +318,17 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="col-md-6">
                 <h6 class="fw-bold text-primary mb-3">사용자 권한</h6>
                 <div class="mb-3">
-                    <span><strong>센터장:</strong> 전체 데이터 조회 및 관리, 사용자 관리</span>
+                    {% if current_user.role == '센터장' %}
+                        <span><strong>센터장:</strong> 전체 데이터 조회 및 관리, 사용자 관리</span>
+                    {% elif current_user.role == '돌봄선생님' %}
+                        <span><strong>돌봄선생님:</strong> 포인트 입력, 기록 조회</span>
+                    {% elif current_user.role == '사회복무요원' %}
+                        <span><strong>사회복무요원:</strong> 포인트 입력, 기록 조회</span>
+                    {% elif current_user.role == '개발자' %}
+                        <span><strong>개발자:</strong> 전체 권한, 삭제 가능</span>
+                    {% else %}
+                        <span><strong>{{ current_user.role }}:</strong> 기본 조회 권한</span>
+                    {% endif %}
                 </div>
                 <div class="mb-3">
                     <div class="d-flex align-items-center mb-2">
