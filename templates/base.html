@@ -75,12 +75,6 @@
                         포인트 시각화
                     </a>
                 </div>
-                <div class="nav-item">
-                    <a href="{{ url_for('reading_list') }}" class="nav-link {% if request.endpoint and 'reading' in request.endpoint %}active{% endif %}">
-                        <i class="bi bi-book"></i>
-                        독서 기록
-                    </a>
-                </div>
                 <!-- 임시 비활성화: 기존 통계 분석
                 <div class="nav-item">
                     <a href="{{ url_for('statistics_overview') }}" class="nav-link {% if request.endpoint and 'statistics' in request.endpoint %}active{% endif %}">
