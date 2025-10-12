@@ -71,19 +71,19 @@
             </div>
         </div>
 
-        <!-- UI/UX 설정 -->
+        <!-- 누적포인트 관리 -->
         <div class="col-lg-6 col-xl-4 mb-4">
             <div class="card h-100">
                 <div class="card-header">
                     <h5 class="card-title mb-0">
-                        <i class="bi bi-palette me-2"></i>UI/UX 설정
+                        <i class="bi bi-calculator me-2"></i>누적포인트 관리
                     </h5>
                 </div>
                 <div class="card-body">
-                    <p class="text-muted mb-3">테마 및 인터페이스 설정을 관리합니다.</p>
+                    <p class="text-muted mb-3">아동별 누적포인트를 설정하고 관리합니다.</p>
                     <div class="d-grid">
-                        <a href="{{ url_for('settings_ui') }}" class="btn btn-warning">
-                            <i class="bi bi-gear me-2"></i>UI 설정
+                        <a href="{{ url_for('cumulative_points') }}" class="btn btn-success">
+                            <i class="bi bi-gear me-2"></i>누적포인트 관리
                         </a>
                     </div>
                 </div>
@@ -103,25 +103,6 @@
                     <div class="d-grid">
                         <a href="{{ url_for('settings_system') }}" class="btn btn-secondary">
                             <i class="bi bi-gear me-2"></i>시스템 정보
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 누적포인트 관리 -->
-        <div class="col-lg-6 col-xl-4 mb-4">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="bi bi-calculator me-2"></i>누적포인트 관리
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted mb-3">아동별 누적포인트를 설정하고 관리합니다.</p>
-                    <div class="d-grid">
-                        <a href="{{ url_for('cumulative_points') }}" class="btn btn-success">
-                            <i class="bi bi-gear me-2"></i>누적포인트 관리
                         </a>
                     </div>
                 </div>
