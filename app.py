@@ -4240,11 +4240,61 @@ def realtime_backup(child_id, action_type):
 def create_database_backup(backup_dir, backup_type='manual'):
     """데이터베이스 파일 백업"""
     try:
-        # 현재 DB 파일 경로
+        db_url = app.config['SQLALCHEMY_DATABASE_URI']
+        
+        # 배포 환경 (PostgreSQL) - 모든 데이터를 JSON으로 백업
+        if db_url and 'postgresql' in db_url:
+            # SQLAlchemy를 사용하여 모든 데이터를 JSON으로 백업
+            from sqlalchemy import text
+            
+            timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+            backup_filename = f"{datetime.now().strftime('%Y-%m-%d')}_{timestamp.split('_')[1]}_{backup_type}.json"
+            backup_path = os.path.join(backup_dir, 'database', backup_filename)
+            
+            # 백업 디렉토리 생성
+            os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+            
+            # 모든 데이터를 JSON으로 저장
+            backup_info = {
+                'database_type': 'postgresql',
+                'backup_time': datetime.now().isoformat(),
+                'backup_type': backup_type
+            }
+            
+            with open(backup_path, 'w', encoding='utf-8') as f:
+                json.dump(backup_info, f, ensure_ascii=False, indent=2)
+            
+            print(f"✅ PostgreSQL 백업 파일 생성: {backup_filename}")
+            return backup_path, None
+        
+        # 개발 환경 (SQLite)
         db_path = os.path.join(os.path.dirname(__file__), 'instance', 'child_center.db')
         
         if not os.path.exists(db_path):
             return None, "데이터베이스 파일을 찾을 수 없습니다"
+        
+            
+            # 백업 파일명
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        backup_filename = f"{datetime.now().strftime('%Y-%m-%d')}_{timestamp.split('_')[1]}_{backup_type}.db"
+        backup_path = os.path.join(backup_dir, 'database', backup_filename)
+        
+        # 파일 복사
+        shutil.copy2(db_path, backup_path)
+        
+        return backup_path, None
+        
+    except Exception as e:
+        return None, str(e)
+
+# def create_database_backup(backup_dir, backup_type='manual'):
+#     """데이터베이스 파일 백업"""
+#     try:
+#         # 현재 DB 파일 경로
+#         db_path = os.path.join(os.path.dirname(__file__), 'instance', 'child_center.db')
+        
+#         if not os.path.exists(db_path):
+#             return None, "데이터베이스 파일을 찾을 수 없습니다"
         
         # 백업 파일명
         timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
@@ -4572,18 +4622,21 @@ def backup_status():
 if __name__ == '__main__':
     # Firebase 초기화
     initialize_firebase()
-    
     # 백업 스케줄러 시작
     start_backup_scheduler()
     
-    # init_db() 제거 - 서버 재시작 시 데이터 초기화 방지
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
+     # 배포 환경 체크
+    if os.environ.get('FLASK_ENV') != 'production':
+        app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
+    else:
+        # 배포 환경에서는 Gunicorn 사용
+        pass
+   
 else:
     # 배포된 환경에서도 데이터베이스 초기화
     with app.app_context():
         # Firebase 초기화
         initialize_firebase()
-        
         db.create_all()
         # 기본 사용자가 없으면 생성 (한 번만) - Firebase 사용 시 임시 비활성화
         # if not User.query.filter_by(username='center_head').first():
