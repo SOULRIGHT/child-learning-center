@@ -4619,18 +4619,59 @@ def backup_status():
     except Exception as e:
         return jsonify({'error': f'백업 상태 조회 실패: {str(e)}'}), 500
 
+@app.route('/backup/download/<path:filename>')
+@login_required
+def download_backup(filename):
+    """백업 파일 다운로드"""
+    import os
+    from werkzeug.utils import secure_filename
+    from flask import send_file, abort
+    
+    # 보안: 파일명 검증
+    safe_filename = secure_filename(os.path.basename(filename))
+    
+    # 현재 디렉토리에서 백업 파일 찾기
+    file_path = os.path.join(os.path.dirname(__file__), safe_filename)
+    
+    # 파일이 없으면 다른 경로 확인
+    if not os.path.exists(file_path):
+        # backups/database 경로 확인
+        backup_path = os.path.join(os.path.dirname(__file__), 'backups', 'database', safe_filename)
+        if os.path.exists(backup_path):
+            file_path = backup_path
+        else:
+            # 현재 디렉토리의 모든 백업 파일 확인
+            current_dir = os.path.dirname(__file__)
+            for file in os.listdir(current_dir):
+                if file.startswith('backup_') and file.endswith('.sql'):
+                    if safe_filename in file or file == safe_filename:
+                        file_path = os.path.join(current_dir, file)
+                        break
+            
+            if not os.path.exists(file_path):
+                flash('백업 파일을 찾을 수 없습니다.', 'error')
+                return redirect(url_for('dashboard'))
+    
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=safe_filename,
+        mimetype='application/sql'
+    )
+
 if __name__ == '__main__':
     # Firebase 초기화
     initialize_firebase()
     # 백업 스케줄러 시작
     start_backup_scheduler()
     
-     # 배포 환경 체크
-    if os.environ.get('FLASK_ENV') != 'production':
-        app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
+    # 배포 환경 체크
+    if os.environ.get('FLASK_ENV') == 'production':
+        # 배포 환경에서는 debug=False로 실행
+        app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
     else:
-        # 배포 환경에서는 Gunicorn 사용
-        pass
+        # 개발 환경에서는 debug=True
+        app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
    
 else:
     # 배포된 환경에서도 데이터베이스 초기화
