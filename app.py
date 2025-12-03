@@ -4659,38 +4659,67 @@ def download_backup(filename):
     """백업 파일 다운로드"""
     import os
     from werkzeug.utils import secure_filename
-    from flask import send_file, abort
+    from flask import send_file
     
     # 보안: 파일명 검증
     safe_filename = secure_filename(os.path.basename(filename))
     
-    # 현재 디렉토리에서 백업 파일 찾기
-    file_path = os.path.join(os.path.dirname(__file__), safe_filename)
+    # 현재 디렉토리 (app.py가 있는 위치)
+    current_dir = os.path.dirname(__file__)
     
-    # 파일이 없으면 다른 경로 확인
-    if not os.path.exists(file_path):
-        # backups/database 경로 확인
-        backup_path = os.path.join(os.path.dirname(__file__), 'backups', 'database', safe_filename)
-        if os.path.exists(backup_path):
-            file_path = backup_path
-        else:
-            # 현재 디렉토리의 모든 백업 파일 확인
-            current_dir = os.path.dirname(__file__)
+    # 디버깅: 경로 정보 출력
+    print(f"🔍 백업 파일 검색 시작")
+    print(f"   요청 파일명: {filename}")
+    print(f"   안전 파일명: {safe_filename}")
+    print(f"   현재 디렉토리: {current_dir}")
+    
+    # 파일 경로 찾기 (여러 경로 시도)
+    file_path = None
+    
+    # 1. 현재 디렉토리에서 직접 찾기
+    potential_path = os.path.join(current_dir, safe_filename)
+    print(f"   경로 1 확인: {potential_path}")
+    if os.path.exists(potential_path):
+        file_path = potential_path
+        print(f"   ✅ 파일 발견: {file_path}")
+    else:
+        # 2. 현재 디렉토리에서 backup_*.sql 파일 모두 검색
+        print(f"   경로 1 실패, 현재 디렉토리 파일 목록 검색...")
+        try:
             for file in os.listdir(current_dir):
                 if file.startswith('backup_') and file.endswith('.sql'):
-                    if safe_filename in file or file == safe_filename:
+                    print(f"   발견된 백업 파일: {file}")
+                    # 정확히 일치하거나 파일명이 포함된 경우
+                    if file == safe_filename or safe_filename in file or file == filename:
                         file_path = os.path.join(current_dir, file)
+                        print(f"   ✅ 매칭된 파일: {file_path}")
                         break
-            
-            if not os.path.exists(file_path):
-                flash('백업 파일을 찾을 수 없습니다.', 'error')
-                return redirect(url_for('dashboard'))
+        except Exception as e:
+            print(f"   ❌ 디렉토리 읽기 오류: {e}")
+        
+        # 3. backups/database 경로 확인
+        if not file_path:
+            backup_path = os.path.join(current_dir, 'backups', 'database', safe_filename)
+            print(f"   경로 3 확인: {backup_path}")
+            if os.path.exists(backup_path):
+                file_path = backup_path
+                print(f"   ✅ 파일 발견: {file_path}")
     
+    # 파일을 찾지 못한 경우
+    if not file_path or not os.path.exists(file_path):
+        print(f"   ❌ 파일을 찾을 수 없음")
+        print(f"   최종 검색 경로:")
+        print(f"   - {os.path.join(current_dir, safe_filename)}")
+        print(f"   - {os.path.join(current_dir, 'backups', 'database', safe_filename)}")
+        flash('백업 파일을 찾을 수 없습니다.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    print(f"✅ 백업 파일 다운로드 시작: {file_path}")
     return send_file(
         file_path,
         as_attachment=True,
         download_name=safe_filename,
-        mimetype='application/sql'
+        mimetype='application/sql' if safe_filename.endswith('.sql') else 'application/octet-stream'
     )
 
 if __name__ == '__main__':
