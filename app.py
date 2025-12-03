@@ -645,6 +645,13 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """완전 Firebase Auth 기반 로그인"""
+    # Firebase 설정 검증
+    if not FIREBASE_CONFIG.get('apiKey'):
+        print("❌ FIREBASE_API_KEY가 설정되지 않았습니다!")
+        flash('Firebase 설정 오류: API 키가 설정되지 않았습니다.', 'error')
+    if not FIREBASE_CONFIG.get('authDomain') or FIREBASE_CONFIG.get('authDomain') == 'your-project.firebaseapp.com':
+        print("❌ FIREBASE_AUTH_DOMAIN이 올바르게 설정되지 않았습니다!")
+        flash('Firebase 설정 오류: Auth 도메인이 설정되지 않았습니다.', 'error')
     try:
         if request.method == 'POST':
             # === 🛡️ 브루트포스 공격 방지 체크 ===
@@ -744,7 +751,7 @@ def login():
             return jsonify({'success': False, 'error': f'Login error: {str(e)}'})
         else:
             return render_template('login.html', firebase_config=FIREBASE_CONFIG)
-            
+
 @app.route('/firebase-login', methods=['POST'])
 def firebase_login():
     """Firebase Auth API 엔드포인트"""
