@@ -645,79 +645,106 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """완전 Firebase Auth 기반 로그인"""
-    if request.method == 'POST':
-        # === 🛡️ 브루트포스 공격 방지 체크 ===
-        client_ip = get_client_ip()
-        
-        if is_ip_blocked(client_ip):
-            flash('⚠️ 보안상 로그인이 일시적으로 제한되었습니다. 30분 후 다시 시도해주세요.', 'error')
-            return render_template('login.html', firebase_config=FIREBASE_CONFIG)
-        
-        # Firebase 토큰 검증
-        token = request.json.get('token') if request.is_json else request.form.get('token')
-        
-        if not token:
-            flash('로그인 토큰이 없습니다.', 'error')
-            return render_template('login.html', firebase_config=FIREBASE_CONFIG)
-        
-        # Firebase 토큰 검증
-        decoded_token = verify_firebase_token(token)
-        
-        if decoded_token:
-            # 사용자 정보 추출
-            firebase_uid = decoded_token['uid']
-            email = decoded_token['email']
-            name = decoded_token.get('name', email.split('@')[0])
+    try:
+        if request.method == 'POST':
+            # === 🛡️ 브루트포스 공격 방지 체크 ===
+            client_ip = get_client_ip()
+            print(f"🔍 로그인 시도 - IP: {client_ip}")
             
-            # Firebase 사용자로 로그인 처리 (firebase_uid 또는 email로 찾기)
-            user = User.query.filter(
-                (User.firebase_uid == firebase_uid) | (User.email == email)
-            ).first()
+            if is_ip_blocked(client_ip):
+                print(f"⚠️ IP 차단됨: {client_ip}")
+                flash('⚠️ 보안상 로그인이 일시적으로 제한되었습니다. 30분 후 다시 시도해주세요.', 'error')
+                return render_template('login.html', firebase_config=FIREBASE_CONFIG)
             
-            if not user:
-                # 새 Firebase 사용자 생성
-                user = User(
-                    firebase_uid=firebase_uid,
-                    email=email,
-                    name=name,
-                    role=get_user_role_from_email(email),
-                    username=email.split('@')[0],  # 호환성을 위해
-                    password_hash=''  # Firebase 사용자는 비밀번호 없음
-                )
-                db.session.add(user)
-                db.session.commit()
-                print(f"✅ 새 Firebase 사용자 생성: {email}")
-            elif not user.firebase_uid:
-                # 기존 사용자에 firebase_uid 추가
-                user.firebase_uid = firebase_uid
-                db.session.commit()
-                print(f"✅ 기존 사용자 Firebase UID 업데이트: {email}")
+            # Firebase 토큰 검증
+            token = request.json.get('token') if request.is_json else request.form.get('token')
+            print(f"🔍 토큰 수신: {'있음' if token else '없음'}")
             
-            # Firebase 사용자로 로그인
+            if not token:
+                print("❌ 토큰이 없습니다")
+                flash('로그인 토큰이 없습니다.', 'error')
+                return render_template('login.html', firebase_config=FIREBASE_CONFIG)
+            
+            # Firebase 토큰 검증
+            print("🔍 Firebase 토큰 검증 시작...")
+            decoded_token = verify_firebase_token(token)
+            
+            if decoded_token:
+                print(f"✅ 토큰 검증 성공 - UID: {decoded_token.get('uid')}")
+                # 사용자 정보 추출
+                firebase_uid = decoded_token['uid']
+                email = decoded_token['email']
+                name = decoded_token.get('name', email.split('@')[0])
+                
+                # Firebase 사용자로 로그인 처리 (firebase_uid 또는 email로 찾기)
+                user = User.query.filter(
+                    (User.firebase_uid == firebase_uid) | (User.email == email)
+                ).first()
+                
+                if not user:
+                    # 새 Firebase 사용자 생성
+                    print(f"🆕 새 사용자 생성: {email}")
+                    user = User(
+                        firebase_uid=firebase_uid,
+                        email=email,
+                        name=name,
+                        role=get_user_role_from_email(email),
+                        username=email.split('@')[0],
+                        password_hash=''
+                    )
+                    db.session.add(user)
+                    db.session.commit()
+                    print(f"✅ 새 Firebase 사용자 생성: {email}")
+                elif not user.firebase_uid:
+                    # 기존 사용자에 firebase_uid 추가
+                    user.firebase_uid = firebase_uid
+                    db.session.commit()
+                    print(f"✅ 기존 사용자 Firebase UID 업데이트: {email}")
+                
+                # Firebase 사용자로 로그인
                 login_user(user)
-            
-            # === 🛡️ 로그인 성공 시 실패 기록 초기화 ===
-            clear_failed_login(client_ip)
-            
-            flash(f'{user.name}님, Firebase 인증으로 로그인되었습니다!', 'success')
-            
-            if request.is_json:
-                return jsonify({'success': True, 'redirect': url_for('dashboard')})
+                
+                # === 🛡️ 로그인 성공 시 실패 기록 초기화 ===
+                clear_failed_login(client_ip)
+                
+                print(f"✅ 로그인 성공: {user.name} ({email})")
+                flash(f'{user.name}님, Firebase 인증으로 로그인되었습니다!', 'success')
+                
+                if request.is_json:
+                    return jsonify({'success': True, 'redirect': url_for('dashboard')})
+                else:
+                    return redirect(url_for('dashboard'))
             else:
-                return redirect(url_for('dashboard'))
+                # === 🛡️ 로그인 실패 시 실패 기록 ===
+                print("❌ Firebase 토큰 검증 실패")
+                is_now_blocked = record_failed_login(client_ip)
+                if is_now_blocked:
+                    print(f"⚠️ IP 차단: {client_ip}")
+                    flash('⚠️ 연속된 로그인 실패로 인해 30분간 로그인이 제한됩니다.', 'error')
+                flash('Firebase 인증에 실패했습니다.', 'error')
+                
+                if request.is_json:
+                    return jsonify({'success': False, 'error': 'Invalid Firebase token'})
+        
+        # Firebase 설정 정보를 템플릿에 전달
+        return render_template('login.html', firebase_config=FIREBASE_CONFIG)
+        
+    except Exception as e:
+        # 상세 오류 로깅
+        print(f"❌ Firebase 로그인 오류 발생!")
+        print(f"   오류 타입: {type(e).__name__}")
+        print(f"   오류 메시지: {str(e)}")
+        import traceback
+        print("   상세 스택 트레이스:")
+        traceback.print_exc()
+        
+        flash('로그인 중 오류가 발생했습니다. 관리자에게 문의하세요.', 'error')
+        
+        if request.is_json:
+            return jsonify({'success': False, 'error': f'Login error: {str(e)}'})
         else:
-            # === 🛡️ 로그인 실패 시 실패 기록 ===
-            is_now_blocked = record_failed_login(client_ip)
-            if is_now_blocked:
-                flash('⚠️ 연속된 로그인 실패로 인해 30분간 로그인이 제한됩니다.', 'error')
-            flash('Firebase 인증에 실패했습니다.', 'error')
+            return render_template('login.html', firebase_config=FIREBASE_CONFIG)
             
-            if request.is_json:
-                return jsonify({'success': False, 'error': 'Invalid Firebase token'})
-    
-    # Firebase 설정 정보를 템플릿에 전달
-    return render_template('login.html', firebase_config=FIREBASE_CONFIG)
-
 @app.route('/firebase-login', methods=['POST'])
 def firebase_login():
     """Firebase Auth API 엔드포인트"""
