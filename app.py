@@ -3076,7 +3076,7 @@ def delete_manual_point(item_id):
         print(f"수동 포인트 삭제 오류: {str(e)}")
         return jsonify({'success': False, 'error': f'삭제 중 오류가 발생했습니다: {str(e)}'})
 
-@app.route('/settings/data')
+@app.route('/settings/data', methods=['GET', 'POST'])
 @login_required
 def settings_data():
     """데이터 관리 페이지"""
@@ -3086,7 +3086,7 @@ def settings_data():
         if action == 'seed_data':
             # 시드 데이터 실행
             try:
-                from scripts.seed_data import main as seed_main
+                from scripts.seed.seed_basic import main as seed_main
                 seed_main()
                 flash('기본 시드 데이터가 성공적으로 실행되었습니다.', 'success')
             except Exception as e:
