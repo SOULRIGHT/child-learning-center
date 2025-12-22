@@ -3093,22 +3093,26 @@ def settings_data():
                 flash(f'시드 데이터 실행 중 오류가 발생했습니다: {e}', 'error')
         
         elif action == 'reset_data':
-            # 데이터 초기화 (개발자만)
             if current_user.role != '개발자':
                 flash('데이터 초기화 권한이 없습니다.', 'error')
                 return redirect(url_for('settings_data'))
             
             try:
-                # 모든 데이터 삭제
+                # FK를 가진 테이블부터 정리
+                PointsHistory.query.delete()
+                Notification.query.delete()
+                ChildNote.query.delete()
                 DailyPoints.query.delete()
                 LearningRecord.query.delete()
                 Child.query.delete()
                 User.query.delete()
+                
                 db.session.commit()
                 flash('모든 데이터가 초기화되었습니다.', 'success')
             except Exception as e:
+                db.session.rollback()
                 flash(f'데이터 초기화 중 오류가 발생했습니다: {e}', 'error')
-        
+
         elif action == 'export_data':
             # 데이터 내보내기 (개발자만)
             if current_user.role != '개발자':
