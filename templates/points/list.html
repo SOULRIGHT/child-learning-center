@@ -34,10 +34,32 @@
                                     <th>독서</th>
                                     <th>총점</th>
                                     <th>입력자</th>
+                                    <th class="text-center extra-col">+추가 과목</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for record in points_records %}
+                                {% set extra = namespace(items=[], total=0) %}
+                                {% set extra_sources = [
+                                    ('피아노', record.piano_points),
+                                    ('영어', record.english_points),
+                                    ('고학년 수학', record.advanced_math_points),
+                                    ('쓰기', record.writing_points),
+                                ] %}
+                                {% for label, value in extra_sources %}
+                                    {% if value is not none and value != 0 %}
+                                        {% set extra.items = extra.items + [{'label': label, 'value': value}] %}
+                                        {% set extra.total = extra.total + value %}
+                                    {% endif %}
+                                {% endfor %}
+                                {% if record.manual_items %}
+                                    {% for item in record.manual_items %}
+                                        {% if item.points %}
+                                            {% set extra.items = extra.items + [{'label': item.subject or '수동 포인트', 'value': item.points}] %}
+                                            {% set extra.total = extra.total + item.points %}
+                                        {% endif %}
+                                    {% endfor %}
+                                {% endif %}
                                 <tr>
                                     <td>{{ record.date | kst_strftime('%m/%d') }}</td>
                                     <td>
@@ -86,6 +108,30 @@
                                         <strong class="text-primary">{{ record.total_points }}</strong>
                                     </td>
                                     <td>{{ record.creator.name if record.creator else '-' }}</td>
+                                    <td class="extra-points-cell">
+                                        {% if extra.items %}
+                                        {% set target_id = 'points-extra-card-' ~ loop.index0 %}
+                                <button class="btn btn-outline-primary btn-sm extra-toggle"
+                                                type="button"
+                                                aria-expanded="false"
+                                                data-target="{{ target_id }}">
+                                            <span class="extra-label">상세 보기</span>
+                                            <span class="extra-summary-text">총합: {{ extra.total }}점</span>
+                                        </button>
+                                        <div class="extra-card" id="{{ target_id }}" role="dialog" aria-label="추가 과목 상세">
+                                            {% for item in extra.items %}
+                                            <div class="extra-card-row">
+                                                <span>{{ item.label }}</span>
+                                                <span class="{% if item.label == '수동 포인트' and item.value < 0 %}text-danger{% endif %}">
+                                                    {% if item.label == '수동 포인트' and item.value > 0 %}+{% endif %}{{ item.value }}점
+                                                </span>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -100,3 +146,147 @@
     </div>
 </div>
 {% endblock %} 
+
+{% block extra_css %}
+<style>
+.extra-col {
+    width: 150px;
+}
+
+.extra-points-cell {
+    position: relative;
+    min-width: 130px;
+    text-align: center;
+}
+
+.extra-points-cell .extra-toggle {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    min-width: 100px;
+    padding: 0.2rem 0.75rem;
+    line-height: 1.2;
+    font-size: 0.8rem;
+}
+
+.extra-label {
+    display: block;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.extra-summary-text {
+    display: block;
+    font-size: 0.7rem;
+    margin-top: 0.1rem;
+    color: #6c757d;
+}
+
+.extra-card {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translate(8px, -50%);
+    width: 200px;
+    padding: 0.75rem;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(21, 30, 48, 0.15);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 10;
+}
+
+.extra-card.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translate(-8px, -50%);
+}
+
+.extra-card-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    margin-bottom: 0.35rem;
+}
+
+.extra-card-row:last-child {
+    margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+    .extra-col {
+        width: 120px;
+    }
+
+    .extra-card {
+        position: static;
+        transform: none;
+        margin-top: 0.5rem;
+        width: 100%;
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+    }
+
+    .extra-card.is-open {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const extraCards = document.querySelectorAll('.extra-card');
+    const extraToggles = document.querySelectorAll('.extra-toggle');
+
+    const closeAllExtraCards = (exceptId = null) => {
+        extraCards.forEach(card => {
+            if (card.id !== exceptId) {
+                card.classList.remove('is-open');
+                const cell = card.closest('.extra-points-cell');
+                const btn = cell ? cell.querySelector('.extra-toggle') : null;
+                if (btn) {
+                    btn.setAttribute('aria-expanded', 'false');
+                }
+            }
+        });
+    };
+
+    extraToggles.forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const targetId = this.dataset.target;
+            const targetCard = document.getElementById(targetId);
+            if (!targetCard) return;
+
+            const willOpen = !targetCard.classList.contains('is-open');
+            closeAllExtraCards(targetId);
+            if (willOpen) {
+                targetCard.classList.add('is-open');
+                this.setAttribute('aria-expanded', 'true');
+            } else {
+                targetCard.classList.remove('is-open');
+                this.setAttribute('aria-expanded', 'false');
+            }
+        });
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.extra-points-cell')) {
+            closeAllExtraCards();
+        }
+    });
+});
+</script>
+{% endblock %}

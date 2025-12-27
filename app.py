@@ -1070,7 +1070,10 @@ def child_detail(child_id):
     
     # 페이지별 기록 조회
     result = db.session.execute(text("""
-        SELECT id, date, korean_points, math_points, ssen_points, reading_points, total_points, created_at
+        SELECT id, date,
+               korean_points, math_points, ssen_points, reading_points,
+               piano_points, english_points, advanced_math_points, writing_points,
+               total_points, manual_points, manual_history, created_at
         FROM daily_points 
         WHERE child_id = :child_id 
         AND id IN (
@@ -1084,6 +1087,7 @@ def child_detail(child_id):
     """), {"child_id": child_id, "per_page": per_page, "offset": offset})
     
     # DailyPoints 객체로 변환
+    import json
     recent_records = []
     for row in result:
         # 날짜 타입 변환
@@ -1092,22 +1096,46 @@ def child_detail(child_id):
             from datetime import datetime
             date_value = datetime.strptime(date_value, '%Y-%m-%d').date()
         
-        created_at_value = row[7]
+        created_at_value = row[13]
         if isinstance(created_at_value, str):
             from datetime import datetime
             created_at_value = datetime.strptime(created_at_value, '%Y-%m-%d %H:%M:%S.%f')
         
-        point_record = DailyPoints(
-            id=row[0],
-            date=date_value,
-            korean_points=row[2],
-            math_points=row[3],
-            ssen_points=row[4],
-            reading_points=row[5],
-            total_points=row[6]
-        )
+        point_record = DailyPoints()
+        point_record.id = row[0]
+        point_record.date = date_value
+        point_record.korean_points = row[2]
+        point_record.math_points = row[3]
+        point_record.ssen_points = row[4]
+        point_record.reading_points = row[5]
+        point_record.piano_points = row[6]
+        point_record.english_points = row[7]
+        point_record.advanced_math_points = row[8]
+        point_record.writing_points = row[9]
+        point_record.total_points = row[10]
+        point_record.manual_points = row[11] or 0
+        point_record.manual_history = row[12]
         # created_at을 별도로 설정 (템플릿에서 사용할 수 있도록)
         point_record.created_at = created_at_value
+        
+        # manual_history 기반으로 안전하게 재계산
+        point_record.manual_points = get_manual_points_from_history(point_record)
+        point_record.total_points = (
+            (point_record.korean_points or 0) +
+            (point_record.math_points or 0) +
+            (point_record.ssen_points or 0) +
+            (point_record.reading_points or 0) +
+            (point_record.piano_points or 0) +
+            (point_record.english_points or 0) +
+            (point_record.advanced_math_points or 0) +
+            (point_record.writing_points or 0) +
+            (point_record.manual_points or 0)
+        )
+        try:
+            manual_items = json.loads(point_record.manual_history) if point_record.manual_history else []
+        except Exception:
+            manual_items = []
+        point_record.manual_items = manual_items
         recent_records.append(point_record)
     
     # 최근 특이사항들
@@ -1982,7 +2010,26 @@ def period_report():
 def points_list():
     """포인트 기록 목록"""
     # 최근 입력된 포인트들 (입력 시간 기준으로 정렬)
+    import json
     points_records = DailyPoints.query.order_by(DailyPoints.created_at.desc()).limit(20).all()
+    for record in points_records:
+        record.manual_points = get_manual_points_from_history(record)
+        record.total_points = (
+            (record.korean_points or 0) +
+            (record.math_points or 0) +
+            (record.ssen_points or 0) +
+            (record.reading_points or 0) +
+            (record.piano_points or 0) +
+            (record.english_points or 0) +
+            (record.advanced_math_points or 0) +
+            (record.writing_points or 0) +
+            (record.manual_points or 0)
+        )
+        try:
+            manual_items = json.loads(record.manual_history) if record.manual_history else []
+        except Exception:
+            manual_items = []
+        record.manual_items = manual_items
     return render_template('points/list.html', points_records=points_records)
 
 @app.route('/points/input/select')
