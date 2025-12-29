@@ -2,6 +2,150 @@
 
 {% block title %}{{ child.name }} - 포인트 입력{% endblock %}
 
+{% block extra_css %}
+<style>
+    .manual-points-wrapper {
+        border: 1px solid #e0e3eb;
+        border-radius: 12px;
+        padding: 1.25rem;
+        background: #f8fafc;
+    }
+    .manual-toggle {
+        position: relative;
+        border-radius: 10px;
+        transition: background-color 0.2s ease, border-color 0.2s ease;
+        text-align: center;
+        padding-right: 3rem;
+    }
+    .manual-toggle .toggle-label {
+        width: 100%;
+        text-align: center;
+    }
+    .manual-toggle .toggle-icon {
+        position: absolute;
+        right: 1.25rem;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    .manual-card {
+        border-radius: 12px;
+        background-color: #fff;
+        border: 1px dashed #cfd4dc;
+        padding: 1rem;
+    }
+    .manual-entry-item {
+        border: 1px solid #edf1f7;
+        border-radius: 10px;
+        padding: 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .manual-entry-item + .manual-entry-item {
+        margin-top: 0.5rem;
+    }
+    .manual-entry-points {
+        font-weight: 600;
+        font-size: 1rem;
+    }
+    .manual-entry-points.positive {
+        color: #0f9d58;
+    }
+    .manual-entry-points.negative {
+        color: #d93025;
+    }
+    .manual-empty-state {
+        border: 1px dashed #d7dce5;
+        border-radius: 10px;
+        padding: 1rem;
+        text-align: center;
+        color: #6c757d;
+        background-color: #fff;
+    }
+    .manual-summary-badge {
+        background: #e8f0fe;
+        color: #1967d2;
+        border-radius: 999px;
+        padding: 0.35rem 0.9rem;
+        font-weight: 600;
+    }
+    .manual-preview-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-top: 0.35rem;
+    }
+    .manual-preview-tag {
+        background: #eef2ff;
+        color: #4c6ef5;
+        border-radius: 8px;
+        padding: 0.1rem 0.5rem;
+        font-size: 0.8rem;
+    }
+    .manual-quick-buttons .btn {
+        border-radius: 999px;
+    }
+    .manual-card.collapse {
+        display: none;
+    }
+    .manual-card.collapse.show {
+        display: block;
+    }
+    #manualPointsInput {
+        appearance: textfield;
+        -moz-appearance: textfield;
+    }
+    #manualPointsInput::-webkit-outer-spin-button,
+    #manualPointsInput::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    .manual-quick-buttons .btn-outline-danger {
+        color: #dc3545;
+        border: 1px solid #dc3545;
+    }
+    .manual-quick-buttons .btn-outline-danger:hover {
+        background-color: #dc3545;
+        color: #fff;
+    }
+    .manual-quick-buttons .btn-outline-danger:focus-visible {
+        box-shadow: 0 0 0 0.15rem rgba(220, 53, 69, 0.35);
+    }
+    .manual-quick-buttons .btn-outline-danger.active,
+    .manual-quick-buttons .btn-outline-danger:active,
+    .manual-quick-buttons .btn-outline-danger.active:focus {
+        background-color: #dc3545 !important;
+        color: #fff !important;
+        border-color: #dc3545 !important;
+    }
+    .manual-add-btn {
+        height: 100%;
+        min-height: 48px;
+        font-size: 1.6rem;
+        line-height: 1;
+    }
+    .final-total-box {
+        background: #f0f4ff;
+        border-radius: 16px;
+        padding: 1rem 1.5rem;
+        margin-top: 1rem;
+    }
+    .final-total-label {
+        font-size: 0.95rem;
+        color: #4c6ef5;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        font-weight: 600;
+    }
+    .final-total-value {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #0b57d0;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
     <div class="row">
@@ -228,43 +372,146 @@
                         </div>
                         </div>
 
+                        <!-- 수동 포인트 섹션 -->
+                        <div class="manual-points-wrapper mb-4" id="manualPointsWrapper">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div>
+                                    <h5 class="mb-1">수동 포인트</h5>
+                                    <small class="text-muted">연필, 교재 완료, 특별 상황 등 추가/차감</small>
+                                </div>
+                                <span class="manual-summary-badge">
+                                    현재 합계 <span id="manualSummaryTotal">0</span>점
+                                </span>
+                            </div>
+                            <button type="button"
+                                    class="btn btn-outline-primary manual-toggle w-100"
+                                    id="manualSectionToggle"
+                                    aria-expanded="false"
+                                    aria-controls="manualPointsSection">
+                                <span class="toggle-label d-inline-flex align-items-center justify-content-center gap-2">
+                                    <i class="fas fa-sliders-h"></i>
+                                    <span>수동 포인트 입력 영역 열기</span>
+                                </span>
+                                <i class="fas fa-chevron-down toggle-icon" id="manualSectionIcon"></i>
+                            </button>
+                            <div id="manualPointsSection" class="manual-card mt-3 collapse" aria-hidden="true">
+                                <div class="manual-quick-buttons mb-3">
+                                    <span class="fw-semibold small text-muted me-2">빠른 선택</span>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-primary manual-preset"
+                                                data-preset-key="textbook"
+                                                data-subject="교재 완료"
+                                                data-points="3000"
+                                                data-reason="교재 완료">
+                                            교재 완료 +3000
+                                        </button>
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-danger manual-preset"
+                                                data-preset-key="print"
+                                                data-subject="프린트"
+                                                data-points="-100"
+                                                data-reason="프린트 사용">
+                                            프린트 -100
+                                        </button>
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-danger manual-preset"
+                                                data-preset-key="pencil"
+                                                data-subject="연필"
+                                                data-points="-300"
+                                                data-reason="연필 구매">
+                                            연필 -300
+                                        </button>
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-danger manual-preset"
+                                                data-preset-key="eraser"
+                                                data-subject="지우개"
+                                                data-points="-500"
+                                                data-reason="지우개 구매">
+                                            지우개 -500
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="manual-custom-form">
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-md-4">
+                                            <label class="form-label">항목명</label>
+                                            <input type="text"
+                                                   class="form-control"
+                                                   id="manualSubjectInput"
+                                                   placeholder="예: 교재 완료"
+                                                   maxlength="30">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">점수 <span class="text-muted">(음수 입력 시 차감)</span></label>
+                                            <input type="number"
+                                                   class="form-control"
+                                                   id="manualPointsInput"
+                                                   placeholder=""
+                                                   min="-50000"
+                                                   max="50000">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">메모</label>
+                                            <input type="text"
+                                                   class="form-control"
+                                                   id="manualReasonInput"
+                                                   placeholder="예: 연필 구매"
+                                                   maxlength="60">
+                                        </div>
+                                        <div class="col-md-2 col-lg-1 d-grid">
+                                            <button type="button" class="btn btn-primary manual-add-btn d-flex align-items-center justify-content-center" id="manualAddBtn" aria-label="수동 포인트 항목 추가">
+                                                ✓
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="manual-list mt-3" id="manualEntriesList" aria-live="polite"></div>
+                            </div>
+                            <input type="hidden" name="manual_entries" id="manualEntriesField" value="[]">
+                            <script type="application/json" id="manualEntriesData">{{ manual_entries|default([])|tojson }}</script>
+                        </div>
+
                         <!-- 총점 미리보기 -->
                         <div class="alert alert-info">
                             <h6 class="mb-2"><i class="fas fa-calculator"></i> 총점 미리보기</h6>
-                            <div class="row">
-                                <div class="col-md-3">
-                                    <small class="text-muted">국어:</small>
+                            <div class="row row-cols-2 row-cols-md-4 gy-3">
+                                <div class="col">
+                                    <small class="text-muted d-block">국어</small>
                                     <span id="korean_preview">0</span>점
                                 </div>
-                                <div class="col-md-3">
-                                    <small class="text-muted">수학:</small>
+                                <div class="col">
+                                    <small class="text-muted d-block">수학</small>
                                     <span id="math_preview">0</span>점
                                 </div>
-                                <div class="col-md-3">
-                                    <small class="text-muted">쎈수학:</small>
+                                <div class="col">
+                                    <small class="text-muted d-block">쎈수학</small>
                                     <span id="ssen_preview">0</span>점
                                 </div>
-                                <div class="col-md-3">
-                                    <small class="text-muted">독서:</small>
+                                <div class="col">
+                                    <small class="text-muted d-block">독서</small>
                                     <span id="reading_preview">0</span>점
                                 </div>
-                            </div>
-                            <div class="row mt-2">
-                                <div class="col-md-3">
-                                    <small class="text-muted">피아노:</small>
+                                <div class="col">
+                                    <small class="text-muted d-block">피아노</small>
                                     <span id="piano_preview">0</span>점
                                 </div>
-                                <div class="col-md-3">
-                                    <small class="text-muted">영어:</small>
+                                <div class="col">
+                                    <small class="text-muted d-block">영어</small>
                                     <span id="english_preview">0</span>점
                                 </div>
-                                <div class="col-md-3">
-                                    <small class="text-muted">고학년수학:</small>
+                                <div class="col">
+                                    <small class="text-muted d-block">고학년수학</small>
                                     <span id="advanced_math_preview">0</span>점
                                 </div>
-                                <div class="col-md-3">
-                                    <small class="text-muted">쓰기:</small>
+                                <div class="col">
+                                    <small class="text-muted d-block">쓰기</small>
                                     <span id="writing_preview">0</span>점
+                                </div>
+                                <div class="col">
+                                    <small class="text-muted d-block">수동 포인트</small>
+                                    <span id="manual_preview">0</span>점
+                                    <div class="manual-preview-tags" id="manual_preview_list"></div>
                                 </div>
                             </div>
                             <hr>
@@ -272,6 +519,15 @@
                                 <h4 class="text-primary mb-0">
                                     총점: <span id="total_preview">0</span>점
                                 </h4>
+                            </div>
+                            <div class="final-total-box text-center">
+                                <div class="final-total-label">입력 후 예상 누적 포인트</div>
+                                <div class="final-total-value">
+                                    <span id="final_preview">{{ total_cumulative_points }}</span>점
+                                </div>
+                                <div class="text-muted small">
+                                    (현재 누적 {{ total_cumulative_points }}점 + 오늘 입력값)
+                                </div>
                             </div>
                         </div>
 
@@ -286,37 +542,25 @@
                     </form>
                 </div>
             </div>
-            
-            <!-- 수동 포인트 관리 바로가기 카드 -->
-            <div class="card mt-4">
-                <div class="card-body text-center py-4">
-                    <div class="row align-items-center">
-                        <div class="col-md-8">
-                            <h6 class="mb-2 text-dark">
-                                <i class="fas fa-plus-circle text-success me-2"></i>
-                                특별한 포인트가 더 필요하신가요?
-                            </h6>
-                            <p class="text-muted mb-0 small">
-                                연필, 지우개, 교재 완료 등 수동으로 포인트를 추가하거나 차감할 수 있습니다.
-                            </p>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('settings_points') }}" 
-                               class="btn btn-outline-success btn-lg" 
-                               data-role="manual-points"
-                               aria-label="수동 포인트 관리 페이지로 이동">
-                                <i class="fas fa-arrow-right me-2"></i>
-                                수동포인트<br>입력
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 </div>
 
 <script>
+const manualEntryAuthor = "{{ (current_user.name or current_user.username)|e }}";
+const manualEntriesField = document.getElementById('manualEntriesField');
+const manualEntriesDataElement = document.getElementById('manualEntriesData');
+const manualEntriesListElement = document.getElementById('manualEntriesList');
+const manualPreviewTagsElement = document.getElementById('manual_preview_list');
+const manualSummaryTotalElement = document.getElementById('manualSummaryTotal');
+const manualSectionElement = document.getElementById('manualPointsSection');
+const manualSectionToggle = document.getElementById('manualSectionToggle');
+const manualSectionIcon = document.getElementById('manualSectionIcon');
+const manualSubjectInput = document.getElementById('manualSubjectInput');
+const manualPointsInput = document.getElementById('manualPointsInput');
+const manualReasonInput = document.getElementById('manualReasonInput');
+let manualEntries = [];
+
 // 추가 과목 토글 기능
 document.getElementById('toggleAdditionalSubjects').addEventListener('click', function() {
     const additionalSubjects = document.getElementById('additionalSubjects');
@@ -324,22 +568,210 @@ document.getElementById('toggleAdditionalSubjects').addEventListener('click', fu
     const toggleText = document.getElementById('toggleText');
     
     if (additionalSubjects.classList.contains('show')) {
-        // 접기
         additionalSubjects.classList.remove('show');
         toggleIcon.className = 'fas fa-chevron-down me-2';
         toggleText.textContent = '추가 과목 보기 (피아노, 영어, 고학년수학, 쓰기)';
     } else {
-        // 펼치기
         additionalSubjects.classList.add('show');
         toggleIcon.className = 'fas fa-chevron-up me-2';
         toggleText.textContent = '추가 과목 숨기기';
     }
 });
 
-// 총점 계산 함수 (강화된 버전)
+function escapeHtml(value = '') {
+    const text = value === null || value === undefined ? '' : String(value);
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return text.replace(/[&<>"']/g, (char) => map[char]);
+}
+
+function clampManualPoints(points) {
+    const numeric = Number(points);
+    if (Number.isNaN(numeric)) {
+        return 0;
+    }
+    return Math.max(-5000, Math.min(5000, numeric));
+}
+
+function formatManualPoints(points) {
+    const numeric = Number(points) || 0;
+    const prefix = numeric > 0 ? '+' : '';
+    return `${prefix}${numeric}점`;
+}
+
+function updateManualHiddenField() {
+    if (!manualEntriesField) {
+        return;
+    }
+    const payload = manualEntries.map(({ uid, ...rest }) => rest);
+    manualEntriesField.value = JSON.stringify(payload);
+}
+
+function getManualTotal() {
+    return manualEntries.reduce((sum, entry) => sum + (Number(entry.points) || 0), 0);
+}
+
+function renderManualPreviewTags() {
+    if (!manualPreviewTagsElement) {
+        return;
+    }
+    manualPreviewTagsElement.innerHTML = '';
+    if (!manualEntries.length) {
+        return;
+    }
+    manualEntries.slice(0, 3).forEach((entry) => {
+        const tag = document.createElement('span');
+        tag.className = 'manual-preview-tag';
+        tag.textContent = `${entry.subject || '수동'} ${(entry.points > 0 ? '+' : '')}${entry.points}`;
+        manualPreviewTagsElement.appendChild(tag);
+    });
+    if (manualEntries.length > 3) {
+        const moreTag = document.createElement('span');
+        moreTag.className = 'manual-preview-tag';
+        moreTag.textContent = `+${manualEntries.length - 3}개`;
+        manualPreviewTagsElement.appendChild(moreTag);
+    }
+}
+
+function updateManualSummary() {
+    const total = getManualTotal();
+    if (manualSummaryTotalElement) {
+        manualSummaryTotalElement.textContent = total;
+    }
+    const manualPreview = document.getElementById('manual_preview');
+    if (manualPreview) {
+        manualPreview.textContent = total;
+    }
+    renderManualPreviewTags();
+}
+
+function syncQuickButtons() {
+    document.querySelectorAll('.manual-preset').forEach((button) => {
+        const presetKey = button.dataset.presetKey;
+        const isActive = manualEntries.some((entry) => entry.presetKey && entry.presetKey === presetKey);
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+}
+
+function renderManualList() {
+    if (!manualEntriesListElement) {
+        updateManualHiddenField();
+        updateManualSummary();
+        syncQuickButtons();
+        updateTotalScore();
+        return;
+    }
+    if (!manualEntries.length) {
+        manualEntriesListElement.innerHTML = '<div class="manual-empty-state">아직 추가된 수동 포인트가 없습니다.<br><small>빠른 버튼을 누르거나 아래 입력란을 사용해주세요.</small></div>';
+        updateManualHiddenField();
+        updateManualSummary();
+        syncQuickButtons();
+        updateTotalScore();
+        return;
+    }
+    manualEntriesListElement.innerHTML = '';
+    manualEntries.forEach((entry) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'manual-entry-item';
+        wrapper.innerHTML = `
+            <div>
+                <div class="fw-semibold">${escapeHtml(entry.subject || '수동 포인트')}</div>
+                ${entry.reason ? `<div class="text-muted small">${escapeHtml(entry.reason)}</div>` : ''}
+                ${entry.created_at ? `<div class="text-muted small">${escapeHtml(entry.created_at)} · ${escapeHtml(entry.created_by || manualEntryAuthor)}</div>` : ''}
+            </div>
+            <div class="text-end">
+                <div class="manual-entry-points ${entry.points >= 0 ? 'positive' : 'negative'}">${formatManualPoints(entry.points)}</div>
+                <button type="button" class="btn btn-link btn-sm text-danger p-0" data-action="remove-manual-entry" data-uid="${entry.uid}">
+                    삭제
+                </button>
+            </div>
+        `;
+        manualEntriesListElement.appendChild(wrapper);
+    });
+    updateManualHiddenField();
+    updateManualSummary();
+    syncQuickButtons();
+    updateTotalScore();
+}
+
+function addManualEntry(entry, options = {}) {
+    const subject = (entry.subject || '').toString().trim().slice(0, 30);
+    if (!subject) {
+        alert('항목명을 입력해주세요.');
+        return;
+    }
+    const points = clampManualPoints(entry.points);
+    const reason = (entry.reason || '').toString().trim().slice(0, 80);
+    const uid = options.uid || `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    
+    manualEntries.push({
+        id: options.id || entry.id || null,
+        uid,
+        subject,
+        points,
+        reason,
+        presetKey: options.presetKey || entry.presetKey || null,
+        created_by: entry.created_by || manualEntryAuthor,
+        created_at: entry.created_at || new Date().toISOString().slice(0, 16).replace('T', ' ')
+    });
+    renderManualList();
+}
+
+function removeManualEntry(uid) {
+    manualEntries = manualEntries.filter((entry) => entry.uid !== uid);
+    renderManualList();
+}
+
+function handlePresetClick(button) {
+    const presetKey = button.dataset.presetKey;
+    const existingIndex = manualEntries.findIndex((entry) => entry.presetKey === presetKey);
+    if (existingIndex > -1) {
+        manualEntries.splice(existingIndex, 1);
+        renderManualList();
+        return;
+    }
+    addManualEntry({
+        subject: button.dataset.subject,
+        points: button.dataset.points,
+        reason: button.dataset.reason,
+        presetKey
+    }, { presetKey });
+}
+
+function toggleManualSection() {
+    if (!manualSectionElement || !manualSectionToggle) {
+        return;
+    }
+    const shouldShow = !manualSectionElement.classList.contains('show');
+    manualSectionElement.classList.toggle('show', shouldShow);
+    manualSectionElement.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
+    manualSectionToggle.setAttribute('aria-expanded', shouldShow ? 'true' : 'false');
+    if (manualSectionIcon) {
+        manualSectionIcon.className = shouldShow ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
+    }
+}
+
+function parseInitialManualEntries() {
+    try {
+        const raw = JSON.parse(manualEntriesDataElement?.textContent || '[]');
+        if (Array.isArray(raw)) {
+            manualEntries = raw.map((entry, index) => ({
+                ...entry,
+                uid: entry.uid || `existing-${entry.id || index}-${Date.now()}`
+            }));
+        } else {
+            manualEntries = [];
+        }
+    } catch (error) {
+        console.warn('manual_history 파싱 오류:', error);
+        manualEntries = [];
+    }
+    renderManualList();
+}
+
+// 총점 계산 함수
 function updateTotalScore() {
     try {
-        // 선택된 라디오 버튼에서 값 가져오기
         const korean = parseInt(document.querySelector('input[name="korean_points"]:checked')?.value || 0);
         const math = parseInt(document.querySelector('input[name="math_points"]:checked')?.value || 0);
         const ssen = parseInt(document.querySelector('input[name="ssen_points"]:checked')?.value || 0);
@@ -348,34 +780,17 @@ function updateTotalScore() {
         const english = parseInt(document.querySelector('input[name="english_points"]:checked')?.value || 0);
         const advanced_math = parseInt(document.querySelector('input[name="advanced_math_points"]:checked')?.value || 0);
         const writing = parseInt(document.querySelector('input[name="writing_points"]:checked')?.value || 0);
+        const manual = getManualTotal();
         
-        // 값 검증: NaN 체크
-        if (isNaN(korean) || isNaN(math) || isNaN(ssen) || isNaN(reading) || isNaN(piano) || isNaN(english) || isNaN(advanced_math) || isNaN(writing)) {
-            console.error('❌ 잘못된 포인트 값이 감지되었습니다.');
-            return;
-        }
-        
-        // 값 검증: 범위 체크 (각 과목별 최대값 다름)
         const values = [korean, math, ssen, reading, piano, english, advanced_math, writing];
-        const maxValues = [200, 200, 200, 200, 100, 100, 300, 100]; // 각 과목별 최대값
+        const maxValues = [200, 200, 200, 200, 100, 100, 300, 100];
         for (let i = 0; i < values.length; i++) {
-            if (values[i] < 0 || values[i] > maxValues[i]) {
+            if (Number.isNaN(values[i]) || values[i] < 0 || values[i] > maxValues[i]) {
                 console.error(`❌ 포인트 값이 범위를 벗어났습니다: ${values[i]} (최대: ${maxValues[i]})`);
                 return;
             }
         }
         
-        // 총점 계산 (검증된 값으로)
-        const total = values.reduce((sum, val) => sum + val, 0);
-        
-        // 계산 결과 검증
-        const expectedTotal = korean + math + ssen + reading + piano + english + advanced_math + writing;
-        if (total !== expectedTotal) {
-            console.error(`❌ 포인트 계산 오류: 예상 ${expectedTotal}, 계산 ${total}`);
-            return;
-        }
-        
-        // UI 업데이트
         document.getElementById('korean_preview').textContent = korean;
         document.getElementById('math_preview').textContent = math;
         document.getElementById('ssen_preview').textContent = ssen;
@@ -384,9 +799,17 @@ function updateTotalScore() {
         document.getElementById('english_preview').textContent = english;
         document.getElementById('advanced_math_preview').textContent = advanced_math;
         document.getElementById('writing_preview').textContent = writing;
-        document.getElementById('total_preview').textContent = total;
+        document.getElementById('manual_preview').textContent = manual;
         
-        // 총점 색상 변경 (시각적 피드백)
+        const total = values.reduce((sum, val) => sum + val, 0) + manual;
+        document.getElementById('total_preview').textContent = total;
+        const cumulative = Number('{{ total_cumulative_points }}') || 0;
+        const combined = cumulative + total;
+        const finalPreviewEl = document.getElementById('final_preview');
+        if (finalPreviewEl) {
+            finalPreviewEl.textContent = combined;
+        }
+        
         const totalElement = document.getElementById('total_preview');
         if (total >= 600) {
             totalElement.className = 'text-success fw-bold';
@@ -395,9 +818,6 @@ function updateTotalScore() {
         } else {
             totalElement.className = 'text-danger fw-bold';
         }
-        
-        console.log(`✅ 포인트 계산 완료: 국어(${korean}) + 수학(${math}) + 쎈수학(${ssen}) + 독서(${reading}) + 피아노(${piano}) + 영어(${english}) + 고학년수학(${advanced_math}) + 쓰기(${writing}) = ${total}`);
-        
     } catch (error) {
         console.error('❌ 포인트 계산 중 오류 발생:', error);
     }
@@ -407,18 +827,11 @@ function updateTotalScore() {
 document.querySelectorAll('input[type="radio"]').forEach(radio => {
     radio.addEventListener('change', function() {
         updateTotalScore();
-        
-        // 선택된 과목 하이라이트
-        const subjectName = this.name.replace('_points', '');
         const subjectSection = this.closest('.mb-4');
-        
-        // 모든 과목 섹션에서 하이라이트 제거
         document.querySelectorAll('.mb-4').forEach(section => {
             section.classList.remove('border-primary', 'border-2');
         });
-        
-        // 선택된 과목 섹션 하이라이트
-        if (this.checked) {
+        if (this.checked && subjectSection) {
             subjectSection.classList.add('border-primary', 'border-2');
         }
     });
@@ -427,7 +840,7 @@ document.querySelectorAll('input[type="radio"]').forEach(radio => {
 // 폼 제출 전 최종 검증
 document.querySelector('form').addEventListener('submit', function(e) {
     try {
-        // 선택된 포인트 값들 가져오기
+        updateManualHiddenField();
         const korean = parseInt(document.querySelector('input[name="korean_points"]:checked')?.value || 0);
         const math = parseInt(document.querySelector('input[name="math_points"]:checked')?.value || 0);
         const ssen = parseInt(document.querySelector('input[name="ssen_points"]:checked')?.value || 0);
@@ -436,27 +849,29 @@ document.querySelector('form').addEventListener('submit', function(e) {
         const english = parseInt(document.querySelector('input[name="english_points"]:checked')?.value || 0);
         const advanced_math = parseInt(document.querySelector('input[name="advanced_math_points"]:checked')?.value || 0);
         const writing = parseInt(document.querySelector('input[name="writing_points"]:checked')?.value || 0);
+        const manual = getManualTotal();
         
-        // 최종 검증
-        if (isNaN(korean) || isNaN(math) || isNaN(ssen) || isNaN(reading) || isNaN(piano) || isNaN(english) || isNaN(advanced_math) || isNaN(writing)) {
+        const values = [korean, math, ssen, reading, piano, english, advanced_math, writing];
+        if (values.some((val) => Number.isNaN(val))) {
             e.preventDefault();
             alert('❌ 모든 과목의 포인트를 선택해주세요.');
             return false;
         }
         
-        // 총점 재계산 및 검증
-        const total = korean + math + ssen + reading + piano + english + advanced_math + writing;
-        const expectedTotal = korean + math + ssen + reading + piano + english + advanced_math + writing;
-        
-        if (total !== expectedTotal) {
+        const total = values.reduce((sum, val) => sum + val, 0) + manual;
+        if (Number.isNaN(total)) {
             e.preventDefault();
-            alert(`❌ 포인트 계산 오류가 발생했습니다. 다시 시도해주세요.`);
+            alert('❌ 포인트 계산 오류가 발생했습니다. 다시 시도해주세요.');
             return false;
         }
+        const cumulative = Number('{{ total_cumulative_points }}') || 0;
+        const combined = cumulative + total;
+        console.log(`✅ 폼 제출 검증 완료: 총점 ${total}점 (수동 ${manual}점 포함) / 예상 누적 ${combined}점`);
         
-        // 성공 메시지
-        console.log(`✅ 폼 제출 검증 완료: 총점 ${total}점`);
-        
+        const finalPreviewEl = document.getElementById('final_preview');
+        if (finalPreviewEl) {
+            finalPreviewEl.textContent = combined;
+        }
     } catch (error) {
         e.preventDefault();
         console.error('❌ 폼 검증 중 오류 발생:', error);
@@ -465,35 +880,38 @@ document.querySelector('form').addEventListener('submit', function(e) {
     }
 });
 
-// 수동 포인트 버튼 클릭 이벤트 (template-javascript-safety 규칙 준수)
-document.addEventListener('click', function(e) {
-    if (e.target.matches('[data-role="manual-points"]') || e.target.closest('[data-role="manual-points"]')) {
-        e.preventDefault();
-        const button = e.target.closest('[data-role="manual-points"]');
-        try {
-            console.log('🔗 수동 포인트 관리 페이지로 이동합니다...');
-            window.location.href = button.href;
-        } catch (error) {
-            console.error('❌ 페이지 이동 중 오류:', error);
-            alert('페이지 이동 중 오류가 발생했습니다.');
-        }
+if (manualSectionToggle) {
+    manualSectionToggle.addEventListener('click', toggleManualSection);
+}
+
+document.getElementById('manualAddBtn')?.addEventListener('click', () => {
+    addManualEntry({
+        subject: manualSubjectInput?.value,
+        points: manualPointsInput?.value,
+        reason: manualReasonInput?.value
+    });
+    if (manualSubjectInput) manualSubjectInput.value = '';
+    if (manualPointsInput) manualPointsInput.value = '';
+    if (manualReasonInput) manualReasonInput.value = '';
+});
+
+manualEntriesListElement?.addEventListener('click', (event) => {
+    const target = event.target.closest('[data-action="remove-manual-entry"]');
+    if (target) {
+        removeManualEntry(target.dataset.uid);
     }
 });
 
-// 배열 합계 함수
-function sum(arr) {
-    return arr.reduce((sum, val) => sum + val, 0);
-}
+document.querySelectorAll('.manual-preset').forEach((button) => {
+    button.addEventListener('click', () => handlePresetClick(button));
+});
 
-// 페이지 로드 시 초기 총점 계산
 document.addEventListener('DOMContentLoaded', function() {
+    parseInitialManualEntries();
     updateTotalScore();
-    
-    // 디버깅 정보 출력
     console.log('🚀 포인트 입력 페이지 로드 완료');
-    console.log('📊 실시간 포인트 계산 시스템 활성화');
-    console.log('🔗 수동 포인트 입력 기능 연결됨');
-    console.log('📋 접이식 추가 과목 기능 활성화');
+    console.log('📊 실시간 포인트 계산 + 수동 포인트 합산 활성화');
+    console.log('🧮 빠른 수동 포인트 버튼 및 사용자 정의 입력 활성화');
 });
 </script>
 {% endblock %}

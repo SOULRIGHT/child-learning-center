@@ -174,6 +174,64 @@ def get_manual_points_from_history(record):
         print(f"❌ manual_history 파싱 오류: {e}")
         return 0
 
+def parse_manual_entries(payload, author_name):
+    """수동 포인트 폼 데이터를 정규화"""
+    if not payload:
+        return [], 0
+    
+    if isinstance(payload, str):
+        try:
+            raw_entries = json.loads(payload)
+        except (TypeError, ValueError):
+            return [], 0
+    else:
+        raw_entries = payload
+    
+    if not isinstance(raw_entries, list):
+        return [], 0
+    
+    normalized = []
+    max_id = 0
+    for item in raw_entries:
+        if not isinstance(item, dict):
+            continue
+        
+        subject = str(item.get('subject', '')).strip()
+        if not subject:
+            continue
+        
+        reason = str(item.get('reason', '')).strip()
+        points_raw = item.get('points', 0)
+        try:
+            points = int(points_raw)
+        except (TypeError, ValueError):
+            points = 0
+        points = max(-50000, min(50000, points))
+        
+        entry_id = item.get('id')
+        if isinstance(entry_id, int) and entry_id > 0:
+            max_id = max(max_id, entry_id)
+        else:
+            entry_id = None
+        
+        normalized.append({
+            'id': entry_id,
+            'subject': subject[:30],
+            'points': points,
+            'reason': reason[:80],
+            'created_by': item.get('created_by') or author_name,
+            'created_at': item.get('created_at') or datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+            'presetKey': item.get('presetKey') or item.get('preset_key')
+        })
+    
+    for entry in normalized:
+        if entry['id'] is None:
+            max_id += 1
+            entry['id'] = max_id
+    
+    total_points = sum(entry['points'] for entry in normalized)
+    return normalized, total_points
+
 # === ⏰ 세션 영구화 ===
 @app.before_request
 def make_session_permanent():
@@ -2074,6 +2132,7 @@ def points_input_select():
 def points_input(child_id):
     """포인트 입력 페이지"""
     child = Child.query.get_or_404(child_id)
+    display_name = getattr(current_user, 'name', None) or getattr(current_user, 'username', None) or '사용자'
     
     if request.method == 'POST':
         # 입력 날짜 (기본값: 오늘)
@@ -2105,9 +2164,9 @@ def points_input(child_id):
             english_points = int(request.form.get('english_points', 0))
             advanced_math_points = int(request.form.get('advanced_math_points', 0))
             writing_points = int(request.form.get('writing_points', 0))
-
-            # 수동 포인트 (manual_history에서 실시간 계산)
-            manual_points = get_manual_points_from_history(existing_record)
+            
+            manual_entries_raw = request.form.get('manual_entries', '[]')
+            manual_entries, manual_points = parse_manual_entries(manual_entries_raw, display_name)
         
             # 값 검증: 음수 방지만 방지
             if any(points < 0 for points in [korean_points, math_points, ssen_points, reading_points, piano_points, english_points, advanced_math_points, writing_points]):
@@ -2115,7 +2174,11 @@ def points_input(child_id):
                 return redirect(url_for('points_input', child_id=child_id, date=selected_date.isoformat()))
             
             # 총 포인트 계산 (검증된 값으로)
-            total_points = korean_points + math_points + ssen_points + reading_points + piano_points + english_points + advanced_math_points + writing_points + manual_points
+            total_points = (
+                korean_points + math_points + ssen_points + reading_points +
+                piano_points + english_points + advanced_math_points + writing_points +
+                manual_points
+            )
             
             # 계산 결과 검증
             expected_total = sum([korean_points, math_points, ssen_points, reading_points, piano_points, english_points, advanced_math_points, writing_points, manual_points])
@@ -2134,7 +2197,7 @@ def points_input(child_id):
                 old_english = existing_record.english_points
                 old_advanced_math = existing_record.advanced_math_points
                 old_writing = existing_record.writing_points
-                old_manual = existing_record.manual_points
+                old_manual = get_manual_points_from_history(existing_record)
                 
                 # 기존 기록 업데이트
                 existing_record.korean_points = korean_points
@@ -2145,13 +2208,17 @@ def points_input(child_id):
                 existing_record.english_points = english_points
                 existing_record.advanced_math_points = advanced_math_points
                 existing_record.writing_points = writing_points
-                # existing_record.manual_points = manual_points  # 제거: manual_history에서 실시간 계산
+                existing_record.manual_points = manual_points
+                existing_record.manual_history = json.dumps(manual_entries, ensure_ascii=False)
                 existing_record.total_points = total_points
                 existing_record.updated_at = datetime.utcnow()
                 
                 # 변경 이력 기록 (PointsHistory 테이블) - 변경사항이 있을 때만
                 if (old_korean != korean_points or old_math != math_points or 
                     old_ssen != ssen_points or old_reading != reading_points or old_piano != piano_points or old_english != english_points or old_advanced_math != advanced_math_points or old_writing != writing_points or old_manual != manual_points):
+                    
+                    manual_diff = manual_points - old_manual
+                    manual_change_note = f' / 수동 포인트 조정 {manual_diff:+}점' if manual_diff else ''
                     
                     history_record = PointsHistory(
                         child_id=child_id,
@@ -2176,7 +2243,7 @@ def points_input(child_id):
                         new_total_points=total_points,
                         change_type='update',
                         changed_by=current_user.id,
-                        change_reason='웹 UI를 통한 포인트 수정'
+                        change_reason=f'웹 UI를 통한 포인트 수정{manual_change_note}'
                     )
                     db.session.add(history_record)
                     
@@ -2205,6 +2272,7 @@ def points_input(child_id):
                 flash(f'✅ {child.name} 아이의 포인트가 수정되었습니다. (총점: {total_points}점)', 'success')
                 return redirect(url_for('points_list'))
             else:
+                manual_change_note = f' (수동 {manual_points:+}점 포함)' if manual_points else ''
                 # 새 기록 생성 (생성 이력 기록)
                 history_record = PointsHistory(
                     child_id=child_id,
@@ -2229,7 +2297,7 @@ def points_input(child_id):
                     new_total_points=total_points,
                     change_type='create',
                     changed_by=current_user.id,
-                    change_reason='웹 UI를 통한 포인트 신규 입력'
+                    change_reason=f'웹 UI를 통한 포인트 신규 입력{manual_change_note}'
                 )
                 db.session.add(history_record)
                 
@@ -2245,6 +2313,8 @@ def points_input(child_id):
                     english_points=english_points,
                     advanced_math_points=advanced_math_points,
                     writing_points=writing_points,
+                    manual_points=manual_points,
+                    manual_history=json.dumps(manual_entries, ensure_ascii=False),
                     total_points=total_points,
                     created_by=current_user.id
                 )
@@ -2290,6 +2360,11 @@ def points_input(child_id):
         date=selected_date
     ).first()
     
+    if selected_record and selected_record.manual_history:
+        manual_entries_for_template, _ = parse_manual_entries(selected_record.manual_history, display_name)
+    else:
+        manual_entries_for_template = []
+    
     # 오늘/선택 날짜 문자열 계산
     today_date = datetime.utcnow().strftime('%Y년 %m월 %d일')
     selected_date_display = selected_date.strftime('%Y년 %m월 %d일')
@@ -2309,7 +2384,8 @@ def points_input(child_id):
                           selected_date_display=selected_date_display,
                           selected_date_iso=selected_date_iso,
                           today_iso=today_iso,
-                          total_cumulative_points=total_cumulative_points)
+                          total_cumulative_points=total_cumulative_points,
+                          manual_entries=manual_entries_for_template)
 
 def update_cumulative_points(child_id, commit=True):
     """아동의 누적 포인트를 자동으로 업데이트"""
