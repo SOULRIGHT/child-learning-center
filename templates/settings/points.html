@@ -24,8 +24,8 @@
         </div>
         <div class="card-body">
             <form id="manualPointsForm">
-                <div class="row">
-                    <div class="col-md-3">
+                <div class="row g-3">
+                    <div class="col-md-2">
                         <label class="form-label">아동 선택</label>
                         <select class="form-select" id="childSelect" required>
                             <option value="">아동을 선택하세요</option>
@@ -33,6 +33,16 @@
                             <option value="{{ child.id }}">{{ child.name }} ({{ child.grade }}학년)</option>
                             {% endfor %}
                         </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">적용 날짜</label>
+                        <input type="date"
+                               class="form-control"
+                               id="manualDate"
+                               value="{{ today_iso }}"
+                               max="{{ today_iso }}"
+                               required>
+                        <small class="text-muted">미선택 시 오늘</small>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">과목명</label>
@@ -49,11 +59,11 @@
                         <input type="number" class="form-control" id="points" placeholder="50" min="-5000" max="5000" required>
                         <small class="text-muted">음수 입력시 차감</small>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label">사유</label>
                         <input type="text" class="form-control" id="reason" placeholder="연필 구매, 교재완료(국어) 등" required>
                     </div>
-                    <div class="col-md-1">
+                    <div class="col-md-1 d-flex align-items-end">
                         <label class="form-label">&nbsp;</label>
                         <button type="submit" class="btn btn-primary w-100">
                             <i class="bi bi-check-circle me-1"></i>입력
@@ -114,6 +124,10 @@
                             아동: <span id="confirmChildName" class="fw-bold"></span>
                         </h6>
                         <h6 class="mb-2">
+                            <i class="fas fa-calendar-alt me-2"></i>
+                            날짜: <span id="confirmDate" class="fw-bold"></span>
+                        </h6>
+                        <h6 class="mb-2">
                             <i class="fas fa-book me-2"></i>
                             과목: <span id="confirmSubject" class="fw-bold"></span>
                         </h6>
@@ -157,11 +171,12 @@ document.getElementById('manualPointsForm').addEventListener('submit', function(
     e.preventDefault();
     
     const childId = document.getElementById('childSelect').value;
+    const manualDate = document.getElementById('manualDate').value;
     const subjectName = document.getElementById('subjectName').value;
     const points = parseInt(document.getElementById('points').value);
     const reason = document.getElementById('reason').value;
     
-    if (!childId || !subjectName || !points || !reason) {
+    if (!childId || !manualDate || !subjectName || !points || !reason) {
         alert('모든 필드를 입력해주세요.');
         return;
     }
@@ -169,6 +184,7 @@ document.getElementById('manualPointsForm').addEventListener('submit', function(
     // 폼 데이터 임시 저장
     pendingFormData = {
         child_id: childId,
+        date: manualDate,
         subject: subjectName,
         points: points,
         reason: reason
@@ -180,6 +196,7 @@ document.getElementById('manualPointsForm').addEventListener('submit', function(
     
     // Modal에 정보 표시
     document.getElementById('confirmChildName').textContent = childName;
+    document.getElementById('confirmDate').textContent = manualDate;
     document.getElementById('confirmSubject').textContent = subjectName;
     
     // 점수에 따라 색상과 텍스트 변경
@@ -187,9 +204,12 @@ document.getElementById('manualPointsForm').addEventListener('submit', function(
     if (points > 0) {
         pointsSpan.textContent = `+${points}점 (추가)`;
         pointsSpan.className = 'fw-bold text-success';
-    } else {
+    } else if (points < 0) {
         pointsSpan.textContent = `${points}점 (차감)`;
         pointsSpan.className = 'fw-bold text-danger';
+    } else {
+        pointsSpan.textContent = '0점 (변동 없음)';
+        pointsSpan.className = 'fw-bold text-muted';
     }
     
     document.getElementById('confirmReason').textContent = reason;

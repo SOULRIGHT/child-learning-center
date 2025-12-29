@@ -7,11 +7,11 @@
 <!-- 통계 카드 섹션 -->
 <div class="row mb-4">
     <div class="col-xl-3 col-lg-6 col-sm-6 mb-3">
-        <div class="stat-card">
+        <div class="stat-card stat-card-clickable" data-bs-toggle="modal" data-bs-target="#todayPointsModal">
                             <div class="stat-content">
                     <div>
                         <div class="stat-number">{{ today_points_children }}</div>
-                        <div class="stat-label">오늘 포인트 입력 아동</div>
+                    <div class="stat-label">오늘 포인트 입력 아동</div>
                     </div>
                     <div class="stat-icon">
                         <i class="bi bi-calendar-check"></i>
@@ -197,7 +197,7 @@
                             </div>
                         </div>
                         <div class="progress" style="height: 8px;">
-                            <div class="progress-bar bg-primary" style="width: {{ (weekly_korean_avg / 200 * 100) | round(0) }}%"></div>
+                            <div class="progress-bar bg-primary" style="width: 0%;" data-width="{{ (weekly_korean_avg / 200 * 100) | round(0) }}"></div>
                         </div>
                     </div>
                     
@@ -214,7 +214,7 @@
                             </div>
                         </div>
                         <div class="progress" style="height: 8px;">
-                            <div class="progress-bar bg-success" style="width: {{ (weekly_math_avg / 200 * 100) | round(0) }}%"></div>
+                            <div class="progress-bar bg-success" style="width: 0%;" data-width="{{ (weekly_math_avg / 200 * 100) | round(0) }}"></div>
                         </div>
                     </div>
                     
@@ -231,7 +231,7 @@
                             </div>
                         </div>
                         <div class="progress" style="height: 8px;">
-                            <div class="progress-bar bg-warning" style="width: {{ (weekly_ssen_avg / 200 * 100) | round(0) }}%"></div>
+                            <div class="progress-bar bg-warning" style="width: 0%;" data-width="{{ (weekly_ssen_avg / 200 * 100) | round(0) }}"></div>
                         </div>
                     </div>
                     
@@ -248,7 +248,7 @@
                             </div>
                         </div>
                         <div class="progress" style="height: 8px;">
-                            <div class="progress-bar bg-info" style="width: {{ (weekly_reading_avg / 200 * 100) | round(0) }}%"></div>
+                            <div class="progress-bar bg-info" style="width: 0%;" data-width="{{ (weekly_reading_avg / 200 * 100) | round(0) }}"></div>
                         </div>
                     </div>
                 </div>
@@ -365,6 +365,83 @@
     </div>
 </div>
 
+<!-- 오늘 포인트 현황 모달 -->
+<div class="modal fade" id="todayPointsModal" tabindex="-1" aria-labelledby="todayPointsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="todayPointsModalLabel">오늘 포인트 현황</h5>
+                    <p class="text-muted small mb-0">입력 완료 {{ today_done_children|length }}명 · 미입력 {{ today_pending_children|length }}명</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="status-card success">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0">입력 완료</h6>
+                                <span class="badge bg-success">{{ today_done_children|length }}명</span>
+                            </div>
+                            {% if today_done_children %}
+                            <ul class="list-unstyled status-list">
+                                {% for child in today_done_children %}
+                                <li class="status-item">
+                                    <div>
+                                        <strong>{{ child.name }}</strong>
+                                        <span class="text-muted small ms-2">{{ child.grade }}학년</span>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="text-primary fw-bold d-block">{{ child.points }}점</span>
+                                        <a href="{{ url_for('points_input', child_id=child.id) }}"
+                                           class="btn btn-link btn-sm px-0 text-decoration-none"
+                                           data-bs-dismiss="modal">
+                                            수정
+                                        </a>
+                                    </div>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                            <p class="text-muted text-center my-4">아직 입력된 아동이 없습니다.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="status-card warning">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0">미입력</h6>
+                                <span class="badge bg-warning text-dark">{{ today_pending_children|length }}명</span>
+                            </div>
+                            {% if today_pending_children %}
+                            <ul class="list-unstyled status-list">
+                                {% for child in today_pending_children %}
+                                <li class="status-item">
+                                    <div>
+                                        <strong>{{ child.name }}</strong>
+                                        <span class="text-muted small ms-2">{{ child.grade }}학년</span>
+                                        {% if child.last_date %}
+                                            <span class="badge bg-light text-muted ms-2">마지막 {{ child.last_date | kst_strftime('%m/%d') }}</span>
+                                        {% endif %}
+                                    </div>
+                                    <a href="{{ url_for('points_input', child_id=child.id) }}" class="btn btn-outline-primary btn-sm" data-bs-dismiss="modal">
+                                        입력하기
+                                    </a>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                            <p class="text-muted text-center my-4">오늘은 모든 아동이 입력 완료!</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 시스템 안내 -->
 <div class="row">
     <div class="col-12">
@@ -425,3 +502,58 @@
     </div>
 </div>
 {% endblock %} 
+
+{% block extra_css %}
+{{ super() }}
+<style>
+.stat-card-clickable {
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.stat-card-clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(33, 82, 255, 0.15);
+}
+
+.status-card {
+    border: 1px solid #e9ecef;
+    border-radius: 1rem;
+    padding: 1rem;
+    background: #fff;
+    height: 100%;
+}
+.status-card.success {
+    border-color: rgba(25, 135, 84, 0.2);
+}
+.status-card.warning {
+    border-color: rgba(255, 193, 7, 0.4);
+}
+.status-list {
+    max-height: 320px;
+    overflow-y: auto;
+    margin-bottom: 0;
+}
+.status-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f1f3f5;
+}
+.status-item:last-child {
+    border-bottom: none;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.progress-bar[data-width]').forEach(bar => {
+        const width = bar.dataset.width ? Number(bar.dataset.width) : 0;
+        bar.style.width = `${Math.max(0, Math.min(width, 100))}%`;
+    });
+});
+</script>
+{% endblock %}

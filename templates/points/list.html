@@ -61,7 +61,16 @@
                                     {% endfor %}
                                 {% endif %}
                                 <tr>
-                                    <td>{{ record.date | kst_strftime('%m/%d') }}</td>
+                                    <td class="text-nowrap">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span>{{ record.date | kst_strftime('%m/%d') }}</span>
+                                            <a href="{{ url_for('points_input', child_id=record.child.id, date=record.date | kst_strftime('%Y-%m-%d')) }}"
+                                               class="btn btn-outline-secondary btn-sm py-0 px-2"
+                                               aria-label="{{ record.child.name }} {{ record.date | kst_strftime('%Y-%m-%d') }} 포인트 수정">
+                                                수정
+                                            </a>
+                                        </div>
+                                    </td>
                                     <td>
                                         <a href="{{ url_for('child_detail', child_id=record.child.id) }}" class="text-decoration-none">
                                             {{ record.child.name }}

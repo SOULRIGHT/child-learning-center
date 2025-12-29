@@ -905,6 +905,35 @@ def dashboard():
     
     # ====== [알림 시스템 활성화] ======
     notifications = get_user_notifications(current_user.id, limit=5)
+
+    # ====== [오늘 포인트 현황 데이터] ======
+    today_records = DailyPoints.query.filter(DailyPoints.date == today).all()
+    today_done_ids = {record.child_id for record in today_records}
+    today_done_map = {record.child_id: record for record in today_records}
+    
+    done_children = []
+    pending_children = []
+    all_children = Child.query.order_by(Child.name).all()
+    
+    for child in all_children:
+        if child.id in today_done_ids:
+            done_children.append({
+                'id': child.id,
+                'name': child.name,
+                'grade': child.grade,
+                'points': today_done_map[child.id].total_points
+            })
+        else:
+            last_record = DailyPoints.query.filter_by(child_id=child.id)\
+                .order_by(DailyPoints.date.desc()).first()
+            pending_children.append({
+                'id': child.id,
+                'name': child.name,
+                'grade': child.grade,
+                'last_date': last_record.date if last_record else None
+            })
+    
+    today_points_children = len(done_children)
     
     return render_template('dashboard.html', 
                          today_points_children=today_points_children,
@@ -918,7 +947,9 @@ def dashboard():
                          weekly_ssen_avg=weekly_ssen_avg,
                          weekly_reading_avg=weekly_reading_avg,
                          weekly_total_points=weekly_total_points,
-                         weekly_points_count=weekly_points_count)
+                         weekly_points_count=weekly_points_count,
+                         today_done_children=done_children,
+                         today_pending_children=pending_children)
 
 # 아동 관리 라우트
 @app.route('/children')
@@ -2045,13 +2076,21 @@ def points_input(child_id):
     child = Child.query.get_or_404(child_id)
     
     if request.method == 'POST':
-        # 오늘 날짜
-        today = datetime.utcnow().date()
+        # 입력 날짜 (기본값: 오늘)
+        selected_date_str = request.form.get('date')
+        if selected_date_str:
+            try:
+                selected_date = datetime.strptime(selected_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                flash('❌ 날짜 형식이 잘못되었습니다.', 'error')
+                return redirect(url_for('points_input', child_id=child_id))
+        else:
+            selected_date = datetime.utcnow().date()
         
         # 기존 기록이 있는지 확인
         existing_record = DailyPoints.query.filter_by(
             child_id=child_id, 
-            date=today
+            date=selected_date
         ).first()
         
         try:
@@ -2073,7 +2112,7 @@ def points_input(child_id):
             # 값 검증: 음수 방지만 방지
             if any(points < 0 for points in [korean_points, math_points, ssen_points, reading_points, piano_points, english_points, advanced_math_points, writing_points]):
                 flash('❌ 포인트는 음수일 수 없습니다. 0 이상의 값을 입력해주세요.', 'error')
-                return redirect(url_for('points_input', child_id=child_id))
+                return redirect(url_for('points_input', child_id=child_id, date=selected_date.isoformat()))
             
             # 총 포인트 계산 (검증된 값으로)
             total_points = korean_points + math_points + ssen_points + reading_points + piano_points + english_points + advanced_math_points + writing_points + manual_points
@@ -2082,7 +2121,7 @@ def points_input(child_id):
             expected_total = sum([korean_points, math_points, ssen_points, reading_points, piano_points, english_points, advanced_math_points, writing_points, manual_points])
             if total_points != expected_total:
                 flash(f'❌ 포인트 계산 오류가 발생했습니다. 예상: {expected_total}, 계산: {total_points}', 'error')
-                return redirect(url_for('points_input', child_id=child_id))
+                return redirect(url_for('points_input', child_id=child_id, date=selected_date.isoformat()))
             
             if existing_record:
                 # 기존 기록 업데이트 (변경 이력 기록)
@@ -2116,7 +2155,7 @@ def points_input(child_id):
                     
                     history_record = PointsHistory(
                         child_id=child_id,
-                        date=today,
+                        date=selected_date,
                         old_korean_points=old_korean,
                         old_math_points=old_math,
                         old_ssen_points=old_ssen,
@@ -2142,7 +2181,7 @@ def points_input(child_id):
                     db.session.add(history_record)
                     
                     # 변경 이력 기록 (간단한 로그)
-                    print(f"📝 포인트 변경 이력 - {child.name}({child.grade}학년) - {today}")
+                    print(f"📝 포인트 변경 이력 - {child.name}({child.grade}학년) - {selected_date}")
                     print(f"  국어: {old_korean} → {korean_points}")
                     print(f"  수학: {old_math} → {math_points}")
                     print(f"  쎈수학: {old_ssen} → {ssen_points}")
@@ -2169,7 +2208,7 @@ def points_input(child_id):
                 # 새 기록 생성 (생성 이력 기록)
                 history_record = PointsHistory(
                     child_id=child_id,
-                    date=today,
+                    date=selected_date,
                     old_korean_points=0,
                     old_math_points=0,
                     old_ssen_points=0,
@@ -2197,15 +2236,15 @@ def points_input(child_id):
                 # 새 기록 생성
                 new_record = DailyPoints(
                     child_id=child_id,
-                    date=today,
+                    date=selected_date,
                     korean_points=korean_points,
                     math_points=math_points,
                     ssen_points=ssen_points,
                     reading_points=reading_points,
-                piano_points=piano_points,
-                english_points=english_points,
-                advanced_math_points=advanced_math_points,
-                writing_points=writing_points,
+                    piano_points=piano_points,
+                    english_points=english_points,
+                    advanced_math_points=advanced_math_points,
+                    writing_points=writing_points,
                     total_points=total_points,
                     created_by=current_user.id
                 )
@@ -2229,21 +2268,33 @@ def points_input(child_id):
             
         except ValueError as e:
             flash('❌ 잘못된 포인트 값이 입력되었습니다. 숫자만 입력해주세요.', 'error')
-            return redirect(url_for('points_input', child_id=child_id))
+            return redirect(url_for('points_input', child_id=child_id, date=selected_date.isoformat()))
         except Exception as e:
             db.session.rollback()
             flash(f'❌ 포인트 저장 중 오류가 발생했습니다: {str(e)}', 'error')
-            return redirect(url_for('points_input', child_id=child_id))
+            return redirect(url_for('points_input', child_id=child_id, date=selected_date.isoformat()))
     
-    # 오늘 기록 가져오기
+    # 기본 표시 날짜 (오늘)
     today = datetime.utcnow().date()
-    today_record = DailyPoints.query.filter_by(
-        child_id=child_id, 
-        date=today
+    selected_date = request.args.get('date')
+    if selected_date:
+        try:
+            selected_date = datetime.strptime(selected_date, '%Y-%m-%d').date()
+        except ValueError:
+            selected_date = today
+    else:
+        selected_date = today
+    
+    selected_record = DailyPoints.query.filter_by(
+        child_id=child_id,
+        date=selected_date
     ).first()
     
-    # 오늘 날짜 문자열 계산
+    # 오늘/선택 날짜 문자열 계산
     today_date = datetime.utcnow().strftime('%Y년 %m월 %d일')
+    selected_date_display = selected_date.strftime('%Y년 %m월 %d일')
+    selected_date_iso = selected_date.strftime('%Y-%m-%d')
+    today_iso = today.strftime('%Y-%m-%d')
     
     # 총 누적 포인트 계산
     total_cumulative_points = db.session.query(
@@ -2252,8 +2303,12 @@ def points_input(child_id):
     
     return render_template('points/input.html', 
                           child=child, 
-                          today_record=today_record, 
+                          today_record=selected_record, 
                           today_date=today_date,
+                          selected_date=selected_date,
+                          selected_date_display=selected_date_display,
+                          selected_date_iso=selected_date_iso,
+                          today_iso=today_iso,
                           total_cumulative_points=total_cumulative_points)
 
 def update_cumulative_points(child_id, commit=True):
@@ -2864,7 +2919,8 @@ def settings_users():
 def settings_points():
     """수동 포인트 관리 페이지"""
     children = Child.query.filter_by(include_in_stats=True).order_by(Child.grade, Child.name).all()
-    return render_template('settings/points.html', children=children)
+    today_iso = datetime.utcnow().strftime('%Y-%m-%d')
+    return render_template('settings/points.html', children=children, today_iso=today_iso)
 
 @app.route('/api/children/by-grade')
 @login_required
@@ -2918,6 +2974,7 @@ def add_manual_points():
         subject = data.get('subject')
         points = data.get('points')
         reason = data.get('reason')
+        date_str = data.get('date')
         
         # 입력 검증
         if not all([child_id, subject, points is not None, reason]):
@@ -2928,15 +2985,26 @@ def add_manual_points():
         if not child:
             return jsonify({'success': False, 'error': '아동을 찾을 수 없습니다.'})
         
-        # 오늘 날짜의 기록 찾기 또는 생성
-        today = datetime.now().date()
-        daily_record = DailyPoints.query.filter_by(child_id=child_id, date=today).first()
+        # 입력 날짜 결정 (기본: 오늘)
+        if date_str:
+            try:
+                target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'success': False, 'error': '유효한 날짜 형식이 아닙니다.'})
+        else:
+            target_date = datetime.now().date()
+        
+        if target_date > datetime.now().date():
+            return jsonify({'success': False, 'error': '미래 날짜에는 입력할 수 없습니다.'})
+        
+        # 선택 날짜의 기록 찾기 또는 생성
+        daily_record = DailyPoints.query.filter_by(child_id=child_id, date=target_date).first()
         
         if not daily_record:
             # 새 기록 생성
             daily_record = DailyPoints(
                 child_id=child_id,
-                date=today,
+                date=target_date,
                 korean_points=0,
                 math_points=0,
                 ssen_points=0,
@@ -2991,7 +3059,7 @@ def add_manual_points():
         change_type = '추가' if points > 0 else '차감'
         points_history = PointsHistory(
             child_id=child_id,
-            date=today,
+            date=target_date,
             old_korean_points=0, old_math_points=0, old_ssen_points=0, old_reading_points=0, 
             old_piano_points=0, old_english_points=0, old_advanced_math_points=0, old_writing_points=0,
             old_total_points=daily_record.total_points - points,
