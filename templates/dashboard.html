@@ -393,10 +393,9 @@
                                         <span class="text-muted small ms-2">{{ child.grade }}학년</span>
                                     </div>
                                     <div class="text-end">
-                                        <span class="text-primary fw-bold d-block">{{ child.points }}점</span>
+                                        <span class="fw-bold d-block text-dark">{{ child.points }}점</span>
                                         <a href="{{ url_for('points_input', child_id=child.id) }}"
-                                           class="btn btn-link btn-sm px-0 text-decoration-none"
-                                           data-bs-dismiss="modal">
+                                           class="btn btn-link btn-sm px-0 text-decoration-none text-primary">
                                             수정
                                         </a>
                                     </div>
@@ -425,7 +424,8 @@
                                             <span class="badge bg-light text-muted ms-2">마지막 {{ child.last_date | kst_strftime('%m/%d') }}</span>
                                         {% endif %}
                                     </div>
-                                    <a href="{{ url_for('points_input', child_id=child.id) }}" class="btn btn-outline-primary btn-sm" data-bs-dismiss="modal">
+                                    <a href="{{ url_for('points_input', child_id=child.id) }}"
+                                       class="btn btn-outline-primary btn-sm">
                                         입력하기
                                     </a>
                                 </li>
