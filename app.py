@@ -4,7 +4,10 @@ import shutil
 import threading
 import schedule
 import time
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+import csv
+import io
+from urllib.parse import quote
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_migrate import Migrate
@@ -231,6 +234,136 @@ def parse_manual_entries(payload, author_name):
     
     total_points = sum(entry['points'] for entry in normalized)
     return normalized, total_points
+
+def normalize_points(value):
+    """포인트 값이 문자열/None이어도 안전하게 정수로 변환"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+def excel_text(value):
+    """엑셀에서 문자열로 인식하도록 =\"...\" 형태로 변환"""
+    if value in (None, ''):
+        return ''
+    return f'="{value}"'
+
+def fetch_child_notes_summary(child_id):
+    """아동 특이사항 리스트와 요약 문자열 반환"""
+    notes = ChildNote.query.filter_by(child_id=child_id)\
+        .order_by(ChildNote.created_at.asc()).all()
+    note_entries = []
+    for note in notes:
+        created = note.created_at.strftime('%Y-%m-%d %H:%M') if note.created_at else ''
+        author = note.creator.name if getattr(note, 'creator', None) else ''
+        entry = f"{created} {note.note}"
+        if author:
+            entry += f" ({author})"
+        note_entries.append(entry.strip())
+    summary = " | ".join(note_entries)
+    return notes, summary
+
+def fetch_child_daily_point_records(child_id):
+    """지정한 아동의 일일 포인트 기록 전체를 최신순으로 반환"""
+    query = text("""
+        SELECT id, date,
+               korean_points, math_points, ssen_points, reading_points,
+               piano_points, english_points, advanced_math_points, writing_points,
+               total_points, manual_points, manual_history, created_at
+        FROM daily_points
+        WHERE child_id = :child_id
+        AND id IN (
+            SELECT MAX(id)
+            FROM daily_points
+            WHERE child_id = :child_id
+            GROUP BY date
+        )
+        ORDER BY date DESC
+    """)
+    rows = db.session.execute(query, {"child_id": child_id}).fetchall()
+    records = []
+    for row in rows:
+        date_value = row[1]
+        if isinstance(date_value, str):
+            date_value = datetime.strptime(date_value, '%Y-%m-%d').date()
+        created_at_value = row[13]
+        if isinstance(created_at_value, str):
+            try:
+                created_at_value = datetime.strptime(created_at_value, '%Y-%m-%d %H:%M:%S.%f')
+            except ValueError:
+                try:
+                    created_at_value = datetime.strptime(created_at_value, '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    created_at_value = None
+        manual_history_raw = row[12] or '[]'
+        try:
+            manual_items = json.loads(manual_history_raw) if manual_history_raw else []
+            if not isinstance(manual_items, list):
+                manual_items = []
+        except Exception:
+            manual_items = []
+        calculated_manual_points = sum(
+            normalize_points(item.get('points'))
+            for item in manual_items
+            if isinstance(item, dict)
+        )
+        manual_points = calculated_manual_points if manual_items else normalize_points(row[11])
+        # 기본 과목 포인트
+        korean = normalize_points(row[2])
+        math = normalize_points(row[3])
+        ssen = normalize_points(row[4])
+        reading = normalize_points(row[5])
+        piano = normalize_points(row[6])
+        english = normalize_points(row[7])
+        advanced_math = normalize_points(row[8])
+        writing = normalize_points(row[9])
+        total_points = (
+            korean + math + ssen + reading +
+            piano + english + advanced_math + writing +
+            manual_points
+        )
+        records.append({
+            "id": row[0],
+            "date": date_value,
+            "subjects": {
+                "korean": korean,
+                "math": math,
+                "ssen": ssen,
+                "reading": reading,
+                "piano": piano,
+                "english": english,
+                "advanced_math": advanced_math,
+                "writing": writing,
+            },
+            "manual_points": manual_points,
+            "manual_items": manual_items,
+            "manual_history_raw": manual_history_raw,
+            "total_points": total_points,
+            "created_at": created_at_value
+        })
+    # 누적 합계 계산 (날짜 오름차순)
+    running_total = 0
+    for record in sorted(records, key=lambda r: (r['date'] or datetime.min.date(), r['created_at'] or datetime.min)):
+        running_total += record['total_points']
+        record['cumulative_total'] = running_total
+    return records
+
+def format_manual_items_for_csv(manual_items):
+    """CSV 내보내기를 위한 수동 포인트 요약 문자열 생성"""
+    if not manual_items:
+        return ''
+    formatted = []
+    for item in manual_items:
+        if not isinstance(item, dict):
+            continue
+        subject = item.get('subject') or item.get('label') or '항목'
+        points = normalize_points(item.get('points'))
+        reason = item.get('reason') or item.get('memo')
+        entry = f"{subject} ({points:+}점)"
+        if reason:
+            entry += f" - {reason}"
+        formatted.append(entry)
+    return " | ".join(formatted)
 
 # === ⏰ 세션 영구화 ===
 @app.before_request
@@ -1258,6 +1391,120 @@ def child_detail(child_id):
                          total_pages=total_pages,
                          total_records=total_records,
                          per_page=per_page)
+
+@app.route('/children/<int:child_id>/points/export/csv')
+@login_required
+def export_child_points_csv(child_id):
+    """아동 포인트 기록을 CSV(엑셀 호환)로 다운로드"""
+    child = Child.query.get_or_404(child_id)
+    records = fetch_child_daily_point_records(child_id)
+    if not records:
+        flash('다운로드할 포인트 기록이 없습니다.', 'info')
+        return redirect(url_for('child_detail', child_id=child_id))
+    
+    notes, notes_summary = fetch_child_notes_summary(child_id)
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        '날짜', '국어', '수학', '쎈수학', '독서',
+        '피아노', '영어', '고학년수학', '쓰기',
+        '수동 포인트 합계', '수동 포인트 항목', '총점', '누적 총점',
+        '특이사항 메모', '입력 시간'
+    ])
+    
+    for record in records:
+        subjects = record['subjects']
+        manual_summary = format_manual_items_for_csv(record['manual_items'])
+        date_str = record['date'].strftime('%Y-%m-%d') if record['date'] else ''
+        created_at = record['created_at'].strftime('%Y-%m-%d %H:%M:%S') if record['created_at'] else ''
+        writer.writerow([
+            excel_text(date_str),
+            subjects['korean'], subjects['math'], subjects['ssen'], subjects['reading'],
+            subjects['piano'], subjects['english'], subjects['advanced_math'], subjects['writing'],
+            record['manual_points'],
+            manual_summary,
+            record['total_points'],
+            record.get('cumulative_total', record['total_points']),
+            notes_summary,
+            excel_text(created_at)
+        ])
+    
+    csv_bytes = output.getvalue().encode('utf-8-sig')
+    timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+    safe_name = child.name.replace(' ', '_')
+    filename_utf8 = f"{safe_name}_points_{timestamp}.csv"
+    filename_ascii = f"child_{child.id}_points_{timestamp}.csv"
+    
+    disposition = (
+        f'attachment; filename="{filename_ascii}"; '
+        f"filename*=UTF-8''{quote(filename_utf8)}"
+    )
+    
+    response = make_response(csv_bytes)
+    response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+    response.headers['Content-Disposition'] = disposition
+    return response
+
+@app.route('/children/<int:child_id>/points/export/json')
+@login_required
+def export_child_points_json(child_id):
+    """아동 포인트 기록 전체를 JSON으로 다운로드"""
+    child = Child.query.get_or_404(child_id)
+    records = fetch_child_daily_point_records(child_id)
+    if not records:
+        flash('다운로드할 포인트 기록이 없습니다.', 'info')
+        return redirect(url_for('child_detail', child_id=child_id))
+    
+    payload_records = []
+    for record in records:
+        subjects = record['subjects']
+        payload_records.append({
+            'date': record['date'].strftime('%Y-%m-%d') if record['date'] else None,
+            'subjects': subjects,
+            'manual_points': record['manual_points'],
+            'manual_entries': record['manual_items'],
+            'manual_history_raw': record['manual_history_raw'],
+            'total_points': record['total_points'],
+            'cumulative_total': record.get('cumulative_total', record['total_points']),
+            'created_at': record['created_at'].strftime('%Y-%m-%d %H:%M:%S') if record['created_at'] else None
+        })
+    
+    notes, note_summary = fetch_child_notes_summary(child_id)
+    note_payload = [{
+        'id': note.id,
+        'content': note.note,
+        'created_at': note.created_at.strftime('%Y-%m-%d %H:%M:%S') if note.created_at else None,
+        'updated_at': note.updated_at.strftime('%Y-%m-%d %H:%M:%S') if note.updated_at else None,
+        'author': note.creator.name if getattr(note, 'creator', None) else None
+    } for note in notes]
+    
+    payload = {
+        'child': {
+            'id': child.id,
+            'name': child.name,
+            'grade': child.grade
+        },
+        'generated_at': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+        'record_count': len(payload_records),
+        'records': payload_records,
+        'notes': note_payload,
+        'notes_summary': note_summary
+    }
+    
+    timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+    safe_name = child.name.replace(' ', '_')
+    filename_utf8 = f"{safe_name}_points_{timestamp}.json"
+    filename_ascii = f"child_{child.id}_points_{timestamp}.json"
+    disposition = (
+        f'attachment; filename="{filename_ascii}"; '
+        f"filename*=UTF-8''{quote(filename_utf8)}"
+    )
+    
+    response = make_response(json.dumps(payload, ensure_ascii=False, indent=2))
+    response.headers['Content-Type'] = 'application/json; charset=utf-8'
+    response.headers['Content-Disposition'] = disposition
+    return response
 
 # ===== 특이사항 관리 라우트 =====
 
