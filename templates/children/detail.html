@@ -162,11 +162,33 @@
                                 <th class="text-center">수학</th>
                                 <th class="text-center">쎈수학</th>
                                 <th class="text-center">독서</th>
+                                <th class="text-center extra-col">+추가 과목</th>
                                 <th class="text-center">총점</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for record in recent_records %}
+                            {% set extra = namespace(items=[], total=0) %}
+                            {% set extra_sources = [
+                                ('피아노', record.piano_points),
+                                ('영어', record.english_points),
+                                ('고학년 수학', record.advanced_math_points),
+                                ('쓰기', record.writing_points)
+                            ] %}
+                            {% for label, value in extra_sources %}
+                                {% if value is not none and value != 0 %}
+                                    {% set extra.items = extra.items + [{'label': label, 'value': value}] %}
+                                    {% set extra.total = extra.total + value %}
+                                {% endif %}
+                            {% endfor %}
+                            {% if record.manual_items %}
+                                {% for item in record.manual_items %}
+                                    {% if item.points %}
+                                        {% set extra.items = extra.items + [{'label': item.subject or '수동 포인트', 'value': item.points}] %}
+                                        {% set extra.total = extra.total + item.points %}
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
                             <tr>
                                 <td class="fw-bold">{{ record.date | kst_strftime('%Y-%m-%d') }}</td>
                                 <td class="text-center">
@@ -203,6 +225,30 @@
                                         <span class="badge bg-warning">100</span>
                                     {% else %}
                                         <span class="badge bg-secondary">0</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center extra-points-cell">
+                                    {% if extra.items %}
+                                    {% set target_id = 'child-extra-card-' ~ loop.index0 %}
+                                    <button class="btn btn-outline-primary btn-sm extra-toggle"
+                                            type="button"
+                                            aria-expanded="false"
+                                            data-target="{{ target_id }}">
+                                        <span class="extra-label">상세 보기</span>
+                                        <span class="extra-summary-text">총합: {{ extra.total }}점</span>
+                                    </button>
+                                    <div class="extra-card" id="{{ target_id }}" role="dialog" aria-label="추가 과목 상세">
+                                        {% for item in extra.items %}
+                                        <div class="extra-card-row">
+                                            <span>{{ item.label }}</span>
+                                            <span class="{% if item.label == '수동 포인트' and item.value < 0 %}text-danger{% endif %}">
+                                                {% if item.label == '수동 포인트' and item.value > 0 %}+{% endif %}{{ item.value }}점
+                                            </span>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
                                     {% endif %}
                                 </td>
                                 <td class="text-center fw-bold text-primary">{{ record.total_points }}점</td>
@@ -433,6 +479,50 @@
                                     {{ latest_record.reading_points }}점
                                 </span>
                             </div>
+                            <div class="d-flex justify-content-between">
+                                <span>피아노:</span>
+                                <span class="badge bg-{% if latest_record.piano_points %}primary{% else %}secondary{% endif %}">
+                                    {{ latest_record.piano_points or 0 }}점
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>영어:</span>
+                                <span class="badge bg-{% if latest_record.english_points %}primary{% else %}secondary{% endif %}">
+                                    {{ latest_record.english_points or 0 }}점
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>고학년 수학:</span>
+                                <span class="badge bg-{% if latest_record.advanced_math_points %}primary{% else %}secondary{% endif %}">
+                                    {{ latest_record.advanced_math_points or 0 }}점
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>쓰기:</span>
+                                <span class="badge bg-{% if latest_record.writing_points %}primary{% else %}secondary{% endif %}">
+                                    {{ latest_record.writing_points or 0 }}점
+                                </span>
+                            </div>
+                            <div class="mt-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span>수동 포인트:</span>
+                                    {% set manual_total = latest_record.manual_points or 0 %}
+                                    <span class="fw-bold {% if manual_total < 0 %}text-danger{% else %}text-success{% endif %}">
+                                        {% if manual_total > 0 %}+{% endif %}{{ manual_total }}점
+                                    </span>
+                                </div>
+                                {% if latest_record.manual_items %}
+                                <div class="mt-1 text-muted small">
+                                    {% for manual in latest_record.manual_items %}
+                                        <div>
+                                            - {{ manual.subject or '항목' }} ({{ manual.points }}점{% if manual.reason %}, {{ manual.reason }}{% endif %})
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <div class="mt-1 text-muted small">기록 없음</div>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
                     {% endif %}
@@ -445,6 +535,94 @@
 
 {% block extra_css %}
 <style>
+.extra-col {
+    width: 130px;
+}
+
+.extra-points-cell {
+    position: relative;
+    min-width: 120px;
+}
+
+.extra-points-cell .extra-toggle {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    min-width: 100px;
+    padding: 0.25rem 0.75rem;
+    line-height: 1.2;
+    font-size: 0.8rem;
+}
+
+.extra-label {
+    font-size: 0.85rem;
+}
+
+.extra-summary-text {
+    font-size: 0.7rem;
+    color: #6c757d;
+}
+
+.extra-card {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translate(8px, -50%);
+    width: 200px;
+    padding: 0.75rem;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(21, 30, 48, 0.15);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 10;
+}
+
+.extra-card.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translate(-8px, -50%);
+}
+
+.extra-card-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    margin-bottom: 0.35rem;
+}
+
+.extra-card-row:last-child {
+    margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+    .extra-col {
+        width: 120px;
+    }
+
+    .extra-card {
+        position: static;
+        transform: none;
+        margin-top: 0.5rem;
+        width: 100%;
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+    }
+
+    .extra-card.is-open {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+    }
+}
+
 .timeline-item:not(:last-child)::before {
     content: '';
     position: absolute;
@@ -598,6 +776,47 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // 추가 과목 카드 토글
+    const extraCards = document.querySelectorAll('.extra-card');
+    const extraToggles = document.querySelectorAll('.extra-toggle');
+
+    const closeAllExtraCards = (exceptId = null) => {
+        extraCards.forEach(card => {
+            if (card.id !== exceptId) {
+                card.classList.remove('is-open');
+                const cell = card.closest('.extra-points-cell');
+                const btn = cell ? cell.querySelector('.extra-toggle') : null;
+                if (btn) {
+                    btn.setAttribute('aria-expanded', 'false');
+                }
+            }
+        });
+    };
+
+    extraToggles.forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const targetId = this.dataset.target;
+            const targetCard = document.getElementById(targetId);
+            const isOpen = targetCard.classList.contains('is-open');
+
+            if (isOpen) {
+                targetCard.classList.remove('is-open');
+                this.setAttribute('aria-expanded', 'false');
+            } else {
+                closeAllExtraCards(targetId);
+                targetCard.classList.add('is-open');
+                this.setAttribute('aria-expanded', 'true');
+            }
+        });
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.extra-points-cell')) {
+            closeAllExtraCards();
+        }
+    });
 });
 </script>
 {% endblock %} 
