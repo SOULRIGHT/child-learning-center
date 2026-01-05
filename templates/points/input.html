@@ -594,6 +594,7 @@ const manualSectionIcon = document.getElementById('manualSectionIcon');
 const manualSubjectInput = document.getElementById('manualSubjectInput');
 const manualPointsInput = document.getElementById('manualPointsInput');
 const manualReasonInput = document.getElementById('manualReasonInput');
+const baselineCumulative = Number('{{ baseline_cumulative_points }}') || 0;
 let manualEntries = [];
 
 // 추가 과목 토글 기능
@@ -838,8 +839,7 @@ function updateTotalScore() {
         
         const total = values.reduce((sum, val) => sum + val, 0) + manual;
         document.getElementById('total_preview').textContent = total;
-        const cumulative = Number('{{ total_cumulative_points }}') || 0;
-        const combined = cumulative + total;
+        const combined = baselineCumulative + total;
         const finalPreviewEl = document.getElementById('final_preview');
         if (finalPreviewEl) {
             finalPreviewEl.textContent = combined;
@@ -899,8 +899,7 @@ document.querySelector('form').addEventListener('submit', function(e) {
             alert('❌ 포인트 계산 오류가 발생했습니다. 다시 시도해주세요.');
             return false;
         }
-        const cumulative = Number('{{ total_cumulative_points }}') || 0;
-        const combined = cumulative + total;
+        const combined = baselineCumulative + total;
         console.log(`✅ 폼 제출 검증 완료: 총점 ${total}점 (수동 ${manual}점 포함) / 예상 누적 ${combined}점`);
         
         const finalPreviewEl = document.getElementById('final_preview');

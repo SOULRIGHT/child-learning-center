@@ -2622,6 +2622,13 @@ def points_input(child_id):
     total_cumulative_points = db.session.query(
         db.func.sum(DailyPoints.total_points)
     ).filter_by(child_id=child_id).scalar() or 0
+
+    # 이미 저장된 해당 날짜 점수를 제외한 기준 누적값 (예상 누적 계산용)
+    baseline_cumulative_points = total_cumulative_points
+    if selected_record:
+        baseline_cumulative_points -= selected_record.total_points or 0
+        if baseline_cumulative_points < 0:
+            baseline_cumulative_points = 0
     
     return render_template('points/input.html', 
                           child=child, 
@@ -2632,6 +2639,7 @@ def points_input(child_id):
                           selected_date_iso=selected_date_iso,
                           today_iso=today_iso,
                           total_cumulative_points=total_cumulative_points,
+                          baseline_cumulative_points=baseline_cumulative_points,
                           manual_entries=manual_entries_for_template)
 
 def update_cumulative_points(child_id, commit=True):
