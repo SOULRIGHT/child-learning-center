@@ -625,7 +625,7 @@ function clampManualPoints(points) {
     if (Number.isNaN(numeric)) {
         return 0;
     }
-    return Math.max(50000, Math.min(50000, numeric));
+    return Math.max(-50000, Math.min(50000, numeric));
 }
 
 function formatManualPoints(points) {
