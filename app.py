@@ -1247,13 +1247,16 @@ def delete_child(child_id):
     child = Child.query.get_or_404(child_id)
     child_name = child.name
     
-    # 권한 확인 (센터장과 돌봄선생님만 삭제 가능)
+    # 권한 확인 (개발자만 삭제 가능)
     if current_user.role not in ['개발자']:
         flash('아동 삭제 권한이 없습니다.', 'error')
         return redirect(url_for('children_list'))
     
     try:
-        # 관련 기록들도 함께 삭제됨 (cascade 설정)
+        # PointsHistory, Notification은 cascade 없음 → 삭제 전에 수동 제거 (FK 오류 방지)
+        PointsHistory.query.filter_by(child_id=child_id).delete()
+        Notification.query.filter(Notification.child_id == child_id).delete(synchronize_session=False)
+        # 관련 기록들도 함께 삭제됨 (LearningRecord, ChildNote, DailyPoints는 cascade)
         db.session.delete(child)
         db.session.commit()
         
