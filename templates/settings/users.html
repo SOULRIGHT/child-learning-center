@@ -59,6 +59,7 @@
                 <div class="col-md-6">
                     <h6 class="fw-bold mb-3">계정 정보 수정</h6>
                     <form method="POST" action="{{ url_for('settings_users') }}">
+                        <input type="hidden" name="action" value="update_info">
                         <div class="mb-3">
                             <label class="form-label">사용자명</label>
                             <input type="text" class="form-control" name="username" value="{{ current_user.username }}" required>
@@ -85,6 +86,7 @@
         </div>
         <div class="card-body">
             <form method="POST" action="{{ url_for('settings_users') }}">
+                <input type="hidden" name="action" value="change_password">
                 <div class="row">
                     <div class="col-md-4">
                         <label class="form-label">현재 비밀번호</label>
@@ -121,9 +123,11 @@
                 <i class="bi bi-info-circle me-2"></i>
                 <strong>주의:</strong> 새 사용자 추가는 개발자 권한이 필요합니다. 추가하시겠습니까?
             </div>
-            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addUserModal">
-                <i class="bi bi-plus-circle me-2"></i>새 사용자 추가
-            </button>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                    <i class="bi bi-plus-circle me-2"></i>새 사용자 추가
+                </button>
+            </div>
         </div>
     </div>
     {% endif %}
@@ -140,6 +144,7 @@
             </div>
             <div class="modal-body">
                 <form method="POST" action="{{ url_for('settings_users') }}">
+                    <input type="hidden" name="action" value="add_user">
                     <div class="mb-3">
                         <label class="form-label">사용자명</label>
                         <input type="text" class="form-control" name="new_username" required>
@@ -152,13 +157,13 @@
                         <label class="form-label">권한</label>
                         <select class="form-select" name="new_role" required>
                             <option value="센터장">센터장</option>
-                            <option value="돌봄교사">돌봄교사</option>
+                            <option value="돌봄선생님">돌봄선생님</option>
                             <option value="사회복무요원">사회복무요원</option>
                         </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">비밀번호</label>
-                        <input type="password" class="form-control" name="new_user_password" required>
+                        <input type="password" class="form-control" name="new_password" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">비밀번호 확인</label>

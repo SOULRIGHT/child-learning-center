@@ -6,7 +6,9 @@ import schedule
 import time
 import csv
 import io
-from urllib.parse import quote
+import hmac
+import hashlib
+from urllib.parse import quote, urlparse
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -370,6 +372,75 @@ def format_manual_items_for_csv(manual_items):
 def make_session_permanent():
     """모든 세션을 영구 세션으로 설정하여 타임아웃 적용"""
     session.permanent = True
+
+VIEWER_ROLE_NAME = '학생열람'
+VIEWER_ALLOWED_ENDPOINTS = {
+    'index',
+    'privacy_policy',
+    'viewer_home',
+    'viewer_report',
+    'logout',
+}
+
+def get_safe_next_url(raw_next):
+    """내부 경로만 허용하여 오픈 리다이렉트 방지"""
+    if not raw_next:
+        return None
+    parsed = urlparse(raw_next)
+    if parsed.scheme or parsed.netloc:
+        return None
+    if not raw_next.startswith('/') or raw_next.startswith('//'):
+        return None
+    return raw_next
+
+def get_viewer_code_secret():
+    """학생 리포트 코드 생성용 비밀키 반환"""
+    return os.environ.get('VIEWER_CODE_SECRET') or app.config.get('SECRET_KEY', 'viewer-secret')
+
+def build_viewer_report_code(child_id):
+    """아동별 고정 서명 코드 생성"""
+    child_id_int = int(child_id)
+    message = f'viewer-report:{child_id_int}'.encode('utf-8')
+    secret = get_viewer_code_secret().encode('utf-8')
+    signature = hmac.new(secret, message, hashlib.sha256).hexdigest()[:16]
+    return f'{child_id_int}-{signature}'
+
+def resolve_child_id_from_viewer_code(view_code):
+    """서명 코드 검증 후 아동 ID 반환"""
+    if not view_code or '-' not in view_code:
+        return None
+    child_part, signature = view_code.split('-', 1)
+    if not child_part.isdigit():
+        return None
+    child_id = int(child_part)
+    expected_signature = build_viewer_report_code(child_id).split('-', 1)[1]
+    if hmac.compare_digest(signature, expected_signature):
+        return child_id
+    return None
+
+@app.before_request
+def enforce_viewer_read_only_access():
+    """학생열람 계정은 읽기 전용 화면만 접근 허용"""
+    if not current_user.is_authenticated:
+        return None
+
+    if getattr(current_user, 'role', None) != VIEWER_ROLE_NAME:
+        return None
+
+    endpoint = request.endpoint or ''
+    if endpoint == 'static':
+        return None
+
+    # 학생열람 계정은 데이터 변경 요청 차단
+    if request.method not in {'GET', 'HEAD', 'OPTIONS'}:
+        flash('학생열람 계정은 읽기 전용입니다.', 'error')
+        return redirect(url_for('viewer_home'))
+
+    if endpoint not in VIEWER_ALLOWED_ENDPOINTS:
+        flash('학생열람 계정은 리포트 열람 화면만 접근할 수 있습니다.', 'error')
+        return redirect(url_for('viewer_home'))
+
+    return None
 
 # === 🛡️ 브루트포스 공격 방지 시스템 ===
 # IP별 로그인 시도 추적 (메모리 기반)
@@ -829,8 +900,17 @@ def init_db():
 @app.route('/')
 def index():
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        return redirect(get_post_login_redirect(current_user))
     return redirect(url_for('login'))
+
+def get_post_login_redirect(user, requested_next=None):
+    """역할별 로그인 후 이동 경로 결정"""
+    safe_next = get_safe_next_url(requested_next)
+    if safe_next:
+        return safe_next
+    if user and getattr(user, 'role', None) == VIEWER_ROLE_NAME:
+        return url_for('viewer_home')
+    return url_for('dashboard')
 
 # === 완전 Firebase Auth 시스템 ===
 @app.route('/login', methods=['GET', 'POST'])
@@ -907,11 +987,13 @@ def login():
                 
                 print(f"✅ 로그인 성공: {user.name} ({email})")
                 flash(f'{user.name}님, Firebase 인증으로 로그인되었습니다!', 'success')
+                requested_next = request.args.get('next') or request.form.get('next')
+                redirect_url = get_post_login_redirect(user, requested_next)
                 
                 if request.is_json:
-                    return jsonify({'success': True, 'redirect': url_for('dashboard')})
+                    return jsonify({'success': True, 'redirect': redirect_url})
                 else:
-                    return redirect(url_for('dashboard'))
+                    return redirect(redirect_url)
             else:
                 # === 🛡️ 로그인 실패 시 실패 기록 ===
                 print("❌ Firebase 토큰 검증 실패")
@@ -952,8 +1034,8 @@ def firebase_login():
         
         if is_ip_blocked(client_ip):
             return jsonify({'success': False, 'error': '보안상 로그인이 일시적으로 제한되었습니다. 30분 후 다시 시도해주세요.'})
-        
-        data = request.get_json()
+
+        data = request.get_json() or {}
         token = data.get('token')
         
         if not token:
@@ -997,10 +1079,12 @@ def firebase_login():
             
             # === 🛡️ 로그인 성공 시 실패 기록 초기화 ===
             clear_failed_login(client_ip)
+            requested_next = request.args.get('next') or data.get('next')
+            redirect_url = get_post_login_redirect(user, requested_next)
             
             return jsonify({
                 'success': True, 
-                'redirect': url_for('dashboard'),
+                'redirect': redirect_url,
                 'user': {
                     'id': user.id,
                     'name': user.name,
@@ -3179,12 +3263,189 @@ def settings():
         return redirect(url_for('dashboard'))
     return render_template('settings/index.html')
 
+@app.route('/viewer')
+@login_required
+def viewer_home():
+    """학생열람 계정 전용 시작 페이지"""
+    if current_user.role != VIEWER_ROLE_NAME:
+        return redirect(url_for('dashboard'))
+    return render_template('viewer/home.html')
+
+def build_child_report_context(child, show_all=False, viewer_code=None):
+    """개인 리포트 템플릿 컨텍스트 생성"""
+    records = fetch_child_daily_point_records(child.id)
+    input_days = len(records)
+    last_input_date = records[0]['date'] if records else None
+    average_points = round(
+        sum(record.get('total_points', 0) for record in records) / input_days,
+        1
+    ) if input_days else 0
+    latest_day_points = records[0].get('total_points', 0) if records else 0
+
+    if records:
+        latest_cumulative = records[0].get('cumulative_total', child.cumulative_points or 0)
+        final_points = int(round(latest_cumulative or 0))
+        period_start = records[-1]['date'].strftime('%Y-%m-%d')
+        period_end = records[0]['date'].strftime('%Y-%m-%d')
+        report_period = f'{period_start} ~ {period_end}'
+    else:
+        final_points = int(child.cumulative_points or 0)
+        report_period = '-'
+
+    recent_records = records[:12]
+    full_records = records if show_all else []
+
+    subject_totals = {
+        'korean': 0,
+        'math': 0,
+        'ssen': 0,
+        'reading': 0,
+        'piano': 0,
+        'english': 0,
+        'writing': 0,
+        'manual': 0,
+    }
+
+    for record in records:
+        subjects = record.get('subjects', {})
+        subject_totals['korean'] += normalize_points(subjects.get('korean'))
+        subject_totals['math'] += normalize_points(subjects.get('math'))
+        subject_totals['ssen'] += normalize_points(subjects.get('ssen'))
+        subject_totals['reading'] += normalize_points(subjects.get('reading'))
+        subject_totals['piano'] += normalize_points(subjects.get('piano'))
+        subject_totals['english'] += normalize_points(subjects.get('english'))
+        subject_totals['writing'] += normalize_points(subjects.get('writing'))
+        subject_totals['manual'] += normalize_points(record.get('manual_points'))
+
+    today = datetime.utcnow().date()
+    current_week_start = today - timedelta(days=today.weekday())
+    week_starts = [current_week_start - timedelta(weeks=i) for i in range(7, -1, -1)]
+    weekly_totals = {week_start: 0 for week_start in week_starts}
+
+    for record in records:
+        record_date = record.get('date')
+        if not record_date:
+            continue
+        week_start = record_date - timedelta(days=record_date.weekday())
+        if week_start in weekly_totals:
+            weekly_totals[week_start] += normalize_points(record.get('total_points'))
+
+    weekly_labels = [week_start.strftime('%m/%d') for week_start in week_starts]
+    weekly_values = [weekly_totals[week_start] for week_start in week_starts]
+
+    subject_labels = ['국어', '수학', '쎈수학', '독서', '피아노', '영어', '쓰기', '수동포인트']
+    subject_values = [
+        max(0, subject_totals['korean']),
+        max(0, subject_totals['math']),
+        max(0, subject_totals['ssen']),
+        max(0, subject_totals['reading']),
+        max(0, subject_totals['piano']),
+        max(0, subject_totals['english']),
+        max(0, subject_totals['writing']),
+        max(0, subject_totals['manual']),
+    ]
+
+    viewer_code = viewer_code or build_viewer_report_code(child.id)
+    report_url = request.url_root.rstrip('/') + url_for('viewer_report', view_code=viewer_code)
+    qr_image_url = (os.environ.get('PRINT_REPORT_QR_IMAGE_URL') or '').strip() or None
+
+    return {
+        'child': child,
+        'final_points': final_points,
+        'input_days': input_days,
+        'last_input_date': last_input_date,
+        'average_points': average_points,
+        'latest_day_points': latest_day_points,
+        'report_period': report_period,
+        'recent_records': recent_records,
+        'full_records': full_records,
+        'show_all': show_all,
+        'total_record_count': input_days,
+        'weekly_labels': weekly_labels,
+        'weekly_values': weekly_values,
+        'subject_labels': subject_labels,
+        'subject_values': subject_values,
+        'subject_totals': subject_totals,
+        'qr_image_url': qr_image_url,
+        'report_url': report_url,
+        'printed_date': datetime.utcnow().date(),
+        'viewer_code': viewer_code,
+    }
+
+@app.route('/settings/print/children')
+@login_required
+def settings_print_children():
+    """개인 리포트 인쇄용 아동 선택 페이지"""
+    if current_user.role == VIEWER_ROLE_NAME:
+        flash('학생열람 계정은 목록 접근이 제한됩니다. QR로 개별 리포트를 열어주세요.', 'warning')
+        return redirect(url_for('viewer_home'))
+
+    search = (request.args.get('search') or '').strip()
+    grade_filter = request.args.get('grade', type=int)
+
+    query = Child.query
+    if search:
+        query = query.filter(Child.name.contains(search))
+    if grade_filter:
+        query = query.filter(Child.grade == grade_filter)
+
+    children = query.order_by(Child.grade, Child.name).all()
+    grades = db.session.query(Child.grade).distinct().order_by(Child.grade).all()
+    grade_list = [g[0] for g in grades]
+
+    return render_template(
+        'settings/print_children_select.html',
+        children=children,
+        search=search,
+        grade_filter=grade_filter,
+        grade_list=grade_list
+    )
+
+@app.route('/settings/print/child/<int:child_id>')
+@login_required
+def settings_print_child_report(child_id):
+    """관리자용 개인 리포트 화면"""
+    if current_user.role == VIEWER_ROLE_NAME:
+        flash('학생열람 계정은 직접 URL 접근이 제한됩니다. QR로 접속해주세요.', 'warning')
+        return redirect(url_for('viewer_home'))
+
+    child = Child.query.get_or_404(child_id)
+    show_all = request.args.get('show_all') == '1'
+    context = build_child_report_context(child, show_all=show_all)
+    context['is_viewer_mode'] = False
+    return render_template('reports/child_onepage_report.html', **context)
+
+@app.route('/viewer/report/<string:view_code>')
+@login_required
+def viewer_report(view_code):
+    """QR 코드 기반 개인 리포트 열람"""
+    child_id = resolve_child_id_from_viewer_code(view_code)
+    if not child_id:
+        flash('유효하지 않은 리포트 링크입니다.', 'error')
+        if current_user.role == VIEWER_ROLE_NAME:
+            return redirect(url_for('viewer_home'))
+        return redirect(url_for('settings_print_children'))
+
+    child = Child.query.get_or_404(child_id)
+    show_all = request.args.get('show_all') == '1' and current_user.role != VIEWER_ROLE_NAME
+    context = build_child_report_context(child, show_all=show_all, viewer_code=view_code)
+    context['is_viewer_mode'] = current_user.role == VIEWER_ROLE_NAME
+    return render_template('reports/child_onepage_report.html', **context)
+
 @app.route('/settings/users', methods=['GET', 'POST'])
 @login_required
 def settings_users():
     """사용자 관리 페이지"""
     if request.method == 'POST':
         action = request.form.get('action')
+        if not action:
+            # 템플릿 누락/호환 이슈를 대비한 안전한 액션 추론
+            if request.form.get('new_username'):
+                action = 'add_user'
+            elif request.form.get('current_password'):
+                action = 'change_password'
+            elif request.form.get('username'):
+                action = 'update_info'
         
         if action == 'update_info':
             # 사용자 정보 업데이트
@@ -3226,14 +3487,27 @@ def settings_users():
                 flash('새 사용자 추가 권한이 없습니다.', 'error')
                 return redirect(url_for('settings_users'))
             
-            new_username = request.form.get('new_username')
-            new_name = request.form.get('new_name')
+            new_username = (request.form.get('new_username') or '').strip()
+            new_name = (request.form.get('new_name') or '').strip()
             new_role = request.form.get('new_role')
-            new_password = request.form.get('new_password')
+            new_password = request.form.get('new_password') or request.form.get('new_user_password')
+            confirm_new_password = request.form.get('new_user_confirm_password') or request.form.get('confirm_new_password')
+
+            if not all([new_username, new_name, new_role, new_password]):
+                flash('새 사용자 정보를 모두 입력해주세요.', 'error')
+                return redirect(url_for('settings_users'))
+
+            if confirm_new_password and new_password != confirm_new_password:
+                flash('새 사용자 비밀번호 확인이 일치하지 않습니다.', 'error')
+                return redirect(url_for('settings_users'))
             
             # 중복 확인
             if User.query.filter_by(username=new_username).first():
                 flash('이미 사용 중인 아이디입니다.', 'error')
+                return redirect(url_for('settings_users'))
+
+            if User.query.filter_by(name=new_name).first():
+                flash('이미 사용 중인 사용자 이름입니다.', 'error')
                 return redirect(url_for('settings_users'))
             
             new_user = User(
@@ -3596,12 +3870,15 @@ def settings_data():
     users_count = User.query.count()
     records_count = LearningRecord.query.count()
     points_count = DailyPoints.query.count()
+    db_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    is_postgresql_env = db_url.startswith('postgresql')
     
     return render_template('settings/data.html', 
                          children_count=children_count,
                          users_count=users_count,
                          records_count=records_count,
-                         points_count=points_count)
+                         points_count=points_count,
+                         is_postgresql_env=is_postgresql_env)
 
 @app.route('/settings/ui')
 @login_required
@@ -4729,29 +5006,28 @@ def create_database_backup(backup_dir, backup_type='manual'):
     try:
         db_url = app.config['SQLALCHEMY_DATABASE_URI']
         
-        # 배포 환경 (PostgreSQL) - 모든 데이터를 JSON으로 백업
+        # 배포 환경 (PostgreSQL) - 메타데이터 JSON 생성 (실제 pg_dump 아님)
         if db_url and 'postgresql' in db_url:
-            # SQLAlchemy를 사용하여 모든 데이터를 JSON으로 백업
-            from sqlalchemy import text
-            
             timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-            backup_filename = f"{datetime.now().strftime('%Y-%m-%d')}_{timestamp.split('_')[1]}_{backup_type}.json"
+            backup_filename = f"{datetime.now().strftime('%Y-%m-%d')}_{timestamp.split('_')[1]}_{backup_type}_postgres_meta.json"
             backup_path = os.path.join(backup_dir, 'database', backup_filename)
             
             # 백업 디렉토리 생성
             os.makedirs(os.path.dirname(backup_path), exist_ok=True)
             
-            # 모든 데이터를 JSON으로 저장
+            # 내부 백업 단계가 pg_dump를 대체하지 않음을 명시
             backup_info = {
                 'database_type': 'postgresql',
                 'backup_time': datetime.now().isoformat(),
-                'backup_type': backup_type
+                'backup_type': backup_type,
+                'contains_database_dump': False,
+                'warning': '이 파일은 PostgreSQL 복구용 덤프가 아닙니다. 복구용 백업은 scripts/backup/pg_dump_backup.ps1 스크립트를 사용하세요.'
             }
             
             with open(backup_path, 'w', encoding='utf-8') as f:
                 json.dump(backup_info, f, ensure_ascii=False, indent=2)
             
-            print(f"✅ PostgreSQL 백업 파일 생성: {backup_filename}")
+            print(f"ℹ️ PostgreSQL 메타 백업 파일 생성: {backup_filename}")
             return backup_path, None
         
         # 개발 환경 (SQLite)
@@ -4984,9 +5260,14 @@ def backup_manual():
             create_backup_notification('수동', 'failed', error_msg)
             return redirect(url_for('settings_data'))
         
-        success_msg = '백업이 완료되었습니다.'
-        flash(success_msg, 'success')
-        create_backup_notification('수동', 'success', success_msg)
+        if app.config.get('SQLALCHEMY_DATABASE_URI', '').startswith('postgresql'):
+            success_msg = '백업이 완료되었습니다. (주의: PostgreSQL 복구용 정식 백업은 외부 pg_dump 스크립트로 별도 생성해야 합니다.)'
+            flash(success_msg, 'warning')
+            create_backup_notification('수동', 'success', success_msg)
+        else:
+            success_msg = '백업이 완료되었습니다.'
+            flash(success_msg, 'success')
+            create_backup_notification('수동', 'success', success_msg)
         return redirect(url_for('settings_data'))
         
     except Exception as e:
@@ -5113,66 +5394,70 @@ def download_backup(filename):
     import os
     from werkzeug.utils import secure_filename
     from flask import send_file
-    
-    # 보안: 파일명 검증
-    safe_filename = secure_filename(os.path.basename(filename))
-    
-    # 현재 디렉토리 (app.py가 있는 위치)
+    if current_user.role != '개발자':
+        flash('개발자만 백업 파일을 다운로드할 수 있습니다.', 'error')
+        return redirect(url_for('settings_data'))
+
+    requested_path = (filename or '').replace('\\', '/').strip('/')
+    path_parts = [part for part in requested_path.split('/') if part]
+    if not path_parts or '..' in path_parts:
+        flash('잘못된 백업 파일 경로입니다.', 'error')
+        return redirect(url_for('settings_data'))
+
+    allowed_extensions = {'.json', '.xlsx', '.db', '.sql'}
+    safe_filename = secure_filename(path_parts[-1])
+    extension = os.path.splitext(safe_filename)[1].lower()
+    if not safe_filename or extension not in allowed_extensions:
+        flash('허용되지 않은 백업 파일 형식입니다.', 'error')
+        return redirect(url_for('settings_data'))
+
+    backup_dir = create_backup_directory()
     current_dir = os.path.dirname(__file__)
-    
-    # 디버깅: 경로 정보 출력
-    print(f"🔍 백업 파일 검색 시작")
-    print(f"   요청 파일명: {filename}")
-    print(f"   안전 파일명: {safe_filename}")
-    print(f"   현재 디렉토리: {current_dir}")
-    
-    # 파일 경로 찾기 (여러 경로 시도)
+    allowed_subdirs = {'realtime', 'daily', 'monthly', 'database'}
     file_path = None
-    
-    # 1. 현재 디렉토리에서 직접 찾기
-    potential_path = os.path.join(current_dir, safe_filename)
-    print(f"   경로 1 확인: {potential_path}")
-    if os.path.exists(potential_path):
-        file_path = potential_path
-        print(f"   ✅ 파일 발견: {file_path}")
-    else:
-        # 2. 현재 디렉토리에서 backup_*.sql 파일 모두 검색
-        print(f"   경로 1 실패, 현재 디렉토리 파일 목록 검색...")
-        try:
-            for file in os.listdir(current_dir):
-                if file.startswith('backup_') and file.endswith('.sql'):
-                    print(f"   발견된 백업 파일: {file}")
-                    # 정확히 일치하거나 파일명이 포함된 경우
-                    if file == safe_filename or safe_filename in file or file == filename:
-                        file_path = os.path.join(current_dir, file)
-                        print(f"   ✅ 매칭된 파일: {file_path}")
-                        break
-        except Exception as e:
-            print(f"   ❌ 디렉토리 읽기 오류: {e}")
-        
-        # 3. backups/database 경로 확인
-        if not file_path:
-            backup_path = os.path.join(current_dir, 'backups', 'database', safe_filename)
-            print(f"   경로 3 확인: {backup_path}")
-            if os.path.exists(backup_path):
-                file_path = backup_path
-                print(f"   ✅ 파일 발견: {file_path}")
-    
-    # 파일을 찾지 못한 경우
+
+    # 1) 명시적 하위 디렉토리가 주어진 경우 해당 경로 우선 검색
+    if len(path_parts) >= 2:
+        subdir = path_parts[0]
+        if subdir in allowed_subdirs:
+            candidate = os.path.join(backup_dir, subdir, safe_filename)
+            if os.path.exists(candidate):
+                file_path = candidate
+        else:
+            flash('허용되지 않은 백업 디렉토리입니다.', 'error')
+            return redirect(url_for('settings_data'))
+
+    # 2) 루트 및 주요 백업 디렉토리에서 파일명 검색
+    if not file_path:
+        search_dirs = [
+            current_dir,
+            backup_dir,
+            os.path.join(backup_dir, 'database'),
+            os.path.join(backup_dir, 'daily'),
+            os.path.join(backup_dir, 'realtime'),
+            os.path.join(backup_dir, 'monthly'),
+        ]
+        for directory in search_dirs:
+            candidate = os.path.join(directory, safe_filename)
+            if os.path.exists(candidate):
+                file_path = candidate
+                break
+
     if not file_path or not os.path.exists(file_path):
-        print(f"   ❌ 파일을 찾을 수 없음")
-        print(f"   최종 검색 경로:")
-        print(f"   - {os.path.join(current_dir, safe_filename)}")
-        print(f"   - {os.path.join(current_dir, 'backups', 'database', safe_filename)}")
         flash('백업 파일을 찾을 수 없습니다.', 'error')
-        return redirect(url_for('dashboard'))
-    
-    print(f"✅ 백업 파일 다운로드 시작: {file_path}")
+        return redirect(url_for('settings_data'))
+
+    mimetype_map = {
+        '.sql': 'application/sql',
+        '.json': 'application/json',
+        '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        '.db': 'application/octet-stream',
+    }
     return send_file(
         file_path,
         as_attachment=True,
         download_name=safe_filename,
-        mimetype='application/sql' if safe_filename.endswith('.sql') else 'application/octet-stream'
+        mimetype=mimetype_map.get(extension, 'application/octet-stream')
     )
 
 if __name__ == '__main__':

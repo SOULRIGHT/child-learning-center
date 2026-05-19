@@ -76,7 +76,10 @@ def get_user_role_from_email(email):
     print(f"🐛 DEBUG: 소문자 변환: '{email_lower}'")
     
     # 이메일 패턴 기반 역할 매핑
-    if 'center' in email_lower or '센터장' in email_lower:
+    if 'viewer' in email_lower or 'studentview' in email_lower or '열람' in email_lower:
+        print(f"🐛 DEBUG: VIEWER 매칭! → 학생열람")
+        return '학생열람'
+    elif 'center' in email_lower or '센터장' in email_lower:
         print(f"🐛 DEBUG: CENTER 매칭! → 센터장")
         return '센터장'
     elif 'teacher' in email_lower or '선생님' in email_lower:
