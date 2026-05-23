@@ -6,8 +6,10 @@ import schedule
 import time
 import csv
 import io
+import base64
 import hmac
 import hashlib
+import importlib
 import re
 from urllib.parse import quote, urlparse, unquote
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response
@@ -19,6 +21,12 @@ from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from sqlalchemy import func # Added for func.date
 from sqlalchemy import text
+from viewer_slug_utils import extract_viewer_slug, generate_viewer_slug
+
+try:
+    qrcode = importlib.import_module('qrcode')
+except ImportError:
+    qrcode = None
 
 # Firebase Authentication
 from firebase_config import (
@@ -407,6 +415,31 @@ def build_viewer_report_code(child_id):
     signature = hmac.new(secret, message, hashlib.sha256).hexdigest()[:16]
     return f'{child_id_int}-{signature}'
 
+def generate_unique_viewer_slug():
+    """중복되지 않는 viewer slug 생성"""
+    for _ in range(32):
+        candidate = generate_viewer_slug()
+        if not Child.query.filter_by(viewer_slug=candidate).first():
+            return candidate
+    raise RuntimeError('viewer_slug 생성에 반복 실패했습니다.')
+
+def ensure_child_viewer_slug(child, commit=False):
+    """아동에 viewer slug가 없으면 생성하고 반환"""
+    if child is None:
+        return None
+    existing_slug = extract_viewer_slug(getattr(child, 'viewer_slug', None))
+    if existing_slug:
+        if child.viewer_slug != existing_slug:
+            child.viewer_slug = existing_slug
+            if commit:
+                db.session.commit()
+        return existing_slug
+
+    child.viewer_slug = generate_unique_viewer_slug()
+    if commit:
+        db.session.commit()
+    return child.viewer_slug
+
 def normalize_viewer_code(raw_view_code):
     """깨진/혼합 문자열에서 viewer code를 복구 추출"""
     if raw_view_code is None:
@@ -430,6 +463,45 @@ def resolve_child_id_from_viewer_code(view_code):
     if hmac.compare_digest(signature.encode('ascii'), expected_signature.encode('ascii')):
         return child_id
     return None
+
+def resolve_child_from_viewer_token(view_token):
+    """slug 우선, legacy code 보조로 아동 식별"""
+    normalized_slug = extract_viewer_slug(view_token)
+    if normalized_slug:
+        child = Child.query.filter_by(viewer_slug=normalized_slug).first()
+        if child:
+            return child, normalized_slug
+
+    legacy_child_id = resolve_child_id_from_viewer_code(view_token)
+    if not legacy_child_id:
+        return None, None
+    child = Child.query.get(legacy_child_id)
+    if not child:
+        return None, None
+    slug = ensure_child_viewer_slug(child, commit=True)
+    return child, slug
+
+def build_report_qr_image_data_url(report_url):
+    """리포트 URL을 PNG QR(data URL)로 생성"""
+    if not report_url or qrcode is None:
+        return None
+    try:
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=8,
+            border=2,
+        )
+        qr.add_data(report_url)
+        qr.make(fit=True)
+        image = qr.make_image(fill_color='black', back_color='white')
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        encoded = base64.b64encode(buffer.getvalue()).decode('ascii')
+        return f'data:image/png;base64,{encoded}'
+    except Exception as e:
+        print(f'QR 생성 실패: {e}')
+        return None
 
 @app.before_request
 def enforce_viewer_read_only_access():
@@ -602,6 +674,7 @@ class Child(db.Model):
     name = db.Column(db.String(100), nullable=False)
     grade = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    viewer_slug = db.Column(db.String(24), unique=True, index=True, nullable=True)
     
     # 누적 포인트 (전체 과목 합계)
     cumulative_points = db.Column(db.Integer, default=0)
@@ -1295,7 +1368,7 @@ def add_child():
             return render_template('children/form.html')
         
         # 아동 등록
-        child = Child(name=name, grade=int(grade))
+        child = Child(name=name, grade=int(grade), viewer_slug=generate_unique_viewer_slug())
         db.session.add(child)
         db.session.commit()
         
@@ -3284,8 +3357,9 @@ def viewer_home():
         return redirect(url_for('dashboard'))
     return render_template('viewer/home.html')
 
-def build_child_report_context(child, show_all=False, viewer_code=None):
+def build_child_report_context(child, show_all=False, viewer_slug=None):
     """개인 리포트 템플릿 컨텍스트 생성"""
+    viewer_slug = viewer_slug or ensure_child_viewer_slug(child, commit=True)
     records = fetch_child_daily_point_records(child.id)
     input_days = len(records)
     last_input_date = records[0]['date'] if records else None
@@ -3358,9 +3432,11 @@ def build_child_report_context(child, show_all=False, viewer_code=None):
         max(0, subject_totals['manual']),
     ]
 
-    viewer_code = viewer_code or build_viewer_report_code(child.id)
-    report_url = request.url_root.rstrip('/') + url_for('viewer_report', view_code=viewer_code)
-    qr_image_url = (os.environ.get('PRINT_REPORT_QR_IMAGE_URL') or '').strip() or None
+    report_url = request.url_root.rstrip('/') + url_for('viewer_report', view_token=viewer_slug)
+    qr_image_url = build_report_qr_image_data_url(report_url)
+    if not qr_image_url:
+        # QR 생성 실패 시 기존 정적 URL 설정값을 fallback으로 사용
+        qr_image_url = (os.environ.get('PRINT_REPORT_QR_IMAGE_URL') or '').strip() or None
 
     return {
         'child': child,
@@ -3382,7 +3458,7 @@ def build_child_report_context(child, show_all=False, viewer_code=None):
         'qr_image_url': qr_image_url,
         'report_url': report_url,
         'printed_date': datetime.utcnow().date(),
-        'viewer_code': viewer_code,
+        'viewer_slug': viewer_slug,
     }
 
 @app.route('/settings/print/children')
@@ -3428,21 +3504,19 @@ def settings_print_child_report(child_id):
     context['is_viewer_mode'] = False
     return render_template('reports/child_onepage_report.html', **context)
 
-@app.route('/viewer/report/<string:view_code>')
+@app.route('/viewer/report/<string:view_token>')
 @login_required
-def viewer_report(view_code):
+def viewer_report(view_token):
     """QR 코드 기반 개인 리포트 열람"""
-    child_id = resolve_child_id_from_viewer_code(view_code)
-    if not child_id:
+    child, viewer_slug = resolve_child_from_viewer_token(view_token)
+    if not child:
         flash('유효하지 않은 리포트 링크입니다.', 'error')
         if current_user.role == VIEWER_ROLE_NAME:
             return redirect(url_for('viewer_home'))
         return redirect(url_for('settings_print_children'))
 
-    child = Child.query.get_or_404(child_id)
     show_all = request.args.get('show_all') == '1' and current_user.role != VIEWER_ROLE_NAME
-    canonical_view_code = build_viewer_report_code(child_id)
-    context = build_child_report_context(child, show_all=show_all, viewer_code=canonical_view_code)
+    context = build_child_report_context(child, show_all=show_all, viewer_slug=viewer_slug)
     context['is_viewer_mode'] = current_user.role == VIEWER_ROLE_NAME
     return render_template('reports/child_onepage_report.html', **context)
 
