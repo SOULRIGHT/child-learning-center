@@ -8,7 +8,8 @@ import csv
 import io
 import hmac
 import hashlib
-from urllib.parse import quote, urlparse
+import re
+from urllib.parse import quote, urlparse, unquote
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -381,6 +382,7 @@ VIEWER_ALLOWED_ENDPOINTS = {
     'viewer_report',
     'logout',
 }
+VIEWER_CODE_RE = re.compile(r'(?P<child_id>\d+)-(?P<signature>[0-9a-fA-F]{16})')
 
 def get_safe_next_url(raw_next):
     """내부 경로만 허용하여 오픈 리다이렉트 방지"""
@@ -405,16 +407,27 @@ def build_viewer_report_code(child_id):
     signature = hmac.new(secret, message, hashlib.sha256).hexdigest()[:16]
     return f'{child_id_int}-{signature}'
 
+def normalize_viewer_code(raw_view_code):
+    """깨진/혼합 문자열에서 viewer code를 복구 추출"""
+    if raw_view_code is None:
+        return None
+    decoded = unquote(str(raw_view_code)).strip()
+    match = VIEWER_CODE_RE.search(decoded)
+    if not match:
+        return None
+    child_id = match.group('child_id')
+    signature = match.group('signature').lower()
+    return f'{child_id}-{signature}'
+
 def resolve_child_id_from_viewer_code(view_code):
     """서명 코드 검증 후 아동 ID 반환"""
-    if not view_code or '-' not in view_code:
+    normalized_code = normalize_viewer_code(view_code)
+    if not normalized_code:
         return None
-    child_part, signature = view_code.split('-', 1)
-    if not child_part.isdigit():
-        return None
+    child_part, signature = normalized_code.split('-', 1)
     child_id = int(child_part)
-    expected_signature = build_viewer_report_code(child_id).split('-', 1)[1]
-    if hmac.compare_digest(signature, expected_signature):
+    expected_signature = build_viewer_report_code(child_id).split('-', 1)[1].lower()
+    if hmac.compare_digest(signature.encode('ascii'), expected_signature.encode('ascii')):
         return child_id
     return None
 
@@ -3428,7 +3441,8 @@ def viewer_report(view_code):
 
     child = Child.query.get_or_404(child_id)
     show_all = request.args.get('show_all') == '1' and current_user.role != VIEWER_ROLE_NAME
-    context = build_child_report_context(child, show_all=show_all, viewer_code=view_code)
+    canonical_view_code = build_viewer_report_code(child_id)
+    context = build_child_report_context(child, show_all=show_all, viewer_code=canonical_view_code)
     context['is_viewer_mode'] = current_user.role == VIEWER_ROLE_NAME
     return render_template('reports/child_onepage_report.html', **context)
 
