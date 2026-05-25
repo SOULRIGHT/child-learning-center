@@ -3909,17 +3909,21 @@ def settings_data():
                 return redirect(url_for('settings_data'))
             
             try:
-                # FK를 가진 테이블부터 정리
+                # 학기 초기화: 아동/사용자는 유지하고 기록성 데이터만 삭제
                 PointsHistory.query.delete()
                 Notification.query.delete()
                 ChildNote.query.delete()
                 DailyPoints.query.delete()
                 LearningRecord.query.delete()
-                Child.query.delete()
-                User.query.delete()
+
+                # 아동별 누적 포인트 초기화 + viewer slug 재발급
+                children = Child.query.all()
+                for child in children:
+                    child.cumulative_points = 0
+                    child.viewer_slug = generate_unique_viewer_slug()
                 
                 db.session.commit()
-                flash('모든 데이터가 초기화되었습니다.', 'success')
+                flash('학기 데이터 초기화 완료: 아동/사용자는 유지되고 기록/포인트/메모/알림이 삭제되었습니다.', 'success')
             except Exception as e:
                 db.session.rollback()
                 flash(f'데이터 초기화 중 오류가 발생했습니다: {e}', 'error')
