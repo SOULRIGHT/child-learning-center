@@ -20,11 +20,11 @@
                 <i class="bi bi-printer me-1"></i>인쇄
             </button>
         </div>
-        {% if total_record_count > 12 and not is_viewer_mode %}
+        {% if total_record_count > preview_limit and not is_viewer_mode %}
         <div>
             {% if show_all %}
             <a href="{{ url_for('settings_print_child_report', child_id=child.id) }}" class="btn btn-outline-dark btn-sm">
-                최근 12건 보기
+                최근 {{ preview_limit }}건 보기
             </a>
             {% else %}
             <a href="{{ url_for('settings_print_child_report', child_id=child.id, show_all=1) }}" class="btn btn-outline-dark btn-sm">
@@ -42,8 +42,7 @@
                     <h3 class="mb-1 fw-bold">개인 포인트 리포트</h3>
                     <p class="text-muted mb-0">{{ child.name }} ({{ child.grade }}학년)</p>
                 </div>
-                <div class="text-end">
-                    <div class="small text-muted mb-2">출력일 {{ printed_date | kst_strftime('%Y-%m-%d') }}</div>
+                <div class="report-header-right">
                     <div class="qr-slot">
                         {% if qr_image_url %}
                         <img src="{{ qr_image_url }}" alt="QR" class="qr-image">
@@ -62,22 +61,25 @@
                     <div class="summary-value">{{ final_points }}점</div>
                 </div>
                 <div class="summary-item">
-                    <div class="summary-label">입력일수</div>
-                    <div class="summary-value">{{ input_days }}일</div>
+                    <div class="summary-label">활동일수</div>
+                    <div class="summary-value">{{ input_days }}일 / {{ max_activity_days }}일</div>
                 </div>
                 <div class="summary-item">
                     <div class="summary-label">평균 포인트</div>
                     <div class="summary-value">{{ average_points_display }}점</div>
                 </div>
                 <div class="summary-item">
-                    <div class="summary-label">학년 상위 비율</div>
+                    <div class="summary-label">전체 순위</div>
                     <div class="summary-value">
-                        {% if grade_top_percent is not none %}
-                            상위 {{ grade_top_percent }}%
+                        {% if overall_rank is not none %}
+                            {{ overall_rank }}위
                         {% else %}
                             -
                         {% endif %}
                     </div>
+                    {% if overall_rank is not none %}
+                    <div class="summary-subvalue">{{ overall_rank }}위 / {{ overall_total_children }}명</div>
+                    {% endif %}
                 </div>
             </div>
 
@@ -118,7 +120,7 @@
                             <th class="text-center">쓰기</th>
                             <th class="text-center">수동</th>
                             <th class="text-center">총점</th>
-                            <th class="text-center">누적 총점</th>
+                            <th class="text-center cumulative-col">누적 총점</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -134,58 +136,16 @@
                             <td class="text-center">{{ record['subjects']['writing'] }}</td>
                             <td class="text-center">{{ record['manual_points'] }}</td>
                             <td class="text-center fw-bold">{{ record['total_points'] }}</td>
-                            <td class="text-center fw-bold">{{ record['cumulative_total'] }}</td>
+                            <td class="text-center cumulative-col">{{ record['cumulative_total'] }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
 
-            {% if total_record_count > 12 %}
+            {% if total_record_count > preview_limit %}
             <div class="small text-muted mt-2">
-                인쇄 표시는 최근 12건 기준입니다. (전체 {{ total_record_count }}건)
-            </div>
-            {% endif %}
-
-            {% if show_all and full_records %}
-            <div class="mt-4 full-records-section">
-                <h6 class="mb-2">전체 기록 (화면 전용)</h6>
-                <div class="table-responsive">
-                    <table class="table table-sm table-striped align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>날짜</th>
-                                <th class="text-center">국어</th>
-                                <th class="text-center">수학</th>
-                                <th class="text-center">쎈수학</th>
-                                <th class="text-center">독서</th>
-                                <th class="text-center">피아노</th>
-                                <th class="text-center">영어</th>
-                                <th class="text-center">쓰기</th>
-                                <th class="text-center">수동</th>
-                                <th class="text-center">총점</th>
-                                <th class="text-center">누적 총점</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for record in full_records %}
-                            <tr>
-                                <td>{{ record['date'] | kst_strftime('%Y-%m-%d') }}</td>
-                                <td class="text-center">{{ record['subjects']['korean'] }}</td>
-                                <td class="text-center">{{ record['subjects']['math'] }}</td>
-                                <td class="text-center">{{ record['subjects']['ssen'] }}</td>
-                                <td class="text-center">{{ record['subjects']['reading'] }}</td>
-                                <td class="text-center">{{ record['subjects']['piano'] }}</td>
-                                <td class="text-center">{{ record['subjects']['english'] }}</td>
-                                <td class="text-center">{{ record['subjects']['writing'] }}</td>
-                                <td class="text-center">{{ record['manual_points'] }}</td>
-                                <td class="text-center fw-bold">{{ record['total_points'] }}</td>
-                                <td class="text-center fw-bold">{{ record['cumulative_total'] }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+                인쇄 표시는 최근 {{ preview_limit }}건 기준입니다. (전체 {{ total_record_count }}건)
             </div>
             {% endif %}
         </div>
@@ -225,6 +185,13 @@
     padding: 6px;
 }
 
+.report-header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    margin-right: 8px;
+}
+
 .report-summary {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -248,6 +215,18 @@
     font-size: 18px;
     font-weight: 700;
     color: #101828;
+}
+
+.summary-subvalue {
+    margin-top: 2px;
+    font-size: 12px;
+    color: #667085;
+}
+
+.cumulative-col {
+    border-left: 2px solid #bfdbfe !important;
+    color: #1e3a8a !important;
+    font-weight: 700 !important;
 }
 
 .chart-card {
@@ -324,6 +303,17 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // 브라우저 인쇄 헤더의 가운데 제목을 최소화하기 위한 처리
+    // (브라우저별로 동작 차이가 있을 수 있음)
+    let originalTitle = document.title;
+    window.addEventListener('beforeprint', function () {
+        originalTitle = document.title;
+        document.title = ' ';
+    });
+    window.addEventListener('afterprint', function () {
+        document.title = originalTitle;
+    });
+
     const weeklyCanvas = document.getElementById('weeklyTrendChart');
     const subjectCanvas = document.getElementById('subjectShareChart');
 

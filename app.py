@@ -3379,34 +3379,39 @@ def build_child_report_context(child, show_all=False, viewer_slug=None):
         final_points = int(child.cumulative_points or 0)
         report_period = '-'
 
-    # 평균 표시는 소수점 0이면 정수로, 아니면 소수 1자리로 노출
-    if float(average_points).is_integer():
-        average_points_display = int(average_points)
-    else:
-        average_points_display = average_points
+    # 평균 포인트는 소수점 없이 반올림
+    average_points_display = int(round(average_points))
 
-    # 같은 학년 내 상위 비율 계산 (등수 대신 퍼센트)
-    grade_children = Child.query.filter_by(grade=child.grade).all()
-    grade_final_points = []
-    for grade_child in grade_children:
-        grade_records = fetch_child_daily_point_records(grade_child.id)
-        if grade_records:
-            grade_latest = grade_records[0].get('cumulative_total', grade_child.cumulative_points or 0)
-            grade_points = int(round(grade_latest or 0))
-        else:
-            grade_points = int(grade_child.cumulative_points or 0)
-        grade_final_points.append(grade_points)
+    # 전체 아동 중 최대 활동일수
+    activity_day_rows = db.session.query(
+        DailyPoints.child_id,
+        func.count(func.distinct(DailyPoints.date))
+    ).group_by(DailyPoints.child_id).all()
+    max_activity_days = max((int(row[1] or 0) for row in activity_day_rows), default=0)
+    max_activity_days = max(max_activity_days, input_days)
 
-    if grade_final_points:
-        higher_count = sum(1 for points in grade_final_points if points > final_points)
-        rank = higher_count + 1
-        grade_top_percent = int(round((rank / len(grade_final_points)) * 100))
-        grade_top_percent = min(max(grade_top_percent, 1), 100)
-    else:
-        grade_top_percent = None
+    # 전체 아동 순위 (동점은 단순 정렬로 처리)
+    all_children_rows = db.session.query(Child.id, Child.cumulative_points).all()
+    points_by_child = {
+        int(row[0]): int(row[1] or 0)
+        for row in all_children_rows
+    }
+    points_by_child[child.id] = final_points  # 현재 리포트 아동은 최신 계산값 우선
 
-    recent_records = records[:12]
-    full_records = records if show_all else []
+    overall_total_children = len(points_by_child)
+    sorted_children = sorted(
+        points_by_child.items(),
+        key=lambda item: (-item[1], item[0])
+    )
+    overall_rank = None
+    for idx, (child_id, _) in enumerate(sorted_children):
+        if child_id == child.id:
+            overall_rank = idx + 1
+            break
+
+    preview_limit = 18
+    recent_records = records if show_all else records[:preview_limit]
+    full_records = []
 
     subject_totals = {
         'korean': 0,
@@ -3466,11 +3471,14 @@ def build_child_report_context(child, show_all=False, viewer_slug=None):
         'average_points': average_points,
         'average_points_display': average_points_display,
         'latest_day_points': latest_day_points,
-        'grade_top_percent': grade_top_percent,
+        'max_activity_days': max_activity_days,
+        'overall_rank': overall_rank,
+        'overall_total_children': overall_total_children,
         'report_period': report_period,
         'recent_records': recent_records,
         'full_records': full_records,
         'show_all': show_all,
+        'preview_limit': preview_limit,
         'total_record_count': input_days,
         'trend_labels': trend_labels,
         'trend_values': trend_values,
