@@ -53,7 +53,6 @@
                         </div>
                         {% endif %}
                     </div>
-                    <div class="small text-muted mt-2 report-link-text">이 페이지 링크: {{ report_url }}</div>
                 </div>
             </div>
 
@@ -67,23 +66,29 @@
                     <div class="summary-value">{{ input_days }}일</div>
                 </div>
                 <div class="summary-item">
-                    <div class="summary-label">최근 입력일</div>
-                    <div class="summary-value">{{ last_input_date | kst_strftime('%Y-%m-%d') if last_input_date else '-' }}</div>
+                    <div class="summary-label">평균 포인트</div>
+                    <div class="summary-value">{{ average_points_display }}점</div>
                 </div>
                 <div class="summary-item">
-                    <div class="summary-label">최근 입력 점수</div>
-                    <div class="summary-value">{{ latest_day_points }}점</div>
+                    <div class="summary-label">학년 상위 비율</div>
+                    <div class="summary-value">
+                        {% if grade_top_percent is not none %}
+                            상위 {{ grade_top_percent }}%
+                        {% else %}
+                            -
+                        {% endif %}
+                    </div>
                 </div>
             </div>
 
             <div class="small text-muted mb-3">
-                기간: {{ report_period }} / 평균 일일 포인트: {{ average_points }}점
+                기간: {{ report_period }}
             </div>
 
             <div class="row g-3 mb-3">
                 <div class="col-lg-6">
                     <div class="chart-card">
-                        <div class="chart-title">최근 8주 포인트 추이</div>
+                        <div class="chart-title">전체 기간 포인트 추이</div>
                         <div class="chart-wrapper">
                             <canvas id="weeklyTrendChart"></canvas>
                         </div>
@@ -113,6 +118,7 @@
                             <th class="text-center">쓰기</th>
                             <th class="text-center">수동</th>
                             <th class="text-center">총점</th>
+                            <th class="text-center">누적 총점</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -128,6 +134,7 @@
                             <td class="text-center">{{ record['subjects']['writing'] }}</td>
                             <td class="text-center">{{ record['manual_points'] }}</td>
                             <td class="text-center fw-bold">{{ record['total_points'] }}</td>
+                            <td class="text-center fw-bold">{{ record['cumulative_total'] }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -157,6 +164,7 @@
                                 <th class="text-center">쓰기</th>
                                 <th class="text-center">수동</th>
                                 <th class="text-center">총점</th>
+                                <th class="text-center">누적 총점</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -172,6 +180,7 @@
                                 <td class="text-center">{{ record['subjects']['writing'] }}</td>
                                 <td class="text-center">{{ record['manual_points'] }}</td>
                                 <td class="text-center fw-bold">{{ record['total_points'] }}</td>
+                                <td class="text-center fw-bold">{{ record['cumulative_total'] }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -267,11 +276,6 @@
     max-height: 240px !important;
 }
 
-.report-link-text {
-    max-width: 260px;
-    word-break: break-all;
-}
-
 @media (max-width: 768px) {
     .report-summary {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -327,10 +331,10 @@ document.addEventListener('DOMContentLoaded', function () {
         new Chart(weeklyCanvas.getContext('2d'), {
             type: 'line',
             data: {
-                labels: {{ weekly_labels | tojson }},
+                labels: {{ trend_labels | tojson }},
                 datasets: [{
-                    label: '주간 총점',
-                    data: {{ weekly_values | tojson }},
+                    label: '일일 총점',
+                    data: {{ trend_values | tojson }},
                     borderColor: 'rgb(37, 99, 235)',
                     backgroundColor: 'rgba(37, 99, 235, 0.15)',
                     tension: 0.25,

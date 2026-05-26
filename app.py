@@ -3372,12 +3372,38 @@ def build_child_report_context(child, show_all=False, viewer_slug=None):
     if records:
         latest_cumulative = records[0].get('cumulative_total', child.cumulative_points or 0)
         final_points = int(round(latest_cumulative or 0))
-        period_start = records[-1]['date'].strftime('%Y-%m-%d')
-        period_end = records[0]['date'].strftime('%Y-%m-%d')
+        period_start = records[-1]['date'].strftime('%y-%m-%d')
+        period_end = records[0]['date'].strftime('%y-%m-%d')
         report_period = f'{period_start} ~ {period_end}'
     else:
         final_points = int(child.cumulative_points or 0)
         report_period = '-'
+
+    # 평균 표시는 소수점 0이면 정수로, 아니면 소수 1자리로 노출
+    if float(average_points).is_integer():
+        average_points_display = int(average_points)
+    else:
+        average_points_display = average_points
+
+    # 같은 학년 내 상위 비율 계산 (등수 대신 퍼센트)
+    grade_children = Child.query.filter_by(grade=child.grade).all()
+    grade_final_points = []
+    for grade_child in grade_children:
+        grade_records = fetch_child_daily_point_records(grade_child.id)
+        if grade_records:
+            grade_latest = grade_records[0].get('cumulative_total', grade_child.cumulative_points or 0)
+            grade_points = int(round(grade_latest or 0))
+        else:
+            grade_points = int(grade_child.cumulative_points or 0)
+        grade_final_points.append(grade_points)
+
+    if grade_final_points:
+        higher_count = sum(1 for points in grade_final_points if points > final_points)
+        rank = higher_count + 1
+        grade_top_percent = int(round((rank / len(grade_final_points)) * 100))
+        grade_top_percent = min(max(grade_top_percent, 1), 100)
+    else:
+        grade_top_percent = None
 
     recent_records = records[:12]
     full_records = records if show_all else []
@@ -3404,21 +3430,15 @@ def build_child_report_context(child, show_all=False, viewer_slug=None):
         subject_totals['writing'] += normalize_points(subjects.get('writing'))
         subject_totals['manual'] += normalize_points(record.get('manual_points'))
 
-    today = datetime.utcnow().date()
-    current_week_start = today - timedelta(days=today.weekday())
-    week_starts = [current_week_start - timedelta(weeks=i) for i in range(7, -1, -1)]
-    weekly_totals = {week_start: 0 for week_start in week_starts}
-
-    for record in records:
-        record_date = record.get('date')
-        if not record_date:
-            continue
-        week_start = record_date - timedelta(days=record_date.weekday())
-        if week_start in weekly_totals:
-            weekly_totals[week_start] += normalize_points(record.get('total_points'))
-
-    weekly_labels = [week_start.strftime('%m/%d') for week_start in week_starts]
-    weekly_values = [weekly_totals[week_start] for week_start in week_starts]
+    trend_records = list(reversed(records))
+    trend_labels = [
+        record['date'].strftime('%y-%m-%d') if record.get('date') else '-'
+        for record in trend_records
+    ]
+    trend_values = [
+        normalize_points(record.get('total_points'))
+        for record in trend_records
+    ]
 
     subject_labels = ['국어', '수학', '쎈수학', '독서', '피아노', '영어', '쓰기', '수동포인트']
     subject_values = [
@@ -3444,14 +3464,16 @@ def build_child_report_context(child, show_all=False, viewer_slug=None):
         'input_days': input_days,
         'last_input_date': last_input_date,
         'average_points': average_points,
+        'average_points_display': average_points_display,
         'latest_day_points': latest_day_points,
+        'grade_top_percent': grade_top_percent,
         'report_period': report_period,
         'recent_records': recent_records,
         'full_records': full_records,
         'show_all': show_all,
         'total_record_count': input_days,
-        'weekly_labels': weekly_labels,
-        'weekly_values': weekly_values,
+        'trend_labels': trend_labels,
+        'trend_values': trend_values,
         'subject_labels': subject_labels,
         'subject_values': subject_values,
         'subject_totals': subject_totals,
