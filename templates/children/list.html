@@ -5,7 +5,7 @@
 
 {% block content %}
 <!-- 헤더 섹션 -->
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
     <div>
         <h4 class="fw-bold text-dark mb-1">아동 관리</h4>
         <p class="text-muted mb-0">전체 {{ children.total }}명의 아동이 등록되어 있습니다.</p>
@@ -89,37 +89,37 @@ document.addEventListener('DOMContentLoaded', function() {
             <table class="table table-hover mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th width="5%">#</th>
-                        <th width="30%">이름</th>
-                        <th width="15%">학년</th>
-                        <th width="20%">등록일</th>
-                        <th width="15%">최근 활동</th>
-                        <th width="15%" class="text-center">관리</th>
+                        <th class="d-none d-md-table-cell" style="width:5%">#</th>
+                        <th>이름</th>
+                        <th class="d-none d-sm-table-cell" style="width:15%">학년</th>
+                        <th class="d-none d-md-table-cell" style="width:20%">등록일</th>
+                        <th class="d-none d-sm-table-cell" style="width:15%">최근 활동</th>
+                        <th class="text-center" style="width:15%">관리</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for child in children.items %}
-                    <tr>
-                        <td class="align-middle">{{ loop.index + (children.page - 1) * children.per_page }}</td>
+                    <tr class="child-row" data-href="{{ url_for('child_detail', child_id=child.id) }}" style="cursor:pointer;">
+                        <td class="align-middle d-none d-md-table-cell">{{ loop.index + (children.page - 1) * children.per_page }}</td>
                         <td class="align-middle">
                             <div class="d-flex align-items-center">
-                                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-3"
-                                     style="width: 40px; height: 40px; font-weight: 600;">
+                                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2 me-md-3"
+                                     style="width: 36px; height: 36px; min-width: 36px; font-weight: 600; font-size: 0.9rem;">
                                     {{ child.name[0] }}
                                 </div>
                                 <div>
-                                    <div class="fw-bold">{{ child.name }}</div>
-                                    <small class="text-muted">ID: {{ child.id }}</small>
+                                    <div class="fw-bold child-name-link">{{ child.name }}</div>
+                                    <small class="text-muted d-sm-none">{{ child.grade }}학년</small>
                                 </div>
                             </div>
                         </td>
-                        <td class="align-middle">
+                        <td class="align-middle d-none d-sm-table-cell">
                             <span class="badge bg-info">{{ child.grade }}학년</span>
                         </td>
-                        <td class="align-middle">
+                        <td class="align-middle d-none d-md-table-cell">
                             <small class="text-muted">{{ child.created_at | kst_strftime('%Y-%m-%d') }}</small>
                         </td>
-                        <td class="align-middle">
+                        <td class="align-middle d-none d-sm-table-cell">
                             {% set latest_record = child.learning_records|selectattr('date')|list|sort(attribute='date', reverse=true)|first %}
                             {% if latest_record %}
                                 <small class="text-success">
@@ -133,32 +133,34 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </small>
                             {% endif %}
                         </td>
-                        <td class="align-middle text-center" style="padding-right: 30px;">
-                            <div class="btn-group" role="group">
+                        <td class="align-middle text-center" onclick="event.stopPropagation();">
+                            <div class="d-flex justify-content-center gap-1">
+                                <!-- 모바일: 포인트 입력 버튼만 -->
+                                <a href="{{ url_for('points_input', child_id=child.id) }}" 
+                                   class="btn btn-sm btn-primary" title="포인트 입력">
+                                    <i class="bi bi-pencil-fill"></i>
+                                </a>
+                                <!-- 태블릿 이상: 추가 버튼들 -->
                                 <a href="{{ url_for('child_detail', child_id=child.id) }}" 
-                                   class="btn btn-sm btn-outline-primary" title="상세보기">
+                                   class="btn btn-sm btn-outline-primary d-none d-sm-inline-flex" title="상세보기">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                <a href="{{ url_for('points_input', child_id=child.id) }}" 
-                                   class="btn btn-sm btn-outline-warning me-1" title="포인트 입력">
-                                    <i class="bi bi-star"></i>
-                                </a>
                                 <a href="{{ url_for('edit_child', child_id=child.id) }}" 
-                                   class="btn btn-sm btn-outline-success" title="수정">
+                                   class="btn btn-sm btn-outline-success d-none d-sm-inline-flex" title="수정">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                 {% if current_user.role == '개발자' %}
-                                 <button type="button" class="btn btn-sm btn-outline-danger delete-btn" 
-                                         data-child-id="{{ child.id }}" data-child-name="{{ child.name }}" title="삭제">
-                                     <i class="bi bi-trash"></i>
-                                 </button>
-                                 {% endif %}
-                                 <form method="POST" action="{{ url_for('toggle_child_stats', child_id=child.id) }}" class="d-inline">
-                                     <button type="submit" class="btn btn-sm {% if child.include_in_stats %}btn-outline-warning{% else %}btn-outline-info{% endif %}" 
-                                             title="{% if child.include_in_stats %}통계에서 제외{% else %}통계에 포함{% endif %}">
-                                         <i class="bi bi-bar-chart"></i>
-                                     </button>
-                                 </form>
+                                {% if current_user.role == '개발자' %}
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-btn d-none d-sm-inline-flex" 
+                                        data-child-id="{{ child.id }}" data-child-name="{{ child.name }}" title="삭제">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                {% endif %}
+                                <form method="POST" action="{{ url_for('toggle_child_stats', child_id=child.id) }}" class="d-none d-sm-inline">
+                                    <button type="submit" class="btn btn-sm {% if child.include_in_stats %}btn-outline-warning{% else %}btn-outline-info{% endif %}" 
+                                            title="{% if child.include_in_stats %}통계에서 제외{% else %}통계에 포함{% endif %}">
+                                        <i class="bi bi-bar-chart"></i>
+                                    </button>
+                                </form>
                             </div>
                         </td>
                     </tr>
@@ -381,8 +383,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
 {% block extra_js %}
 <script>
-// 삭제 버튼 이벤트 리스너
+// 행 클릭 → 상세보기 이동
 document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.child-row').forEach(function(row) {
+        row.addEventListener('click', function() {
+            window.location.href = this.dataset.href;
+        });
+    });
+
+    // 삭제 버튼 이벤트 리스너
     const deleteButtons = document.querySelectorAll('.delete-btn');
     deleteButtons.forEach(button => {
         button.addEventListener('click', function() {

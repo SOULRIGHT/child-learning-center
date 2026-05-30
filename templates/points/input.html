@@ -11,19 +11,16 @@
         background: #f8fafc;
     }
     .manual-toggle {
-        position: relative;
         border-radius: 10px;
         transition: background-color 0.2s ease, border-color 0.2s ease;
-        text-align: center;
-        padding-right: 3rem;
-    }
-    .manual-toggle .toggle-label {
-        width: 100%;
-        text-align: center;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
     }
     .manual-toggle .toggle-icon {
-        position: absolute;
-        right: 1.25rem;
+        font-size: 0.85rem;
+    }
         top: 50%;
         transform: translateY(-50%);
     }
@@ -166,18 +163,18 @@
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container mt-2">
     <div class="row">
         <div class="col-md-8 mx-auto">
             <!-- 다른 아동 선택 링크 -->
-            <div class="alert alert-info d-flex justify-content-between align-items-center">
+            <div class="alert alert-info d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <i class="fas fa-info-circle me-2"></i>
                     현재 선택: <strong>{{ child.name }} ({{ child.grade }}학년)</strong>
-                    <span class="text-muted ms-3">{{ selected_date_display }}</span>
+                    <span class="text-muted ms-2 d-none d-sm-inline">{{ selected_date_display }}</span>
                 </div>
-                <a href="{{ url_for('points_input_select') }}" class="btn btn-outline-primary btn-sm">
-                    <i class="fas fa-exchange-alt me-2"></i>다른 아동 선택
+                <a href="{{ url_for('points_input_select') }}" class="btn btn-outline-primary btn-sm flex-shrink-0">
+                    <i class="fas fa-exchange-alt me-1"></i>다른 아동 선택
                 </a>
             </div>
             
@@ -191,7 +188,7 @@
                                     {{ child.name }}
                                 </a>
                                 <span class="text-body fw-normal">
-                                    ({{ child.grade }}학년) - 포인트 입력
+                                    ({{ child.grade }}학년)   포인트 입력
                                 </span>
                             </h4>
                             <p class="text-muted mb-0">{{ selected_date_display }}</p>
@@ -199,7 +196,7 @@
                         <div class="text-end">
                             <div class="badge bg-primary fs-6 px-3 py-2">
                                 <i class="fas fa-star me-1"></i>
-                                총 포인트: <span id="header_total_points">{{ total_cumulative_points }}</span>점
+                            포인트: <span id="header_total_points">{{ total_cumulative_points }}</span>점
                             </div>
                         </div>
                     </div>
@@ -224,102 +221,135 @@
                                     기록 불러오기
                                 </button>
                             </div>
-                            <small class="text-muted">기본은 오늘입니다. 과거 날짜를 선택해 기존 기록을 불러오거나 수정할 수 있습니다.</small>
+                            <small class="text-muted">이전 포인트 입력 시 날짜 변경 후 불러오기를 눌러주세요!</small>
                         </div>
                         <!-- 국어 -->
                         <div class="mb-4">
-                            <h5 class="text-primary">국어</h5>
-                            <div class="btn-group w-100" role="group">
+                            <h5 class="text-muted">국어</h5>
+                            <div class="btn-group w-100 d-none d-sm-flex" role="group">
                                 <input type="radio" class="btn-check" name="korean_points" id="korean_200" value="200" 
                                        {% if today_record and today_record.korean_points == 200 %}checked{% endif %}>
                                 <label class="btn btn-outline-success" for="korean_200">
                                     <i class="fas fa-check-circle"></i> 완벽 (200점)
                                 </label>
-                                
                                 <input type="radio" class="btn-check" name="korean_points" id="korean_100" value="100" 
                                        {% if today_record and today_record.korean_points == 100 %}checked{% endif %}>
                                 <label class="btn btn-outline-warning" for="korean_100">
                                     <i class="fas fa-exclamation-circle"></i> 부분 (100점)
                                 </label>
-                                
                                 <input type="radio" class="btn-check" name="korean_points" id="korean_0" value="0" 
                                        {% if not today_record or today_record.korean_points == 0 %}checked{% endif %}>
                                 <label class="btn btn-outline-secondary" for="korean_0">
                                     <i class="fas fa-times-circle"></i> 미완료 (0점)
                                 </label>
                             </div>
+                            <div class="d-flex d-sm-none gap-2">
+                                <input type="radio" class="btn-check" name="korean_points" id="korean_200m" value="200" 
+                                       {% if today_record and today_record.korean_points == 200 %}checked{% endif %}>
+                                <label class="btn btn-outline-success flex-fill mobile-radio-btn" for="korean_200m"><span class="mpb-main">완벽</span><span class="mpb-pts">200점</span></label>
+                                <input type="radio" class="btn-check" name="korean_points" id="korean_100m" value="100" 
+                                       {% if today_record and today_record.korean_points == 100 %}checked{% endif %}>
+                                <label class="btn btn-outline-warning flex-fill mobile-radio-btn" for="korean_100m"><span class="mpb-main">부분</span><span class="mpb-pts">100점</span></label>
+                                <input type="radio" class="btn-check" name="korean_points" id="korean_0m" value="0" 
+                                       {% if not today_record or today_record.korean_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary flex-fill mobile-radio-btn" for="korean_0m"><span class="mpb-main">미완료</span><span class="mpb-pts">0점</span></label>
+                            </div>
                         </div>
 
                         <!-- 수학 -->
                         <div class="mb-4">
-                            <h5 class="text-success">수학</h5>
-                            <div class="btn-group w-100" role="group">
+                            <h5 class="text-muted">수학</h5>
+                            <div class="btn-group w-100 d-none d-sm-flex" role="group">
                                 <input type="radio" class="btn-check" name="math_points" id="math_200" value="200" 
                                        {% if today_record and today_record.math_points == 200 %}checked{% endif %}>
                                 <label class="btn btn-outline-success" for="math_200">
                                     <i class="fas fa-check-circle"></i> 완벽 (200점)
                                 </label>
-                                
                                 <input type="radio" class="btn-check" name="math_points" id="math_100" value="100" 
                                        {% if today_record and today_record.math_points == 100 %}checked{% endif %}>
                                 <label class="btn btn-outline-warning" for="math_100">
                                     <i class="fas fa-exclamation-circle"></i> 부분 (100점)
                                 </label>
-                                
                                 <input type="radio" class="btn-check" name="math_points" id="math_0" value="0" 
                                        {% if not today_record or today_record.math_points == 0 %}checked{% endif %}>
                                 <label class="btn btn-outline-secondary" for="math_0">
                                     <i class="fas fa-times-circle"></i> 미완료 (0점)
                                 </label>
                             </div>
+                            <div class="d-flex d-sm-none gap-2">
+                                <input type="radio" class="btn-check" name="math_points" id="math_200m" value="200" 
+                                       {% if today_record and today_record.math_points == 200 %}checked{% endif %}>
+                                <label class="btn btn-outline-success flex-fill mobile-radio-btn" for="math_200m"><span class="mpb-main">완벽</span><span class="mpb-pts">200점</span></label>
+                                <input type="radio" class="btn-check" name="math_points" id="math_100m" value="100" 
+                                       {% if today_record and today_record.math_points == 100 %}checked{% endif %}>
+                                <label class="btn btn-outline-warning flex-fill mobile-radio-btn" for="math_100m"><span class="mpb-main">부분</span><span class="mpb-pts">100점</span></label>
+                                <input type="radio" class="btn-check" name="math_points" id="math_0m" value="0" 
+                                       {% if not today_record or today_record.math_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary flex-fill mobile-radio-btn" for="math_0m"><span class="mpb-main">미완료</span><span class="mpb-pts">0점</span></label>
+                            </div>
                         </div>
 
                         <!-- 쎈수학 -->
                         <div class="mb-4">
-                            <h5 class="text-info">쎈수학</h5>
-                            <div class="btn-group w-100" role="group">
+                            <h5 class="text-muted">쎈수학</h5>
+                            <div class="btn-group w-100 d-none d-sm-flex" role="group">
                                 <input type="radio" class="btn-check" name="ssen_points" id="ssen_100" value="100" 
                                        {% if today_record and today_record.ssen_points == 100 %}checked{% endif %}>
                                 <label class="btn btn-outline-success" for="ssen_100">
                                     <i class="fas fa-exclamation-circle"></i> 완벽 (100점)
                                 </label>
-                                
                                 <input type="radio" class="btn-check" name="ssen_points" id="ssen_0" value="0" 
                                        {% if not today_record or today_record.ssen_points == 0 %}checked{% endif %}>
                                 <label class="btn btn-outline-secondary" for="ssen_0">
                                     <i class="fas fa-times-circle"></i> 미완료 (0점)
                                 </label>
                             </div>
+                            <div class="d-flex d-sm-none gap-2">
+                                <input type="radio" class="btn-check" name="ssen_points" id="ssen_100m" value="100" 
+                                       {% if today_record and today_record.ssen_points == 100 %}checked{% endif %}>
+                                <label class="btn btn-outline-success flex-fill mobile-radio-btn" for="ssen_100m"><span class="mpb-main">완벽</span><span class="mpb-pts">100점</span></label>
+                                <input type="radio" class="btn-check" name="ssen_points" id="ssen_0m" value="0" 
+                                       {% if not today_record or today_record.ssen_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary flex-fill mobile-radio-btn" for="ssen_0m"><span class="mpb-main">미완료</span><span class="mpb-pts">0점</span></label>
+                            </div>
                         </div>
 
                         <!-- 독서 -->
                         <div class="mb-4">
-                            <h5 class="text-warning">독서</h5>
-                            <div class="btn-group w-100" role="group">
+                            <h5 class="text-muted">독서</h5>
+                            <div class="btn-group w-100 d-none d-sm-flex" role="group">
                                 <input type="radio" class="btn-check" name="reading_points" id="reading_200" value="200" 
                                        {% if today_record and today_record.reading_points == 200 %}checked{% endif %}>
                                 <label class="btn btn-outline-success" for="reading_200">
                                     <i class="fas fa-check-circle"></i> 완벽 (200점)
                                 </label>
-                                
                                 <input type="radio" class="btn-check" name="reading_points" id="reading_100" value="100" 
                                        {% if today_record and today_record.reading_points == 100 %}checked{% endif %}>
                                 <label class="btn btn-outline-warning" for="reading_100">
                                     <i class="fas fa-exclamation-circle"></i> 부분 (100점)
                                 </label>
-                                
                                 <input type="radio" class="btn-check" name="reading_points" id="reading_0" value="0" 
                                        {% if not today_record or today_record.reading_points == 0 %}checked{% endif %}>
                                 <label class="btn btn-outline-secondary" for="reading_0">
                                     <i class="fas fa-times-circle"></i> 미완료 (0점)
                                 </label>
                             </div>
+                            <div class="d-flex d-sm-none gap-2">
+                                <input type="radio" class="btn-check" name="reading_points" id="reading_200m" value="200" 
+                                       {% if today_record and today_record.reading_points == 200 %}checked{% endif %}>
+                                <label class="btn btn-outline-success flex-fill mobile-radio-btn" for="reading_200m"><span class="mpb-main">완벽</span><span class="mpb-pts">200점</span></label>
+                                <input type="radio" class="btn-check" name="reading_points" id="reading_100m" value="100" 
+                                       {% if today_record and today_record.reading_points == 100 %}checked{% endif %}>
+                                <label class="btn btn-outline-warning flex-fill mobile-radio-btn" for="reading_100m"><span class="mpb-main">부분</span><span class="mpb-pts">100점</span></label>
+                                <input type="radio" class="btn-check" name="reading_points" id="reading_0m" value="0" 
+                                       {% if not today_record or today_record.reading_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary flex-fill mobile-radio-btn" for="reading_0m"><span class="mpb-main">미완료</span><span class="mpb-pts">0점</span></label>
+                            </div>
 
                         <!-- 추가 과목들 토글 버튼 -->
                         <div class="text-center mt-4 mb-3">
-                            <button type="button" class="btn btn-sm" id="toggleAdditionalSubjects" style="background-color: #1A73E8; border-color: #1A73E8; color: white;">
-                                <i class="fas fa-chevron-down me-2" id="toggleIcon"></i>
-                                <span id="toggleText">추가 과목 보기 (피아노, 영어, 고학년수학, 쓰기)</span>
+                            <button type="button" class="btn btn-sm mx-auto" id="toggleAdditionalSubjects" style="background-color: #1A73E8; border-color: #1A73E8; color: white; min-width: 160px; justify-content: center;">
+                                <span id="toggleText">추가 과목 열기</span>
                             </button>
                         </div>
 
@@ -327,73 +357,101 @@
                         <div id="additionalSubjects" class="collapse">
                             <!-- 피아노 -->
                         <div class="mb-4">
-                            <h5 class="text-info">피아노</h5>
-                            <div class="btn-group w-100" role="group">
+                            <h5 class="text-muted">피아노</h5>
+                            <div class="btn-group w-100 d-none d-sm-flex" role="group">
                                 <input type="radio" class="btn-check" name="piano_points" id="piano_100" value="100" 
                                        {% if today_record and today_record.piano_points == 100 %}checked{% endif %}>
                                 <label class="btn btn-outline-success" for="piano_100">
                                     <i class="fas fa-check-circle"></i> 완료 (100점)
                                 </label>
-                                
                                 <input type="radio" class="btn-check" name="piano_points" id="piano_0" value="0" 
                                        {% if not today_record or today_record.piano_points == 0 %}checked{% endif %}>
                                 <label class="btn btn-outline-secondary" for="piano_0">
                                     <i class="fas fa-times-circle"></i> 미완료 (0점)
                                 </label>
                             </div>
+                            <div class="d-flex d-sm-none gap-2">
+                                <input type="radio" class="btn-check" name="piano_points" id="piano_100m" value="100" 
+                                       {% if today_record and today_record.piano_points == 100 %}checked{% endif %}>
+                                <label class="btn btn-outline-success flex-fill mobile-radio-btn" for="piano_100m"><span class="mpb-main">완료</span><span class="mpb-pts">100점</span></label>
+                                <input type="radio" class="btn-check" name="piano_points" id="piano_0m" value="0" 
+                                       {% if not today_record or today_record.piano_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary flex-fill mobile-radio-btn" for="piano_0m"><span class="mpb-main">미완료</span><span class="mpb-pts">0점</span></label>
+                            </div>
                         </div>
 
                         <!-- 영어 -->
                         <div class="mb-4">
-                            <h5 class="text-primary">영어</h5>
-                            <div class="btn-group w-100" role="group">
+                            <h5 class="text-muted">영어</h5>
+                            <div class="btn-group w-100 d-none d-sm-flex" role="group">
                                 <input type="radio" class="btn-check" name="english_points" id="english_100" value="100" 
                                        {% if today_record and today_record.english_points == 100 %}checked{% endif %}>
                                 <label class="btn btn-outline-success" for="english_100">
                                     <i class="fas fa-check-circle"></i> 완료 (100점)
                                 </label>
-                                
                                 <input type="radio" class="btn-check" name="english_points" id="english_0" value="0" 
                                        {% if not today_record or today_record.english_points == 0 %}checked{% endif %}>
                                 <label class="btn btn-outline-secondary" for="english_0">
                                     <i class="fas fa-times-circle"></i> 미완료 (0점)
                                 </label>
                             </div>
+                            <div class="d-flex d-sm-none gap-2">
+                                <input type="radio" class="btn-check" name="english_points" id="english_100m" value="100" 
+                                       {% if today_record and today_record.english_points == 100 %}checked{% endif %}>
+                                <label class="btn btn-outline-success flex-fill mobile-radio-btn" for="english_100m"><span class="mpb-main">완료</span><span class="mpb-pts">100점</span></label>
+                                <input type="radio" class="btn-check" name="english_points" id="english_0m" value="0" 
+                                       {% if not today_record or today_record.english_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary flex-fill mobile-radio-btn" for="english_0m"><span class="mpb-main">미완료</span><span class="mpb-pts">0점</span></label>
+                            </div>
                         </div>
 
                         <!-- 고학년수학 -->
                         <div class="mb-4">
-                            <h5 class="text-danger">고학년수학</h5>
-                            <div class="btn-group w-100" role="group">
+                            <h5 class="text-muted">고학년수학</h5>
+                            <div class="btn-group w-100 d-none d-sm-flex" role="group">
                                 <input type="radio" class="btn-check" name="advanced_math_points" id="advanced_math_300" value="300" 
                                        {% if today_record and today_record.advanced_math_points == 300 %}checked{% endif %}>
                                 <label class="btn btn-outline-success" for="advanced_math_300">
                                     <i class="fas fa-check-circle"></i> 완료 (300점)
                                 </label>
-                                
                                 <input type="radio" class="btn-check" name="advanced_math_points" id="advanced_math_0" value="0" 
                                        {% if not today_record or today_record.advanced_math_points == 0 %}checked{% endif %}>
                                 <label class="btn btn-outline-secondary" for="advanced_math_0">
                                     <i class="fas fa-times-circle"></i> 미완료 (0점)
                                 </label>
                             </div>
+                            <div class="d-flex d-sm-none gap-2">
+                                <input type="radio" class="btn-check" name="advanced_math_points" id="advanced_math_300m" value="300" 
+                                       {% if today_record and today_record.advanced_math_points == 300 %}checked{% endif %}>
+                                <label class="btn btn-outline-success flex-fill mobile-radio-btn" for="advanced_math_300m"><span class="mpb-main">완료</span><span class="mpb-pts">300점</span></label>
+                                <input type="radio" class="btn-check" name="advanced_math_points" id="advanced_math_0m" value="0" 
+                                       {% if not today_record or today_record.advanced_math_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary flex-fill mobile-radio-btn" for="advanced_math_0m"><span class="mpb-main">미완료</span><span class="mpb-pts">0점</span></label>
+                            </div>
                         </div>
 
                         <!-- 쓰기 -->
                         <div class="mb-4">
-                            <h5 class="text-secondary">쓰기</h5>
-                            <div class="btn-group w-100" role="group">
+                            <h5 class="text-muted">쓰기</h5>
+                            <div class="btn-group w-100 d-none d-sm-flex" role="group">
                                 <input type="radio" class="btn-check" name="writing_points" id="writing_100" value="100" 
                                        {% if today_record and today_record.writing_points == 100 %}checked{% endif %}>
                                 <label class="btn btn-outline-success" for="writing_100">
                                     <i class="fas fa-check-circle"></i> 완료 (100점)
                                 </label>
-                                
                                 <input type="radio" class="btn-check" name="writing_points" id="writing_0" value="0" 
                                        {% if not today_record or today_record.writing_points == 0 %}checked{% endif %}>
                                 <label class="btn btn-outline-secondary" for="writing_0">
                                     <i class="fas fa-times-circle"></i> 미완료 (0점)
                                 </label>
+                            </div>
+                            <div class="d-flex d-sm-none gap-2">
+                                <input type="radio" class="btn-check" name="writing_points" id="writing_100m" value="100" 
+                                       {% if today_record and today_record.writing_points == 100 %}checked{% endif %}>
+                                <label class="btn btn-outline-success flex-fill mobile-radio-btn" for="writing_100m"><span class="mpb-main">완료</span><span class="mpb-pts">100점</span></label>
+                                <input type="radio" class="btn-check" name="writing_points" id="writing_0m" value="0" 
+                                       {% if not today_record or today_record.writing_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary flex-fill mobile-radio-btn" for="writing_0m"><span class="mpb-main">미완료</span><span class="mpb-pts">0점</span></label>
                             </div>
                         </div>
                         </div>
@@ -404,10 +462,10 @@
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div>
                                     <h5 class="mb-1">수동 포인트</h5>
-                                    <small class="text-muted">연필, 교재 완료, 특별 상황 등 추가/차감</small>
+                                    <small class="text-muted">추가/차감 항목 입력</small>
                                 </div>
                                 <span class="manual-summary-badge">
-                                    현재 합계 <span id="manualSummaryTotal">0</span>점
+                                    합계 <span id="manualSummaryTotal">0</span>점
                                 </span>
                             </div>
                             <button type="button"
@@ -415,10 +473,8 @@
                                     id="manualSectionToggle"
                                     aria-expanded="false"
                                     aria-controls="manualPointsSection">
-                                <span class="toggle-label d-inline-flex align-items-center justify-content-center gap-2">
-                                    <i class="fas fa-sliders-h"></i>
-                                    <span>수동 포인트 입력 영역 열기</span>
-                                </span>
+                                <i class="fas fa-sliders-h"></i>
+                                <span>수동 포인트 열기</span>
                                 <i class="fas fa-chevron-down toggle-icon" id="manualSectionIcon"></i>
                             </button>
                             <div id="manualPointsSection" class="manual-card mt-3 collapse" aria-hidden="true">
@@ -550,19 +606,21 @@
                                 </div>
                             </div>
                             <hr>
-                            <div class="text-center">
-                                <h4 class="text-primary mb-0">
-                                    총점: <span id="total_preview">0</span>점
-                                </h4>
+                            <!-- 누적 포인트 흐름: 현재 → 오늘 입력 → 새 총점 -->
+                            <div class="d-flex align-items-center justify-content-center gap-2 flex-wrap text-center mb-2">
+                                <div class="flow-box">
+                                    <div class="flow-label">현재 누적</div>
+                                    <div class="flow-value text-muted" style="color:#374151 !important;">{{ total_cumulative_points }}점</div>
+                                </div>
+                                <div class="flow-arrow">→</div>
+                                <div class="flow-box">
+                                    <div class="flow-label">오늘 입력</div>
+                                    <div class="flow-value"><span id="total_preview">0</span>점</div>
+                                </div>
                             </div>
-                            <div class="final-total-box text-center">
-                                <div class="final-total-label">입력 후 예상 누적 포인트</div>
-                                <div class="final-total-value">
-                                    <span id="final_preview">{{ total_cumulative_points }}</span>점
-                                </div>
-                                <div class="text-muted small">
-                                    (현재 누적 {{ total_cumulative_points }}점 + 오늘 입력값)
-                                </div>
+                            <div class="flow-box flow-box-result text-center">
+                                <div class="flow-label">새 누적 포인트</div>
+                                <div class="flow-value" style="font-size:1.32rem;"><span id="final_preview">{{ total_cumulative_points }}</span>점</div>
                             </div>
                         </div>
 
@@ -600,17 +658,14 @@ let manualEntries = [];
 // 추가 과목 토글 기능
 document.getElementById('toggleAdditionalSubjects').addEventListener('click', function() {
     const additionalSubjects = document.getElementById('additionalSubjects');
-    const toggleIcon = document.getElementById('toggleIcon');
     const toggleText = document.getElementById('toggleText');
     
     if (additionalSubjects.classList.contains('show')) {
         additionalSubjects.classList.remove('show');
-        toggleIcon.className = 'fas fa-chevron-down me-2';
-        toggleText.textContent = '추가 과목 보기 (피아노, 영어, 고학년수학, 쓰기)';
+        toggleText.textContent = '추가 과목 열기';
     } else {
         additionalSubjects.classList.add('show');
-        toggleIcon.className = 'fas fa-chevron-up me-2';
-        toggleText.textContent = '추가 과목 숨기기';
+        toggleText.textContent = '추가 과목 닫기';
     }
 });
 

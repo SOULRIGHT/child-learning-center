@@ -466,16 +466,15 @@ body {
     
     .content-area {
         padding: 1rem;
-        margin-top: 60px; /* 모바일 토글 버튼을 위한 여백 */
     }
     
     .top-navbar {
-        padding: 1rem;
-        margin-left: 50px; /* 토글 버튼 공간 확보 */
+        padding: 0.75rem 1rem 0.75rem 70px;
     }
     
     .page-title {
         font-size: 1.25rem;
+        margin-left: 0;
     }
     
     .login-card {
@@ -697,9 +696,14 @@ body {
         width: 100% !important;
     }
     
-    /* 페이지 제목에 왼쪽 여백 추가 (햄버거 버튼 공간 확보) */
+    /* 햄버거 버튼 공간 확보 - top-navbar 자체에 padding 적용 */
+    .top-navbar {
+        padding-left: 70px;
+    }
+
+    /* page-title 별도 margin 불필요 (navbar padding으로 처리) */
     .page-title {
-        margin-left: 80px;
+        margin-left: 0;
     }
 }
 
@@ -719,8 +723,12 @@ body {
     }
     
     .page-title {
-        margin-left: 70px;
-        font-size: 1.5rem;
+        margin-left: 0;
+        font-size: 1.1rem;
+    }
+    
+    .top-navbar {
+        padding-left: 65px;
     }
 }
 
@@ -804,4 +812,134 @@ body {
     width: 2.5rem !important;
     justify-content: center !important;
     align-items: center !important;
-} 
+}
+
+/* 날짜 input은 왼쪽 아이콘 없으므로 padding-left 오버라이드 */
+input[type="date"].form-control {
+    padding-left: 0.75rem !important;
+}
+
+/* 모바일 라디오 버튼 - 2줄 컬럼 레이아웃 */
+.mobile-radio-btn {
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0.5rem 0.25rem !important;
+    gap: 0.1rem !important;
+    min-height: 54px;
+    line-height: 1.2 !important;
+}
+
+.mpb-main {
+    font-size: 0.7rem;
+    opacity: 0.8;
+    white-space: nowrap;
+}
+
+.mpb-pts {
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* ===== 모바일 공통 유틸리티 ===== */
+
+/* 아동 목록 - 행 클릭 스타일 */
+.child-row:hover {
+    background-color: rgba(37, 99, 235, 0.06) !important;
+}
+
+.child-row:active {
+    background-color: rgba(37, 99, 235, 0.12) !important;
+}
+
+/* 아동 이름 - 클릭 가능 표시 */
+.child-name-link {
+    color: var(--primary-blue);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: rgba(37, 99, 235, 0.4);
+}
+
+.child-row:hover .child-name-link {
+    text-decoration-color: var(--primary-blue);
+}
+
+/* flex 헤더 - 좁은 화면에서 줄바꿈 */
+@media (max-width: 576px) {
+    .flex-header {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    /* 라디오 버튼 그룹 모바일 최적화 */
+    .btn-group-mobile-stack {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .btn-group-mobile-stack .btn {
+        border-radius: 8px !important;
+        margin-bottom: 0.25rem;
+        width: 100%;
+        text-align: center;
+    }
+
+    .btn-group-mobile-stack .btn:last-child {
+        margin-bottom: 0;
+    }
+
+    /* 포인트 입력 라디오 버튼 - 아이콘 숨기고 텍스트 간소화 */
+    .point-radio-label .label-icon {
+        display: none;
+    }
+}
+
+/* ===== 누적 포인트 흐름 표시 ===== */
+.cumulative-flow {
+    padding: 0.5rem 0;
+    gap: 0.5rem;
+}
+
+.flow-box {
+    background: var(--light-blue);
+    border-radius: 12px;
+    padding: 0.6rem 1rem;
+    min-width: 90px;
+    border: 1.5px solid rgba(37, 99, 235, 0.15);
+}
+
+.flow-box-result {
+    background: #F5F8FF;
+    border: 1px solid #DCE6FF;
+}
+
+.flow-box-result .flow-label {
+    color: #1e2d5a;
+    font-size: 0.75rem;
+}
+
+.flow-box-result .flow-value {
+    color: var(--primary-blue) !important;
+}
+
+.flow-label {
+    font-size: 0.68rem;
+    color: #6b7280;
+    margin-bottom: 0.1rem;
+    letter-spacing: 0.02em;
+}
+
+.flow-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--primary-blue);
+}
+
+.flow-arrow {
+    font-size: 1rem;
+    color: #9ca3af;
+    flex-shrink: 0;
+}
