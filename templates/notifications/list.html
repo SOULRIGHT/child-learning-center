@@ -5,50 +5,41 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2><i class="bi bi-bell"></i> 알림</h2>
-            {% if unread_count > 0 %}
-                <p class="text-muted mb-0">읽지 않은 알림 <span class="badge bg-danger">{{ unread_count }}</span>개</p>
-            {% else %}
-                <p class="text-muted mb-0">모든 알림을 확인했습니다.</p>
-            {% endif %}
-        </div>
-        <div>
-            <!-- 필터 버튼들 -->
-            <div class="btn-group me-2" role="group">
-                <button type="button" class="btn btn-outline-secondary active" data-filter="all">
-                    전체
-                </button>
-                <button type="button" class="btn btn-outline-secondary" data-filter="backup">
-                    백업
-                </button>
-                <button type="button" class="btn btn-outline-secondary" data-filter="restore">
-                    복원
-                </button>
-                <button type="button" class="btn btn-outline-secondary" data-filter="system">
-                    시스템
-                </button>
+    <div class="mb-3">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+                <h2 class="mb-0 fs-5 fs-sm-4"><i class="bi bi-bell"></i> 알림</h2>
+                {% if unread_count > 0 %}
+                    <p class="text-muted mb-0 small">읽지 않은 알림 <span class="badge bg-danger">{{ unread_count }}</span>개</p>
+                {% else %}
+                    <p class="text-muted mb-0 small">모든 알림을 확인했습니다.</p>
+                {% endif %}
             </div>
-            
-            {% if unread_count > 0 %}
-                <button class="btn btn-outline-primary me-2" onclick="markAllAsRead()">
-                    <i class="bi bi-check-all"></i> 모두 읽음
-                </button>
-            {% endif %}
-            
-            <!-- 개발자만 삭제 버튼 표시 -->
-            {% if current_user.role == '개발자' %}
-                <button class="btn btn-outline-danger me-2" onclick="deleteSelectedNotifications()">
-                    <i class="bi bi-trash"></i> 선택 삭제
-                </button>
-            {% endif %}
-            
-            {% if current_user.role == '센터장' %}
-                <a href="{{ url_for('test_notifications') }}" class="btn btn-outline-secondary">
-                    <i class="bi bi-plus"></i> 테스트 알림
-                </a>
-            {% endif %}
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                {% if unread_count > 0 %}
+                    <button class="btn btn-outline-primary btn-sm" onclick="markAllAsRead()">
+                        <i class="bi bi-check-all"></i> 모두 읽음
+                    </button>
+                {% endif %}
+                {% if current_user.role == '개발자' %}
+                    <button class="btn btn-outline-danger btn-sm" onclick="deleteSelectedNotifications()">
+                        <i class="bi bi-trash"></i> 선택 삭제
+                    </button>
+                {% endif %}
+                {% if current_user.role == '센터장' %}
+                    <a href="{{ url_for('test_notifications') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-plus"></i> 테스트
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 필터 탭 -->
+        <div class="d-flex gap-1 mt-2">
+            <button type="button" class="btn btn-sm btn-secondary active" data-filter="all">전체</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-filter="backup">백업</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-filter="restore">복원</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-filter="system">시스템</button>
         </div>
     </div>
 
@@ -216,8 +207,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const filter = this.getAttribute('data-filter');
             
             // 버튼 활성화 상태 변경
-            filterButtons.forEach(btn => btn.classList.remove('active'));
-            this.classList.add('active');
+            filterButtons.forEach(btn => {
+                btn.classList.remove('active', 'btn-secondary');
+                btn.classList.add('btn-outline-secondary');
+            });
+            this.classList.add('active', 'btn-secondary');
+            this.classList.remove('btn-outline-secondary');
             
             // 알림 필터링
             notificationItems.forEach(item => {

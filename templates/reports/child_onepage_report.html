@@ -1,37 +1,33 @@
 {% extends "base.html" %}
 
 {% block title %}{{ child.name }} 개인 리포트{% endblock %}
-{% block page_title %}{{ child.name }} 개인 리포트{% endblock %}
+{% block page_title %}개인 리포트{% endblock %}
 
 {% block content %}
 <div class="container-fluid report-page">
-    <div class="d-flex justify-content-between align-items-start mb-3 report-controls">
-        <div>
-            {% if is_viewer_mode %}
-            <a href="{{ url_for('viewer_home') }}" class="btn btn-outline-secondary me-2">
-                <i class="bi bi-arrow-left me-1"></i>안내
-            </a>
-            {% else %}
-            <a href="{{ url_for('settings_print_children') }}" class="btn btn-outline-secondary me-2">
-                <i class="bi bi-arrow-left me-1"></i>목록
-            </a>
-            {% endif %}
-            <button type="button" class="btn btn-primary" onclick="window.print()">
-                <i class="bi bi-printer me-1"></i>인쇄
-            </button>
-        </div>
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap report-controls">
+        {% if is_viewer_mode %}
+        <a href="{{ url_for('viewer_home') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>안내
+        </a>
+        {% else %}
+        <a href="{{ url_for('settings_print_children') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>목록
+        </a>
+        {% endif %}
+        <button type="button" class="btn btn-primary btn-sm" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i>인쇄
+        </button>
         {% if total_record_count > preview_limit and not is_viewer_mode %}
-        <div>
             {% if show_all %}
-            <a href="{{ url_for('settings_print_child_report', child_id=child.id) }}" class="btn btn-outline-dark btn-sm">
+            <a href="{{ url_for('settings_print_child_report', child_id=child.id) }}" class="btn btn-outline-dark btn-sm ms-auto">
                 최근 {{ preview_limit }}건 보기
             </a>
             {% else %}
-            <a href="{{ url_for('settings_print_child_report', child_id=child.id, show_all=1) }}" class="btn btn-outline-dark btn-sm">
-                전체 기록 보기
+            <a href="{{ url_for('settings_print_child_report', child_id=child.id, show_all=1) }}" class="btn btn-outline-dark btn-sm ms-auto">
+                전체 기록
             </a>
             {% endif %}
-        </div>
         {% endif %}
     </div>
 
@@ -72,14 +68,11 @@
                     <div class="summary-label">전체 순위</div>
                     <div class="summary-value">
                         {% if overall_rank is not none %}
-                            {{ overall_rank }}위
+                            {{ overall_rank }}위 / {{ overall_total_children }}명
                         {% else %}
                             -
                         {% endif %}
                     </div>
-                    {% if overall_rank is not none %}
-                    <div class="summary-subvalue">{{ overall_rank }}위 / {{ overall_total_children }}명</div>
-                    {% endif %}
                 </div>
             </div>
 
@@ -113,14 +106,14 @@
                             <th>날짜</th>
                             <th class="text-center">국어</th>
                             <th class="text-center">수학</th>
-                            <th class="text-center">쎈수학</th>
+                            <th class="text-center"><span class="d-none d-sm-inline">쎈수학</span><span class="d-inline d-sm-none">쎈</span></th>
                             <th class="text-center">독서</th>
                             <th class="text-center">피아노</th>
                             <th class="text-center">영어</th>
                             <th class="text-center">쓰기</th>
                             <th class="text-center">수동</th>
                             <th class="text-center">총점</th>
-                            <th class="text-center cumulative-col">누적 총점</th>
+                            <th class="text-center cumulative-col fw-bold" style="color: #000000;">총포인트</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -136,7 +129,7 @@
                             <td class="text-center">{{ record['subjects']['writing'] }}</td>
                             <td class="text-center">{{ record['manual_points'] }}</td>
                             <td class="text-center fw-bold">{{ record['total_points'] }}</td>
-                            <td class="text-center cumulative-col">{{ record['cumulative_total'] }}</td>
+                            <td class="text-center cumulative-col fw-bold" style="color: #000000;">{{ record['cumulative_total'] }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -224,8 +217,8 @@
 }
 
 .cumulative-col {
-    border-left: 2px solid #bfdbfe !important;
-    color: #1e3a8a !important;
+    border-left: 2px solid #aaaaaa !important;
+    color: #000000 !important;
     font-weight: 700 !important;
 }
 

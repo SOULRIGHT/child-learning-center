@@ -3,6 +3,78 @@
 {% block title %}아동 관리 - 지역아동센터 학습관리{% endblock %}
 {% block page_title %}아동 관리{% endblock %}
 
+{% block extra_css %}
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<style>
+/* ── Action Button 컴포넌트 ── */
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    border-radius: 10px;
+    border: 1.5px solid;
+    cursor: pointer;
+    transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+    text-decoration: none;
+    background: transparent;
+    padding: 0;
+    font-size: 0;
+}
+
+.action-btn .material-icons {
+    font-size: 17px;
+    line-height: 1;
+}
+
+/* 포인트 기록 - primary blue (주요 액션 강조) */
+.action-btn-primary {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #3b82f6;
+}
+.action-btn-primary:hover {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+
+/* 나머지 - neutral gray, hover 시 blue accent */
+.action-btn-neutral {
+    background: #f9fafb;
+    border-color: #d1d5db;
+    color: #6b7280;
+}
+.action-btn-neutral:hover {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #3b82f6;
+}
+
+/* 삭제 - 항상 빨간색 고정 (위험 액션) */
+.action-btn-danger {
+    background: #fef2f2;
+    border-color: #ef4444;
+    color: #ef4444;
+}
+.action-btn-danger:hover {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: white;
+}
+
+@media (max-width: 575px) {
+    .action-btn {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <!-- 헤더 섹션 -->
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
@@ -120,7 +192,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <small class="text-muted">{{ child.created_at | kst_strftime('%Y-%m-%d') }}</small>
                         </td>
                         <td class="align-middle d-none d-sm-table-cell">
-                            {% set latest_record = child.learning_records|selectattr('date')|list|sort(attribute='date', reverse=true)|first %}
+                            {% set latest_record = child.daily_points|sort(attribute='date', reverse=true)|first %}
                             {% if latest_record %}
                                 <small class="text-success">
                                     <i class="bi bi-check-circle me-1"></i>
@@ -134,33 +206,34 @@ document.addEventListener('DOMContentLoaded', function() {
                             {% endif %}
                         </td>
                         <td class="align-middle text-center" onclick="event.stopPropagation();">
-                            <div class="d-flex justify-content-center gap-1">
-                                <!-- 모바일: 포인트 입력 버튼만 -->
-                                <a href="{{ url_for('points_input', child_id=child.id) }}" 
-                                   class="btn btn-sm btn-primary" title="포인트 입력">
-                                    <i class="bi bi-pencil-fill"></i>
+                            <div class="d-flex justify-content-center gap-2">
+                                <!-- 포인트 기록 (항상 표시, 주요 액션) -->
+                                <a href="{{ url_for('points_input', child_id=child.id) }}"
+                                   class="action-btn action-btn-primary" title="포인트 기록">
+                                    <span class="material-icons">stars</span>
                                 </a>
                                 <!-- 태블릿 이상: 추가 버튼들 -->
-                                <a href="{{ url_for('child_detail', child_id=child.id) }}" 
-                                   class="btn btn-sm btn-outline-primary d-none d-sm-inline-flex" title="상세보기">
-                                    <i class="bi bi-eye"></i>
+                                <a href="{{ url_for('child_detail', child_id=child.id) }}"
+                                   class="action-btn action-btn-neutral d-none d-sm-inline-flex" title="상세보기">
+                                    <span class="material-icons">visibility</span>
                                 </a>
-                                <a href="{{ url_for('edit_child', child_id=child.id) }}" 
-                                   class="btn btn-sm btn-outline-success d-none d-sm-inline-flex" title="수정">
-                                    <i class="bi bi-pencil"></i>
+                                <a href="{{ url_for('edit_child', child_id=child.id) }}"
+                                   class="action-btn action-btn-neutral d-none d-sm-inline-flex" title="수정">
+                                    <span class="material-icons">edit</span>
                                 </a>
-                                {% if current_user.role == '개발자' %}
-                                <button type="button" class="btn btn-sm btn-outline-danger delete-btn d-none d-sm-inline-flex" 
-                                        data-child-id="{{ child.id }}" data-child-name="{{ child.name }}" title="삭제">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                                {% endif %}
                                 <form method="POST" action="{{ url_for('toggle_child_stats', child_id=child.id) }}" class="d-none d-sm-inline">
-                                    <button type="submit" class="btn btn-sm {% if child.include_in_stats %}btn-outline-warning{% else %}btn-outline-info{% endif %}" 
+                                    <button type="submit" class="action-btn action-btn-neutral"
                                             title="{% if child.include_in_stats %}통계에서 제외{% else %}통계에 포함{% endif %}">
-                                        <i class="bi bi-bar-chart"></i>
+                                        <span class="material-icons">bar_chart</span>
                                     </button>
                                 </form>
+                                {% if current_user.role == '개발자' %}
+                                <button type="button"
+                                        class="action-btn action-btn-danger delete-btn d-none d-sm-inline-flex"
+                                        data-child-id="{{ child.id }}" data-child-name="{{ child.name }}" title="삭제">
+                                    <span class="material-icons">delete</span>
+                                </button>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -281,36 +354,46 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="col-md-6">
                 <h6 class="fw-bold text-primary mb-3">관리 버튼 설명</h6>
-                <div class="mb-3">
-                    <div class="d-flex align-items-center mb-2">
-                        <i class="bi bi-eye text-primary me-2"></i>
-                        <span><strong>상세보기:</strong> 아동의 상세 정보 확인</span>
+                <div class="mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="action-btn action-btn-primary" style="pointer-events:none; width:28px; height:28px; min-width:28px; border-radius:8px;">
+                            <span class="material-icons" style="font-size:15px;">stars</span>
+                        </span>
+                        <span><strong>포인트 기록:</strong> 일일 포인트 입력</span>
                     </div>
                 </div>
-                <div class="mb-3">
-                    <div class="d-flex align-items-center mb-2">
-                        <i class="bi bi-star text-warning me-2"></i>
-                        <span><strong>포인트 입력:</strong> 일일 포인트 입력</span>
+                <div class="mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="action-btn action-btn-neutral" style="pointer-events:none; width:28px; height:28px; min-width:28px; border-radius:8px;">
+                            <span class="material-icons" style="font-size:15px;">visibility</span>
+                        </span>
+                        <span><strong>상세보기:</strong> 아동 상세 정보 확인</span>
                     </div>
                 </div>
-                <div class="mb-3">
-                    <div class="d-flex align-items-center mb-2">
-                        <i class="bi bi-pencil text-success me-2"></i>
+                <div class="mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="action-btn action-btn-neutral" style="pointer-events:none; width:28px; height:28px; min-width:28px; border-radius:8px;">
+                            <span class="material-icons" style="font-size:15px;">edit</span>
+                        </span>
                         <span><strong>수정:</strong> 아동 정보 수정</span>
                     </div>
                 </div>
-                 <div class="mb-3">
-                     <div class="d-flex align-items-center mb-2">
-                         <i class="bi bi-bar-chart text-info me-2"></i>
-                         <span><strong>통계 제외:</strong> 아동별 개별 관리</span>
-                     </div>
-                 </div>
-                 <div class="mb-3">
-                     <div class="d-flex align-items-center mb-2">
-                         <i class="bi bi-trash text-danger me-2"></i>
-                         <span><strong>삭제:</strong> 아동 삭제 (주의!)</span>
-                     </div>
-                 </div>
+                <div class="mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="action-btn action-btn-neutral" style="pointer-events:none; width:28px; height:28px; min-width:28px; border-radius:8px;">
+                            <span class="material-icons" style="font-size:15px;">bar_chart</span>
+                        </span>
+                        <span><strong>통계:</strong> 통계 포함/제외 전환</span>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="action-btn action-btn-danger" style="pointer-events:none; width:28px; height:28px; min-width:28px; border-radius:8px;">
+                            <span class="material-icons" style="font-size:15px;">delete</span>
+                        </span>
+                        <span><strong>삭제:</strong> 아동 삭제 (개발자 전용)</span>
+                    </div>
+                </div>
             </div>
         </div>
         

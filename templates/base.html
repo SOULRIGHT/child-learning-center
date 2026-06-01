@@ -45,14 +45,15 @@
                     </a>
                 </div>
                 {% else %}
+                {% set ep = request.endpoint or '' %}
                 <div class="nav-item">
-                    <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                    <a href="{{ url_for('dashboard') }}" class="nav-link {% if ep == 'dashboard' %}active{% endif %}">
                         <i class="bi bi-speedometer2"></i>
                         대시보드
                     </a>
                 </div>
                 <div class="nav-item">
-                    <a href="{{ url_for('children_list') }}" class="nav-link {% if request.endpoint and 'children' in request.endpoint %}active{% endif %}">
+                    <a href="{{ url_for('children_list') }}" class="nav-link {% if ep in ['children_list', 'add_child', 'edit_child', 'delete_child', 'child_detail', 'child_report'] %}active{% endif %}">
                         <i class="bi bi-people"></i>
                         아동 관리
                     </a>
@@ -66,21 +67,21 @@
                 </div>
                 -->
                 <div class="nav-item">
-                    <a href="{{ url_for('points_list') }}" class="nav-link {% if request.endpoint and 'points' in request.endpoint and 'analysis' not in request.endpoint %}active{% endif %}">
+                    <a href="{{ url_for('points_list') }}" class="nav-link {% if ep in ['points_list', 'points_input_select', 'points_input', 'points_statistics', 'points_analysis', 'points_history'] %}active{% endif %}">
                         <i class="bi bi-star"></i>
                         포인트 기록
                     </a>
                 </div>
                 <div class="nav-item">
-                    <a href="{{ url_for('points_analysis') }}" class="nav-link {% if request.endpoint and 'points_analysis' in request.endpoint %}active{% endif %}">
-                        <i class="bi bi-bar-chart"></i>
-                        개별 포인트 분석
+                    <a href="{{ url_for('points_visualization') }}" class="nav-link {% if ep == 'points_visualization' %}active{% endif %}">
+                        <i class="bi bi-graph-up"></i>
+                        포인트 시각화
                     </a>
                 </div>
                 <div class="nav-item">
-                    <a href="{{ url_for('points_visualization') }}" class="nav-link {% if request.endpoint and 'points_visualization' in request.endpoint %}active{% endif %}">
-                        <i class="bi bi-graph-up"></i>
-                        포인트 시각화
+                    <a href="{{ url_for('settings_print_children') }}" class="nav-link {% if ep in ['settings_print_children', 'settings_print_child_report'] %}active{% endif %}">
+                        <i class="bi bi-printer"></i>
+                        개인 리포트
                     </a>
                 </div>
                 <!-- 임시 비활성화: 기존 통계 분석
@@ -93,14 +94,14 @@
                 -->
                 
                 <div class="nav-item">
-                    <a href="{{ url_for('notifications') }}" class="nav-link {% if request.endpoint and 'notifications' in request.endpoint %}active{% endif %}">
+                    <a href="{{ url_for('notifications') }}" class="nav-link {% if ep == 'notifications' %}active{% endif %}">
                         <i class="bi bi-bell"></i>
                         알림
                     </a>
                 </div>
                 <!-- 설정 -->
                 <div class="nav-item">
-                    <a href="{{ url_for('settings') }}" class="nav-link {% if request.endpoint and 'settings' in request.endpoint %}active{% endif %}">
+                    <a href="{{ url_for('settings') }}" class="nav-link {% if (ep.startswith('settings') and ep not in ['settings_print_children', 'settings_print_child_report']) or ep == 'cumulative_points' %}active{% endif %}">
                         <i class="bi bi-gear"></i>
                         설정
                     </a>

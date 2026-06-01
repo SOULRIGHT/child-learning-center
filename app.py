@@ -388,6 +388,7 @@ VIEWER_ALLOWED_ENDPOINTS = {
     'privacy_policy',
     'viewer_home',
     'viewer_report',
+    'nfc_redirect',
     'logout',
 }
 VIEWER_CODE_RE = re.compile(r'(?P<child_id>\d+)-(?P<signature>[0-9a-fA-F]{16})')
@@ -518,12 +519,36 @@ def enforce_viewer_read_only_access():
 
     # 학생열람 계정은 데이터 변경 요청 차단
     if request.method not in {'GET', 'HEAD', 'OPTIONS'}:
-        flash('학생열람 계정은 읽기 전용입니다.', 'error')
         return redirect(url_for('viewer_home'))
 
     if endpoint not in VIEWER_ALLOWED_ENDPOINTS:
-        flash('학생열람 계정은 리포트 열람 화면만 접근할 수 있습니다.', 'error')
         return redirect(url_for('viewer_home'))
+
+    return None
+
+
+@app.before_request
+def restrict_general_user_from_settings():
+    """일반사용자는 설정 페이지 접근 차단"""
+    if not current_user.is_authenticated:
+        return None
+
+    if getattr(current_user, 'role', None) != '일반사용자':
+        return None
+
+    endpoint = request.endpoint or ''
+    if endpoint == 'static':
+        return None
+
+    settings_endpoints = {
+        'settings', 'settings_users', 'settings_points', 'settings_data',
+        'settings_ui', 'settings_system', 'settings_security',
+        'settings_print_children', 'settings_print_child_report',
+    }
+
+    if endpoint in settings_endpoints:
+        flash('설정 페이지에 접근할 권한이 없습니다.', 'error')
+        return redirect(url_for('dashboard'))
 
     return None
 
@@ -3348,6 +3373,17 @@ def settings():
         flash('설정 페이지에 접근할 권한이 없습니다.', 'error')
         return redirect(url_for('dashboard'))
     return render_template('settings/index.html')
+
+@app.route('/nfc/<int:child_id>')
+@login_required
+def nfc_redirect(child_id):
+    """NFC 카드 스캔 시 역할에 따라 적절한 페이지로 분기"""
+    child = Child.query.get_or_404(child_id)
+    if current_user.role == VIEWER_ROLE_NAME:
+        slug = ensure_child_viewer_slug(child, commit=True)
+        return redirect(url_for('viewer_report', view_token=slug))
+    return redirect(url_for('points_input', child_id=child_id))
+
 
 @app.route('/viewer')
 @login_required

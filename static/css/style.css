@@ -234,6 +234,12 @@ body {
     gap: 0.5rem;
 }
 
+/* outline 버튼은 테두리 유지 */
+[class*="btn-outline-"] {
+    border-width: 1.5px !important;
+    border-style: solid !important;
+}
+
 .btn-primary {
     background: linear-gradient(135deg, var(--primary-blue), var(--primary-blue-dark));
     color: white;
@@ -855,14 +861,14 @@ input[type="date"].form-control {
 
 /* 아동 이름 - 클릭 가능 표시 */
 .child-name-link {
-    color: var(--primary-blue);
+    color: #374151;
     text-decoration: underline;
     text-underline-offset: 3px;
-    text-decoration-color: rgba(37, 99, 235, 0.4);
+    text-decoration-color: rgba(55, 65, 81, 0.3);
 }
 
 .child-row:hover .child-name-link {
-    text-decoration-color: var(--primary-blue);
+    text-decoration-color: #374151;
 }
 
 /* flex 헤더 - 좁은 화면에서 줄바꿈 */

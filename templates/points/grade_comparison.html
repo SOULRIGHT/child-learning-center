@@ -1,21 +1,23 @@
 {% extends "base.html" %}
 
-{% block page_title %}{{ grade }}학년 포인트 비교{% endblock %}
+{% block page_title %}포인트 비교{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <!-- 헤더 -->
+    <h1 class="page-title mb-2" style="font-size: 2.25rem;">{{ grade }}학년 비교</h1>
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2 class="mb-1">{{ grade }}학년 포인트 비교</h2>
-            <p class="text-muted mb-0">총 {{ children_data | length }}명의 아동</p>
-        </div>
-        <div>
-            <a href="{{ url_for('points_visualization') }}" class="btn btn-outline-secondary me-2">
-                <i class="bi bi-arrow-left"></i> 포인트 시각화
+        <p class="text-muted mb-0 small">총 {{ children_data | length }}명의 아동</p>
+        <div class="d-flex gap-1 gap-md-2 flex-shrink-0">
+            <a href="{{ url_for('points_visualization') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left d-none d-sm-inline"></i>
+                <span class="d-none d-sm-inline"> 포인트 시각화</span>
+                <span class="d-sm-none">시각화</span>
             </a>
-            <a href="{{ url_for('points_analysis') }}" class="btn btn-outline-info">
-                <i class="bi bi-chart-line"></i> 포인트 분석
+            <a href="{{ url_for('points_analysis') }}" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-chart-line d-none d-sm-inline"></i>
+                <span class="d-none d-sm-inline"> 포인트 분석</span>
+                <span class="d-sm-none">분석</span>
             </a>
         </div>
     </div>
@@ -34,7 +36,7 @@
         <div class="col-md-3">
             <div class="card">
                 <div class="card-body text-center">
-                    <h5 class="card-title text-success">평균 포인트</h5>
+                    <h5 class="card-title text-primary">평균 포인트</h5>
                     <h3 class="mb-1">{{ (children_data | map(attribute='total_points') | sum) // (children_data | length) if children_data else 0 }}점</h3>
                     <small class="text-muted">전체 아동</small>
                 </div>
@@ -43,7 +45,7 @@
         <div class="col-md-3">
             <div class="card">
                 <div class="card-body text-center">
-                    <h5 class="card-title text-warning">최고 이번 주</h5>
+                    <h5 class="card-title text-primary">최고 이번 주</h5>
                     <h3 class="mb-1">{{ (children_data | sort(attribute='this_week') | last).name if children_data else '-' }}</h3>
                     <small class="text-muted">{{ (children_data | sort(attribute='this_week') | last).this_week if children_data else 0 }}점</small>
                 </div>
@@ -52,7 +54,7 @@
         <div class="col-md-3">
             <div class="card">
                 <div class="card-body text-center">
-                    <h5 class="card-title text-info">최고 이번 달</h5>
+                    <h5 class="card-title text-primary">최고 이번 달</h5>
                     <h3 class="mb-1">{{ (children_data | sort(attribute='this_month') | last).name if children_data else '-' }}</h3>
                     <small class="text-muted">{{ (children_data | sort(attribute='this_month') | last).this_month if children_data else 0 }}점</small>
                 </div>
@@ -145,7 +147,6 @@
                             <th>이번 달</th>
                             <th>평균 포인트</th>
                             <th>기록 수</th>
-                            <th>상태</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -157,7 +158,7 @@
                                 {% elif loop.index == 2 %}
                                     <span class="badge bg-secondary">🥈</span>
                                 {% elif loop.index == 3 %}
-                                    <span class="badge bg-danger">🥉</span>
+                                    <span class="badge" style="background-color: #cd7f32;">🥉</span>
                                 {% else %}
                                     <span class="badge bg-light text-dark">{{ loop.index }}</span>
                                 {% endif %}
@@ -176,17 +177,8 @@
                             <td>
                                 <span class="text-success">{{ child.this_month }}점</span>
                             </td>
-                            <td>{{ child.avg_points }}점</td>
+                            <td>{{ child.avg_points | round(0) | int }}점</td>
                             <td>{{ child.record_count }}회</td>
-                            <td>
-                                {% if child.total_points > children_data[0].total_points * 0.8 %}
-                                    <span class="badge bg-success">상위권</span>
-                                {% elif child.total_points > children_data[0].total_points * 0.5 %}
-                                    <span class="badge bg-warning">중위권</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">하위권</span>
-                                {% endif %}
-                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
