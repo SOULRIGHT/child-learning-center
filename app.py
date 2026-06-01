@@ -386,6 +386,7 @@ VIEWER_ROLE_NAME = '학생열람'
 VIEWER_ALLOWED_ENDPOINTS = {
     'index',
     'privacy_policy',
+    'changelog',
     'viewer_home',
     'viewer_report',
     'nfc_redirect',
@@ -4058,6 +4059,12 @@ def profile():
 def privacy_policy():
     """개인정보보호 및 시스템 보안 정책 페이지"""
     return render_template('privacy_policy.html')
+
+@app.route('/changelog')
+@login_required
+def changelog():
+    """업데이트 내역 페이지"""
+    return render_template('changelog.html')
 
 @app.route('/settings/system')
 @login_required

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}업데이트 내역 - 지역아동센터 학습관리{% endblock %}
+{% block page_title %}업데이트 내역{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="mb-4">
+        <p class="text-muted mb-0">시스템 주요 변경 및 개선 내역입니다.</p>
+    </div>
+
+    <!-- v2.0 -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="d-flex align-items-center mb-3">
+                <span class="badge bg-primary me-2">v2.0</span>
+                <span class="fw-semibold">2026년 5~6월</span>
+                <span class="badge bg-success ms-2">최신</span>
+            </div>
+            <ul class="list-unstyled mb-0">
+                <li class="mb-2 d-flex align-items-start">
+                    <span class="text-primary me-2 mt-1" style="font-size: 0.5rem;">&#9679;</span>
+                    <span>개인 리포트 기능 추가 — 아동별 과목 포인트 추이, 활동 기록, 학년 내 순위를 한 페이지에서 확인할 수 있습니다.</span>
+                </li>
+                <li class="mb-2 d-flex align-items-start">
+                    <span class="text-primary me-2 mt-1" style="font-size: 0.5rem;">&#9679;</span>
+                    <span>QR 코드 및 NFC 카드 연동 — 카드를 찍으면 선생님은 포인트 입력 화면으로, 학생은 본인 리포트로 바로 이동합니다.</span>
+                </li>
+                <li class="mb-2 d-flex align-items-start">
+                    <span class="text-primary me-2 mt-1" style="font-size: 0.5rem;">&#9679;</span>
+                    <span>사용자 계정 확대 — 자원봉사 선생님 계정이 추가되었으며, 역할에 따라 접근 가능한 기능이 구분됩니다.</span>
+                </li>
+                <li class="mb-2 d-flex align-items-start">
+                    <span class="text-primary me-2 mt-1" style="font-size: 0.5rem;">&#9679;</span>
+                    <span>학년별 포인트 비교 화면 개선 — 불필요한 등급 표시를 제거하고 평균 포인트와 순위 중심으로 정리했습니다.</span>
+                </li>
+                <li class="d-flex align-items-start">
+                    <span class="text-primary me-2 mt-1" style="font-size: 0.5rem;">&#9679;</span>
+                    <span>전체 화면 디자인 리뉴얼 — 모바일 환경 전반에 걸쳐 레이아웃, 버튼, 색상을 개선했습니다.</span>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- v1.0 -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="d-flex align-items-center mb-3">
+                <span class="badge bg-secondary me-2">v1.0</span>
+                <span class="fw-semibold">2025년 8월 — 최초 출시</span>
+            </div>
+            <ul class="list-unstyled mb-0">
+                <li class="mb-2 d-flex align-items-start">
+                    <span class="text-secondary me-2 mt-1" style="font-size: 0.5rem;">&#9679;</span>
+                    <span>아동 등록 및 관리 — 가명 기반으로 아동 정보를 안전하게 관리합니다.</span>
+                </li>
+                <li class="mb-2 d-flex align-items-start">
+                    <span class="text-secondary me-2 mt-1" style="font-size: 0.5rem;">&#9679;</span>
+                    <span>8개 과목 포인트 입력 및 기록 — 국어, 수학, 쎈수학, 독서, 피아노, 영어, 고학년수학, 쓰기 기록을 매일 입력합니다.</span>
+                </li>
+                <li class="mb-2 d-flex align-items-start">
+                    <span class="text-secondary me-2 mt-1" style="font-size: 0.5rem;">&#9679;</span>
+                    <span>학년별 포인트 현황 비교 — 같은 학년 아동들의 포인트를 한눈에 비교합니다.</span>
+                </li>
+                <li class="mb-2 d-flex align-items-start">
+                    <span class="text-secondary me-2 mt-1" style="font-size: 0.5rem;">&#9679;</span>
+                    <span>포인트 시각화 — 기간별 포인트 변화 추이를 그래프로 확인합니다.</span>
+                </li>
+                <li class="mb-2 d-flex align-items-start">
+                    <span class="text-secondary me-2 mt-1" style="font-size: 0.5rem;">&#9679;</span>
+                    <span>알림 기능 — 백업 완료, 시스템 상태 등 주요 사항을 알림으로 전달합니다.</span>
+                </li>
+                <li class="d-flex align-items-start">
+                    <span class="text-secondary me-2 mt-1" style="font-size: 0.5rem;">&#9679;</span>
+                    <span>구글 계정 기반 로그인 — Firebase 인증을 통해 안전하게 접속합니다.</span>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="text-center mt-4 mb-2">
+        <small class="text-muted">문의 사항은 개발자에게 알려주세요.</small>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{
+  "backup_metadata": {
+    "backup_id": "2025-08-29_20-10-43",
+    "backup_type": "realtime",
+    "timestamp": "2025-08-29T20:10:43.124708",
+    "action_type": "update",
+    "child_id": 16
+  },
+  "backup_time": "2025-08-29 20:10:43",
+  "child_info": {
+    "name": "김지원",
+    "grade": 4
+  },
+  "points_data": {
+    "today_date": "2025-08-29",
+    "korean_points": 100,
+    "math_points": 100,
+    "ssen_points": 100,
+    "reading_points": 100,
+    "total_points": 400
+  }
+}

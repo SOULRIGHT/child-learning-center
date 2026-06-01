@@ -996,6 +996,33 @@ document.querySelectorAll('.manual-preset').forEach((button) => {
 });
 
 document.addEventListener('DOMContentLoaded', function() {
+    // PC/모바일 라디오가 같은 name을 공유하므로, 실제 checked된 value 기준으로
+    // 같은 name + 같은 value인 모든 label에 active 적용
+    function syncRadioActive(name) {
+        const allInGroup = document.querySelectorAll('.btn-check[name="' + name + '"]');
+        const checked = document.querySelector('.btn-check[name="' + name + '"]:checked');
+        const checkedValue = checked ? checked.value : null;
+        allInGroup.forEach(function(r) {
+            const lbl = document.querySelector('label[for="' + r.id + '"]');
+            if (!lbl) return;
+            if (checkedValue !== null && r.value === checkedValue) {
+                lbl.classList.add('active');
+            } else {
+                lbl.classList.remove('active');
+            }
+        });
+    }
+
+    // 페이지 로드 시 전체 동기화
+    const radioNames = new Set();
+    document.querySelectorAll('.btn-check').forEach(function(r) { radioNames.add(r.name); });
+    radioNames.forEach(syncRadioActive);
+
+    // 클릭 시 동기화
+    document.querySelectorAll('.btn-check').forEach(function(radio) {
+        radio.addEventListener('change', function() { syncRadioActive(this.name); });
+    });
+
     parseInitialManualEntries();
     updateTotalScore();
     console.log('🚀 포인트 입력 페이지 로드 완료');

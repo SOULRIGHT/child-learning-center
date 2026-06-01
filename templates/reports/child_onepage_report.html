@@ -8,7 +8,7 @@
 <div class="d-flex align-items-center gap-2 mb-3 flex-wrap report-controls">
         {% if is_viewer_mode %}
         <a href="{{ url_for('viewer_home') }}" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-arrow-left me-1"></i>안내
+            <i class="bi bi-arrow-left me-1"></i>나가기
         </a>
         {% else %}
         <a href="{{ url_for('settings_print_children') }}" class="btn btn-outline-secondary btn-sm">
@@ -35,7 +35,7 @@
         <div class="card-body p-4">
             <div class="d-flex justify-content-between align-items-start mb-3">
                 <div>
-                    <h3 class="mb-1 fw-bold">개인 포인트 리포트</h3>
+                    <h3 class="mb-1 fw-bold">포인트 리포트</h3>
                     <p class="text-muted mb-0">{{ child.name }} ({{ child.grade }}학년)</p>
                 </div>
                 <div class="report-header-right">

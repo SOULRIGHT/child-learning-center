@@ -43,6 +43,15 @@
         </div>
     </div>
 
+    <!-- 업데이트 내역 배너 -->
+    <div class="alert mb-3 d-flex align-items-center justify-content-between py-2" style="background-color: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 8px;">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-stars text-primary"></i>
+            <span class="small">시스템 업데이트가 있습니다.</span>
+        </div>
+        <a href="{{ url_for('changelog') }}" class="btn btn-sm btn-outline-primary py-0 px-2">업데이트 내역 보기</a>
+    </div>
+
     <!-- 알림 목록 -->
     <div class="row">
         <div class="col-12">

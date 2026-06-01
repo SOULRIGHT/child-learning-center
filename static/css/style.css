@@ -536,7 +536,7 @@ body {
     
     .content-area {
         margin-top: 50px;
-        padding: 0.75rem;
+        padding: 0.25rem 0.75rem;
     }
     
     .user-menu .dropdown {
@@ -705,6 +705,8 @@ body {
     /* 햄버거 버튼 공간 확보 - top-navbar 자체에 padding 적용 */
     .top-navbar {
         padding-left: 70px;
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
     }
 
     /* page-title 별도 margin 불필요 (navbar padding으로 처리) */
@@ -948,4 +950,40 @@ input[type="date"].form-control {
     font-size: 1rem;
     color: #9ca3af;
     flex-shrink: 0;
+}
+
+/* 포인트 입력 - 부분(warning) 버튼 연주황색 */
+.btn-outline-warning {
+    color: #d97706 !important;
+    border-color: #d97706 !important;
+}
+.btn-check:checked + .btn-outline-warning,
+.btn-outline-warning:hover {
+    background-color: #d97706 !important;
+    border-color: #d97706 !important;
+    color: #fff !important;
+}
+
+/* 포인트 입력 - 미완료(secondary) 버튼 checked/active 시 명확히 표시 */
+.btn-check:checked + .btn-outline-secondary,
+.btn-outline-secondary.active {
+    background-color: #6b7280 !important;
+    border-color: #6b7280 !important;
+    color: #fff !important;
+}
+
+/* 포인트 입력 - 완벽(success) 버튼 active 시 */
+.btn-check:checked + .btn-outline-success,
+.btn-outline-success.active {
+    background-color: #16a34a !important;
+    border-color: #16a34a !important;
+    color: #fff !important;
+}
+
+/* 포인트 입력 - 부분(warning) 버튼 active 시 */
+.btn-check:checked + .btn-outline-warning,
+.btn-outline-warning.active {
+    background-color: #d97706 !important;
+    border-color: #d97706 !important;
+    color: #fff !important;
 }

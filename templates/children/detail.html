@@ -4,31 +4,29 @@
 {% block page_title %}{{ child.name }} 상세정보{% endblock %}
 
 {% block content %}
-<!-- 헤더 섹션 -->
-<div class="d-flex align-items-center justify-content-between mb-4">
+<!-- 헤더 섹션 - PC -->
+<div class="d-none d-md-flex align-items-center justify-content-between mb-4">
     <div class="d-flex align-items-center">
-        <a href="{{ url_for('children_list') }}" class="btn btn-outline-secondary me-3">
+        <a href="{{ url_for('children_list') }}" class="btn btn-outline-primary me-3">
             <i class="bi bi-arrow-left"></i>
         </a>
-        <div class="d-flex align-items-center">
-            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-3"
-                 style="width: 60px; height: 60px; font-size: 1.5rem; font-weight: 700;">
-                {{ child.name[0] }}
-            </div>
-            <div>
-                <h3 class="fw-bold text-dark mb-1">{{ child.name }}</h3>
-                <p class="text-muted mb-0">{{ child.grade }}학년 • 등록일: {{ child.created_at | kst_strftime('%Y.%m.%d') }}</p>
-            </div>
+        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-3"
+             style="width: 60px; height: 60px; font-size: 1.5rem; font-weight: 700;">
+            {{ child.name[0] }}
+        </div>
+        <div>
+            <h3 class="fw-bold text-dark mb-1">{{ child.name }}</h3>
+            <p class="text-muted mb-0">{{ child.grade }}학년 • 등록일: {{ child.created_at | kst_strftime('%Y.%m.%d') }}</p>
         </div>
     </div>
     <div class="btn-group">
         <a href="{{ url_for('points_input', child_id=child.id) }}" class="btn btn-primary">
             <i class="bi bi-plus-circle me-2"></i>포인트 입력
         </a>
-        <a href="{{ url_for('points_analysis', child_id=child.id) }}" class="btn btn-outline-info">
+        <a href="{{ url_for('points_analysis', child_id=child.id) }}" class="btn btn-outline-primary">
             <i class="bi bi-graph-up me-2"></i>포인트 분석
         </a>
-        <a href="{{ url_for('points_history', child_id=child.id) }}" class="btn btn-outline-warning">
+        <a href="{{ url_for('points_history', child_id=child.id) }}" class="btn btn-outline-primary">
             <i class="bi bi-clock-history me-2"></i>변경 이력
         </a>
         <a href="{{ url_for('edit_child', child_id=child.id) }}" class="btn btn-outline-primary">
@@ -37,9 +35,44 @@
     </div>
 </div>
 
+<!-- 헤더 섹션 - 모바일 -->
+<div class="d-md-none mb-3">
+    <!-- 첫 줄: 뒤로가기 + 오른쪽 정렬 이름 -->
+    <div class="d-flex align-items-center justify-content-between mb-0">
+        <a href="{{ url_for('children_list') }}" class="btn btn-outline-primary btn-sm" style="flex-shrink:0;">
+            <i class="bi bi-arrow-left"></i>
+        </a>
+        <div class="d-flex align-items-center gap-2">
+            <div class="text-end">
+                <h3 class="fw-bold text-dark mb-0 fs-5 lh-1">{{ child.name }}</h3>
+                <small class="text-muted">{{ child.grade }}학년 • {{ child.created_at | kst_strftime('%Y.%m.%d') }}</small>
+            </div>
+            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center"
+                 style="width: 40px; height: 40px; font-size: 1rem; font-weight: 700; flex-shrink: 0;">
+                {{ child.name[0] }}
+            </div>
+        </div>
+    </div>
+    <!-- 둘째 줄: 액션 버튼 균등 배치 -->
+    <div class="d-flex gap-1" style="margin-top: 2rem; margin-bottom: 2rem;">
+        <a href="{{ url_for('points_input', child_id=child.id) }}" class="btn btn-primary flex-fill text-center text-nowrap" style="font-size:0.78rem; padding: 0.65rem 0.25rem;">
+            <i class="bi bi-plus-circle"></i> 입력
+        </a>
+        <a href="{{ url_for('points_analysis', child_id=child.id) }}" class="btn btn-outline-primary flex-fill text-center text-nowrap" style="font-size:0.78rem; padding: 0.65rem 0.25rem;">
+            <i class="bi bi-graph-up"></i> 분석
+        </a>
+        <a href="{{ url_for('points_history', child_id=child.id) }}" class="btn btn-outline-primary flex-fill text-center text-nowrap" style="font-size:0.78rem; padding: 0.65rem 0.25rem;">
+            <i class="bi bi-clock-history"></i> 이력
+        </a>
+        <a href="{{ url_for('edit_child', child_id=child.id) }}" class="btn btn-outline-primary flex-fill text-center text-nowrap" style="font-size:0.78rem; padding: 0.65rem 0.25rem;">
+            <i class="bi bi-pencil"></i> 수정
+        </a>
+    </div>
+</div>
+
 <!-- 통계 요약 카드 -->
-<div class="row mb-4 mt-5">
-    <div class="col-lg-3 col-md-6 mb-3">
+<div class="row mb-4 mt-3">
+    <div class="col-lg-3 col-md-6 col-6 mb-3">
         <div class="stat-card">
             <div class="stat-content">
                 <div>
@@ -53,12 +86,12 @@
         </div>
     </div>
     
-    <div class="col-lg-3 col-md-6 mb-3">
+    <div class="col-lg-3 col-md-6 col-6 mb-3">
         <div class="stat-card">
             <div class="stat-content">
                 <div>
                     <div class="stat-number">{{ total_records }}</div>
-                    <div class="stat-label">총 포인트 기록</div>
+                    <div class="stat-label">기록 수</div>
                 </div>
                 <div class="stat-icon">
                     <i class="bi bi-journal-text"></i>
@@ -67,7 +100,7 @@
         </div>
     </div>
     
-    <div class="col-lg-3 col-md-6 mb-3">
+    <div class="col-lg-3 col-md-6 col-6 mb-3">
         <div class="stat-card">
             <div class="stat-content">
                 <div>
@@ -81,7 +114,7 @@
         </div>
     </div>
     
-    <div class="col-lg-3 col-md-6 mb-3">
+    <div class="col-lg-3 col-md-6 col-6 mb-3">
         <div class="stat-card">
             <div class="stat-content">
                 <div>

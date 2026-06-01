@@ -143,7 +143,7 @@
                 <div class="spinner-border text-primary" role="status">
                     <span class="visually-hidden">로딩 중...</span>
                 </div>
-                <p class="mt-2 text-muted">Firebase 인증을 초기화하는 중...</p>
+                <p class="mt-2 text-muted">로그인 하는 중...</p>
             </div>
 
             <!-- 에러 메시지 -->
@@ -168,59 +168,10 @@
                             </div>
                         </div>
 
-            <div class="mt-4">
-                <div class="accordion" id="systemInfoAccordion">
-                    <div class="accordion-item border-0">
-                         <h2 class="accordion-header">
-                             <div class="text-center">
-                                 <button class="btn btn-outline-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#collapseInfo">
-                                     <i class="bi bi-info-circle me-2"></i>시스템 정보
-                                 </button>
-                             </div>
-                         </h2>
-                        <div id="collapseInfo" class="accordion-collapse collapse" data-bs-parent="#systemInfoAccordion">
-                            <div class="accordion-body p-3">
-                                <div class="row g-2">
-                                    <div class="col-12">
-                                        <div class="border rounded p-2 bg-light small">
-                                            <div class="text-center">
-                                                <strong class="text-primary">지역아동센터 학습관리 시스템</strong>
-                                                <br>
-                                                <small class="text-muted">아동별 학습 진도 및 포인트 관리</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="col-12">
-                                        <div class="border rounded p-2 bg-light small">
-                                            <div class="text-center">
-                                                <strong class="text-success">주요 기능</strong>
-                                                <br>
-                                                <small class="text-muted">• 아동 관리 • 포인트 입력 • 통계 분석 • 리포트 생성</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="col-12">
-                                        <div class="border rounded p-2 bg-light small">
-                                            <div class="text-center">
-                                                <strong class="text-info">Firebase 보안</strong>
-                                                <br>
-                                                <small class="text-muted">• Google 수준 보안 • 자동 비밀번호 관리 • 안전한 인증</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
             <div class="text-center mt-4">
                 <small class="text-muted">
                     <i class="bi bi-shield-check me-1"></i>
-                    Firebase 기반 안전한 학습 데이터 관리 시스템
+                    구글 로그인 기반 안전 시스템
                 </small>
             </div>
         </div>
@@ -298,14 +249,8 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        // 성공 메시지 표시
-                        document.getElementById('successMessage').style.display = 'block';
-                        document.getElementById('successText').textContent = 'Firebase 인증 성공! 페이지로 이동합니다...';
-                        
-                        // 잠시 후 리다이렉트
-                        setTimeout(function() {
-                            window.location.href = data.redirect;
-                        }, 1500);
+                        // 바로 리다이렉트 (성공 메시지 없이)
+                        window.location.href = data.redirect;
                     } else {
                         // 에러 메시지 표시
                         document.getElementById('errorMessage').style.display = 'block';
@@ -322,15 +267,15 @@
                     let errorMessage = '로그인 오류가 발생했습니다.';
                     
                     if (error.code === 'auth/invalid-login-credentials' || error.code === 'auth/wrong-password') {
-                        errorMessage = '이메일 또는 비밀번호가 올바르지 않습니다.';
+                        errorMessage = '아이디 또는 비밀번호가 일치하지 않습니다.';
                     } else if (error.code === 'auth/user-not-found') {
-                        errorMessage = '존재하지 않는 사용자입니다.';
+                        errorMessage = '아이디 또는 비밀번호가 일치하지 않습니다.';
                     } else if (error.code === 'auth/user-disabled') {
                         errorMessage = '비활성화된 계정입니다. 관리자에게 문의하세요.';
                     } else if (error.code === 'auth/invalid-email') {
                         errorMessage = '올바른 이메일 형식이 아닙니다.';
-                    } else if (error.code === 'auth/internal-error') {
-                        errorMessage = 'Firebase 서버 오류입니다. 잠시 후 다시 시도해주세요.';
+                    } else {
+                        errorMessage = '아이디 또는 비밀번호가 일치하지 않습니다.';
                     }
                     
                     document.getElementById('errorText').textContent = errorMessage;

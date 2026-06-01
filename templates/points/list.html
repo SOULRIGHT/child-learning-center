@@ -116,7 +116,7 @@
                                     <td>
                                         <strong class="text-primary">{{ record.total_points }}</strong>
                                     </td>
-                                    <td>{{ record.creator.name if record.creator else '-' }}</td>
+                                    <td>{{ record.creator.role if record.creator else '-' }}</td>
                                     <td class="extra-points-cell">
                                         {% if extra.items %}
                                         {% set target_id = 'points-extra-card-' ~ loop.index0 %}
