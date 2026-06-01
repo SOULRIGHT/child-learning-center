@@ -1,7 +1,0 @@
-{
-  "database_type": "postgresql",
-  "backup_time": "2026-05-26T22:42:45.008514",
-  "backup_type": "daily",
-  "contains_database_dump": false,
-  "warning": "이 파일은 PostgreSQL 복구용 덤프가 아닙니다. 복구용 백업은 scripts/backup/pg_dump_backup.ps1 스크립트를 사용하세요."
-}
