@@ -23,15 +23,12 @@ def upgrade():
     existing_indexes = [idx['name'] for idx in inspector.get_indexes('child')]
 
     if 'viewer_slug' not in existing_columns:
-        with op.batch_alter_table('child', schema=None) as batch_op:
-            batch_op.add_column(sa.Column('viewer_slug', sa.String(length=24), nullable=True))
+        op.add_column('child', sa.Column('viewer_slug', sa.String(length=24), nullable=True))
 
     if 'ix_child_viewer_slug' not in existing_indexes:
-        with op.batch_alter_table('child', schema=None) as batch_op:
-            batch_op.create_index('ix_child_viewer_slug', ['viewer_slug'], unique=True)
+        op.create_index('ix_child_viewer_slug', 'child', ['viewer_slug'], unique=True)
 
 
 def downgrade():
-    with op.batch_alter_table('child', schema=None) as batch_op:
-        batch_op.drop_index('ix_child_viewer_slug')
-        batch_op.drop_column('viewer_slug')
+    op.drop_index('ix_child_viewer_slug', table_name='child')
+    op.drop_column('child', 'viewer_slug')
