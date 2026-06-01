@@ -5645,6 +5645,15 @@ else:
         # Firebase 초기화
         initialize_firebase()
         db.create_all()
+        # 운영 DB 컬럼 보정 (alembic 상태 무관하게 누락 컬럼 추가)
+        try:
+            from sqlalchemy import text
+            with db.engine.connect() as _conn:
+                _conn.execute(text('ALTER TABLE child ADD COLUMN IF NOT EXISTS viewer_slug VARCHAR(24)'))
+                _conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS ix_child_viewer_slug ON child(viewer_slug)'))
+                _conn.commit()
+        except Exception:
+            pass
         # 기본 사용자가 없으면 생성 (한 번만) - Firebase 사용 시 임시 비활성화
         # if not User.query.filter_by(username='center_head').first():
         #     # init_db() 제거 - 실제 데이터 보호
