@@ -1188,11 +1188,19 @@ def firebase_login():
                 db.session.add(user)
                 db.session.commit()
                 print(f"✅ 새 Firebase 사용자 생성: {email}")
-            elif not user.firebase_uid:
-                # 기존 사용자에 firebase_uid 추가
-                user.firebase_uid = firebase_uid
-                db.session.commit()
-                print(f"✅ 기존 사용자 Firebase UID 업데이트: {email}")
+            else:
+                # 기존 사용자 — firebase_uid 및 role 항상 최신화
+                updated = False
+                if not user.firebase_uid:
+                    user.firebase_uid = firebase_uid
+                    updated = True
+                new_role = get_user_role_from_email(email)
+                if user.role != new_role:
+                    user.role = new_role
+                    updated = True
+                if updated:
+                    db.session.commit()
+                    print(f"✅ 기존 사용자 정보 업데이트: {email} → {user.role}")
             
             # Firebase 사용자로 로그인
             login_user(user)
