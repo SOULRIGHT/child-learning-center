@@ -56,7 +56,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production-firebase-auth')
 
 # === 🔐 보안 설정 (2025-09-21 추가) ===
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)  # 30분 세션 타임아웃
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=4)  # 4시간 세션 타임아웃, ux고려 느슨한 시간
 app.config['SESSION_COOKIE_HTTPONLY'] = True  # JavaScript로 쿠키 접근 차단
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # 기본 CSRF 공격 방지
 app.config['SESSION_COOKIE_SECURE'] = False  # 개발환경: False, 프로덕션: True

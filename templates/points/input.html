@@ -405,7 +405,7 @@
                             </div>
                         </div>
 
-                        <!-- 고학년수학 -->
+                        {# 고학년수학 - 일시 비활성화
                         <div class="mb-4">
                             <h5 class="text-muted">고학년수학</h5>
                             <div class="btn-group w-100 d-none d-sm-flex" role="group">
@@ -429,6 +429,7 @@
                                 <label class="btn btn-outline-secondary flex-fill mobile-radio-btn" for="advanced_math_0m"><span class="mpb-main">미완료</span><span class="mpb-pts">0점</span></label>
                             </div>
                         </div>
+                        #}
 
                         <!-- 쓰기 -->
                         <div class="mb-4">
@@ -591,10 +592,12 @@
                                     <small class="text-muted d-block">영어</small>
                                     <span id="english_preview">0</span>점
                                 </div>
+                                {# 고학년수학 미리보기 - 일시 비활성화
                                 <div class="col">
                                     <small class="text-muted d-block">고학년수학</small>
                                     <span id="advanced_math_preview">0</span>점
                                 </div>
+                                #}
                                 <div class="col">
                                     <small class="text-muted d-block">쓰기</small>
                                     <span id="writing_preview">0</span>점
@@ -888,7 +891,8 @@ function updateTotalScore() {
         document.getElementById('reading_preview').textContent = reading;
         document.getElementById('piano_preview').textContent = piano;
         document.getElementById('english_preview').textContent = english;
-        document.getElementById('advanced_math_preview').textContent = advanced_math;
+        const advancedMathPreview = document.getElementById('advanced_math_preview');
+        if (advancedMathPreview) advancedMathPreview.textContent = advanced_math;
         document.getElementById('writing_preview').textContent = writing;
         document.getElementById('manual_preview').textContent = manual;
         
