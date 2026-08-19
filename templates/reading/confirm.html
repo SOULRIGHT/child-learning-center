@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}아동 확인{% endblock %}
+{% block page_title %}아동 확인{% endblock %}
+
+{% block extra_css %}
+<style>
+.reading-confirm-wrap { max-width: 560px; margin: 1.5rem auto; }
+.reading-confirm-card { border-radius: 18px; }
+.reading-confirm-name { font-size: 1.75rem; font-weight: 800; }
+.reading-confirm-actions .btn { min-height: 56px; font-size: 1.1rem; border-radius: 14px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="reading-confirm-wrap">
+    <div class="card reading-confirm-card shadow-sm">
+        <div class="card-body p-4 text-center">
+            <p class="text-muted mb-2">독서 기록 전에 한 번 확인해요</p>
+            <p class="reading-confirm-name mb-3">{{ child.name }} 아동이 맞나요?</p>
+            <form method="post" class="reading-confirm-actions">
+                <div class="d-grid gap-2">
+                    <button type="submit" name="confirm" value="yes" class="btn btn-primary">네, 맞아요</button>
+                    <button type="submit" name="confirm" value="no" class="btn btn-outline-secondary">아니요</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

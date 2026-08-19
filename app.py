@@ -411,6 +411,21 @@ def make_session_permanent():
 
 VIEWER_ROLE_NAME = '학생열람'
 app.config['VIEWER_ROLE_NAME'] = VIEWER_ROLE_NAME
+
+def _config_iso_date(env_name, default):
+    raw = (os.environ.get(env_name) or default).strip()
+    try:
+        return datetime.strptime(raw, '%Y-%m-%d').date()
+    except ValueError:
+        return datetime.strptime(default, '%Y-%m-%d').date()
+
+app.config['GENERAL_READING_V2_START_DATE'] = _config_iso_date(
+    'GENERAL_READING_V2_START_DATE', '2099-01-01'
+)
+app.config['VIEWER_CHILD_WRITE_TTL_MINUTES'] = int(
+    os.environ.get('VIEWER_CHILD_WRITE_TTL_MINUTES') or '15'
+)
+
 VIEWER_ALLOWED_ENDPOINTS = {
     'index',
     'privacy_policy',
@@ -419,7 +434,15 @@ VIEWER_ALLOWED_ENDPOINTS = {
     'viewer_report',
     'nfc_redirect',
     'books.search_books',
+    'reading.viewer_confirm',
+    'reading.viewer_editor',
     'logout',
+}
+VIEWER_WRITE_ENDPOINTS = {
+    'reading.viewer_confirm',
+    'reading.viewer_start',
+    'reading.viewer_save',
+    'reading.viewer_abandon',
 }
 VIEWER_CODE_RE = re.compile(r'(?P<child_id>\d+)-(?P<signature>[0-9a-fA-F]{16})')
 
@@ -547,9 +570,11 @@ def enforce_viewer_read_only_access():
     if endpoint == 'static':
         return None
 
-    # 학생열람 계정은 데이터 변경 요청 차단
+    # 학생열람 계정은 데이터 변경 요청 차단. 독서 관련 endpoint만 whitelist.
     if request.method not in {'GET', 'HEAD', 'OPTIONS'}:
-        return redirect(url_for('viewer_home'))
+        if endpoint not in VIEWER_WRITE_ENDPOINTS:
+            return redirect(url_for('viewer_home'))
+        return None
 
     if endpoint not in VIEWER_ALLOWED_ENDPOINTS:
         return redirect(url_for('viewer_home'))
@@ -1495,6 +1520,8 @@ def delete_child(child_id):
     
     try:
         # PointsHistory, Notification은 cascade 없음 → 삭제 전에 수동 제거 (FK 오류 방지)
+        from features.reading.service import delete_readings_for_child
+        delete_readings_for_child(child_id)
         PointsHistory.query.filter_by(child_id=child_id).delete()
         Notification.query.filter(Notification.child_id == child_id).delete(synchronize_session=False)
         # 관련 기록들도 함께 삭제됨 (LearningRecord, ChildNote, DailyPoints는 cascade)
@@ -2649,6 +2676,11 @@ def points_input(child_id):
             math_points = int(request.form.get('math_points', 0))
             ssen_points = int(request.form.get('ssen_points', 0))
             reading_points = int(request.form.get('reading_points', 0))
+            from features.reading.policy import validate_reading_points
+            reading_ok, reading_msg = validate_reading_points(selected_date, reading_points)
+            if not reading_ok:
+                flash(f'❌ {reading_msg}', 'error')
+                return redirect(url_for('points_input', child_id=child_id, date=selected_date.isoformat()))
         
             # 새 과목들 (2025-09-17 추가)
             piano_points = int(request.form.get('piano_points', 0))
@@ -2873,6 +2905,11 @@ def points_input(child_id):
         baseline_cumulative_points -= selected_record.total_points or 0
         if baseline_cumulative_points < 0:
             baseline_cumulative_points = 0
+
+    from features.reading.policy import is_general_reading_v2
+    from features.reading.service import snapshot_for_date
+    reading_snapshot = snapshot_for_date(child_id, selected_date)
+    reading_policy_v2 = is_general_reading_v2(selected_date)
     
     return render_template('points/input.html', 
                           child=child, 
@@ -2884,7 +2921,10 @@ def points_input(child_id):
                           today_iso=today_iso,
                           total_cumulative_points=total_cumulative_points,
                           baseline_cumulative_points=baseline_cumulative_points,
-                          manual_entries=manual_entries_for_template)
+                          manual_entries=manual_entries_for_template,
+                          reading_policy_v2=reading_policy_v2,
+                          reading_has_today_record=reading_snapshot['has_today_record'],
+                          reading_current_book_title=reading_snapshot['current_book_title'])
 
 def update_cumulative_points(child_id, commit=True):
     """아동의 누적 포인트를 자동으로 업데이트"""
@@ -4022,11 +4062,14 @@ def settings_data():
             
             try:
                 # 학기 초기화: 아동/사용자는 유지하고 기록성 데이터만 삭제
+                from feature_models import ChildReading, ReadingDay
                 PointsHistory.query.delete()
                 Notification.query.delete()
                 ChildNote.query.delete()
                 DailyPoints.query.delete()
                 LearningRecord.query.delete()
+                ReadingDay.query.delete()
+                ChildReading.query.delete()
 
                 # 아동별 누적 포인트 초기화 + viewer slug 재발급
                 children = Child.query.all()
@@ -5013,6 +5056,40 @@ def get_backup_data():
                 'updated_at': book.updated_at.isoformat() if book.updated_at else None,
             })
 
+        child_readings = ChildReading.query.order_by(ChildReading.id.asc()).all()
+        child_readings_data = []
+        for reading in child_readings:
+            child_readings_data.append({
+                'id': reading.id,
+                'child_id': reading.child_id,
+                'book_id': reading.book_id,
+                'started_on': reading.started_on.isoformat() if reading.started_on else None,
+                'completed_on': reading.completed_on.isoformat() if reading.completed_on else None,
+                'ended_on': reading.ended_on.isoformat() if reading.ended_on else None,
+                'status': reading.status,
+                'program_type': reading.program_type,
+                'policy_version': reading.policy_version,
+                'created_by_user_id': reading.created_by_user_id,
+                'actor_type': reading.actor_type,
+                'created_at': reading.created_at.isoformat() if reading.created_at else None,
+                'updated_at': reading.updated_at.isoformat() if reading.updated_at else None,
+            })
+
+        reading_days = ReadingDay.query.order_by(ReadingDay.id.asc()).all()
+        reading_days_data = []
+        for day in reading_days:
+            reading_days_data.append({
+                'id': day.id,
+                'child_reading_id': day.child_reading_id,
+                'date': day.date.isoformat() if day.date else None,
+                'review_text': day.review_text,
+                'created_by_user_id': day.created_by_user_id,
+                'actor_type': day.actor_type,
+                'policy_version': day.policy_version,
+                'created_at': day.created_at.isoformat() if day.created_at else None,
+                'updated_at': day.updated_at.isoformat() if day.updated_at else None,
+            })
+
         # 사용자 정보
         users = User.query.all()
         users_data = []
@@ -5038,7 +5115,9 @@ def get_backup_data():
                     'points_history': len(history_data),
                     'child_notes': len(notes_data),
                     'users': len(users_data),
-                    'books': len(books_data)
+                    'books': len(books_data),
+                    'child_readings': len(child_readings_data),
+                    'reading_days': len(reading_days_data),
                 }
             },
             'children': children_data,
@@ -5046,7 +5125,9 @@ def get_backup_data():
             'points_history': history_data,
             'child_notes': notes_data,
             'users': users_data,
-            'books': books_data
+            'books': books_data,
+            'child_readings': child_readings_data,
+            'reading_days': reading_days_data,
         }
         
         return backup_data, None
@@ -5186,6 +5267,45 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
                 book.get('created_at'),
                 book.get('updated_at'),
             ])
+
+        ws_readings = wb.create_sheet("독서책이력")
+        ws_readings.append([
+            'ID', '아동ID', '도서ID', '시작일', '완독일', '종료일', '상태',
+            '프로그램', '정책버전', '작성자ID', '작성자유형', '생성일', '수정일'
+        ])
+        for reading in backup_data.get('child_readings', []):
+            ws_readings.append([
+                reading.get('id'),
+                reading.get('child_id'),
+                reading.get('book_id'),
+                reading.get('started_on'),
+                reading.get('completed_on'),
+                reading.get('ended_on'),
+                reading.get('status'),
+                reading.get('program_type'),
+                reading.get('policy_version'),
+                reading.get('created_by_user_id'),
+                reading.get('actor_type'),
+                reading.get('created_at'),
+                reading.get('updated_at'),
+            ])
+
+        ws_days = wb.create_sheet("일별독서기록")
+        ws_days.append([
+            'ID', '독서이력ID', '날짜', '감상', '작성자ID', '작성자유형', '정책버전', '생성일', '수정일'
+        ])
+        for day in backup_data.get('reading_days', []):
+            ws_days.append([
+                day.get('id'),
+                day.get('child_reading_id'),
+                day.get('date'),
+                day.get('review_text'),
+                day.get('created_by_user_id'),
+                day.get('actor_type'),
+                day.get('policy_version'),
+                day.get('created_at'),
+                day.get('updated_at'),
+            ])
         
         # 메타데이터 시트
         ws_meta = wb.create_sheet("백업메타데이터")
@@ -5199,9 +5319,11 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
         ws_meta.append(['변경이력수', meta['records_count']['points_history']])
         ws_meta.append(['사용자수', meta['records_count']['users']])
         ws_meta.append(['도서수', meta['records_count'].get('books', 0)])
+        ws_meta.append(['독서책이력수', meta['records_count'].get('child_readings', 0)])
+        ws_meta.append(['일별독서기록수', meta['records_count'].get('reading_days', 0)])
         
         # 스타일 적용
-        for ws in [ws_children, ws_points, ws_history, ws_users, ws_books, ws_meta]:
+        for ws in [ws_children, ws_points, ws_history, ws_users, ws_books, ws_readings, ws_days, ws_meta]:
             for row in ws.iter_rows(min_row=1, max_row=1):
                 for cell in row:
                     cell.font = Font(bold=True)
@@ -5717,10 +5839,12 @@ def download_backup(filename):
 
 
 # Book/Blueprint 는 db.init_app 이후 late import 한다. feature 모듈은 extensions.db 만 의존한다.
-from feature_models import Book  # noqa: E402
+from feature_models import Book, ChildReading, ReadingDay  # noqa: E402
 from features.books.routes import books_bp  # noqa: E402
+from features.reading.routes import reading_bp  # noqa: E402
 
 app.register_blueprint(books_bp)
+app.register_blueprint(reading_bp)
 
 if __name__ == '__main__':
     if os.environ.get('CLC_TESTING') == '1':

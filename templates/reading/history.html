@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}{{ child.name }} 독서 기록{% endblock %}
+{% block page_title %}독서 기록 보기{% endblock %}
+
+{% block content %}
+<div class="d-flex gap-2 mb-3 flex-wrap">
+    <a href="{{ url_for('reading.teacher_editor', child_id=child.id) }}" class="btn btn-primary">교사가 대신 기록</a>
+    <a href="{{ url_for('points_input', child_id=child.id) }}" class="btn btn-outline-secondary">포인트 입력으로</a>
+    <a href="{{ url_for('child_detail', child_id=child.id) }}" class="btn btn-outline-secondary">아동 상세</a>
+</div>
+<h3 class="mb-3">{{ child.name }}</h3>
+{% if not items %}
+<p class="text-muted">아직 디지털 독서기록이 없습니다.</p>
+{% endif %}
+{% for item in items %}
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="mb-1">{{ item.book.title if item.book else '알 수 없는 책' }}</h5>
+        <p class="text-muted mb-2">
+            {% if item.book and item.book.author %}{{ item.book.author }} · {% endif %}
+            {% if item.reading.status == 'in_progress' %}읽는 중
+            {% elif item.reading.status == 'completed' %}완독 {{ item.reading.completed_on }}
+            {% elif item.reading.status == 'abandoned' %}중단 {{ item.reading.ended_on }}
+            {% else %}{{ item.reading.status }}
+            {% endif %}
+            · 시작 {{ item.reading.started_on }}
+        </p>
+        {% if item.days %}
+        <ul class="list-group">
+            {% for day in item.days %}
+            <li class="list-group-item">
+                <strong>{{ day.date }}</strong>
+                {% if day.review_text %}
+                <div class="mt-1">{{ day.review_text }}</div>
+                {% else %}
+                <div class="text-muted mt-1">감상 없음</div>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-muted mb-0">날짜별 기록이 없습니다.</p>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+{% endblock %}

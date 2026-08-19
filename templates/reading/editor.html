@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}독서 기록{% endblock %}
+{% block page_title %}독서 기록{% endblock %}
+
+{% block extra_css %}
+<style>
+.reading-editor { max-width: 720px; margin: 0 auto 2rem; }
+.reading-editor .form-control, .reading-editor .form-select { min-height: 48px; font-size: 1.05rem; }
+.reading-editor textarea { min-height: 140px; font-size: 1.05rem; }
+.reading-editor .btn-lg-touch { min-height: 56px; font-size: 1.1rem; border-radius: 14px; }
+.reading-book-title { font-size: 1.6rem; font-weight: 800; }
+.reading-suggest { max-height: 240px; overflow-y: auto; }
+.reading-suggest .list-group-item { cursor: pointer; min-height: 48px; }
+.reading-complete-check { font-size: 1.1rem; }
+.reading-complete-check input { width: 1.25rem; height: 1.25rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="reading-editor">
+    {% if is_viewer_mode %}
+    <a href="{{ url_for('viewer_report', view_token=view_token) }}" class="btn btn-outline-secondary mb-3">뒤로가기</a>
+    {% else %}
+    <div class="d-flex gap-2 mb-3 flex-wrap">
+        <a href="{{ url_for('points_input', child_id=child.id, date=activity_date_iso) }}" class="btn btn-outline-secondary">포인트 입력으로</a>
+        <a href="{{ url_for('reading.teacher_history', child_id=child.id) }}" class="btn btn-outline-primary">독서 기록 보기</a>
+    </div>
+    <p class="text-muted">{{ child.name }} · {{ activity_date_iso }}</p>
+    {% endif %}
+
+    {% if current_reading and current_book %}
+    <div class="card shadow-sm mb-3">
+        <div class="card-body p-4">
+            <p class="text-muted mb-1">현재 읽는 책</p>
+            <h2 class="reading-book-title mb-1">{{ current_book.title }}</h2>
+            <p class="mb-4">{% if current_book.author %}{{ current_book.author }}{% else %}글쓴이 없음{% endif %}</p>
+
+            <form method="post" action="{% if is_viewer_mode %}{{ url_for('reading.viewer_save', view_token=view_token) }}{% else %}{{ url_for('reading.teacher_save', child_id=child.id) }}{% endif %}">
+                <input type="hidden" name="child_reading_id" value="{{ current_reading.id }}">
+                {% if not is_viewer_mode %}
+                <input type="hidden" name="date" value="{{ activity_date_iso }}">
+                {% endif %}
+                <label class="form-label fw-bold" for="review_text">오늘 느낀 점</label>
+                <textarea class="form-control mb-3" id="review_text" name="review_text" placeholder="오늘 읽은 느낌을 2~3줄 적어 보세요. 안 적어도 저장할 수 있어요.">{{ today_day.review_text if today_day and today_day.review_text else '' }}</textarea>
+                <div class="form-check reading-complete-check mb-4">
+                    <input class="form-check-input" type="checkbox" value="1" id="completed" name="completed">
+                    <label class="form-check-label" for="completed">이 책을 다 읽었어요</label>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 btn-lg-touch">오늘 기록 저장</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <p class="mb-3">현재 「{{ current_book.title }}」를 읽고 있어요.</p>
+            <div class="d-grid gap-2">
+                <a class="btn btn-outline-primary btn-lg-touch" href="#review_text">계속 읽기</a>
+                <form method="post" action="{% if is_viewer_mode %}{{ url_for('reading.viewer_abandon', view_token=view_token) }}{% else %}{{ url_for('reading.teacher_abandon', child_id=child.id) }}{% endif %}">
+                    <input type="hidden" name="child_reading_id" value="{{ current_reading.id }}">
+                    {% if not is_viewer_mode %}
+                    <input type="hidden" name="date" value="{{ activity_date_iso }}">
+                    {% endif %}
+                    <button type="submit" class="btn btn-outline-danger w-100 btn-lg-touch">그만 읽고 다른 책 읽기</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <h2 class="h4 mb-3">오늘 읽은 책을 기록해요</h2>
+            {% if has_today_record %}
+            <div class="alert alert-info">오늘 독서기록은 이미 작성했어요. 같은 날 다른 책은 적지 않아요.</div>
+            {% endif %}
+            <form method="post" action="{% if is_viewer_mode %}{{ url_for('reading.viewer_start', view_token=view_token) }}{% else %}{{ url_for('reading.teacher_start', child_id=child.id) }}{% endif %}" id="start-book-form">
+                {% if not is_viewer_mode %}
+                <input type="hidden" name="date" value="{{ activity_date_iso }}">
+                {% endif %}
+                <input type="hidden" name="book_id" id="book_id" value="">
+                <label class="form-label fw-bold" for="title">책 제목</label>
+                <input class="form-control mb-2" type="text" name="title" id="title" required placeholder="예: 어린 왕자" autocomplete="off">
+                <ul id="book-suggest" class="list-group reading-suggest mb-3"></ul>
+                <p class="small text-muted">검색 결과에 없으면 새 책으로 저장돼요.</p>
+                <label class="form-label fw-bold" for="author">글쓴이</label>
+                <input class="form-control mb-3" type="text" name="author" id="author" placeholder="알면 적어 주세요">
+                <label class="form-label fw-bold" for="review_text_new">오늘 느낀 점</label>
+                <textarea class="form-control mb-4" id="review_text_new" name="review_text" placeholder="오늘 읽은 느낌을 2~3줄 적어 보세요. 안 적어도 저장할 수 있어요."></textarea>
+                <button type="submit" class="btn btn-primary w-100 btn-lg-touch" {% if has_today_record %}disabled{% endif %}>오늘 독서 기록 저장</button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if not current_reading %}
+<script>
+(function () {
+    const titleInput = document.getElementById('title');
+    const authorInput = document.getElementById('author');
+    const bookIdInput = document.getElementById('book_id');
+    const suggest = document.getElementById('book-suggest');
+    if (!titleInput || !suggest) return;
+    let timer = null;
+
+    function render(books) {
+        suggest.innerHTML = '';
+        if (!books || !books.length) {
+            const li = document.createElement('li');
+            li.className = 'list-group-item text-muted';
+            li.textContent = '검색 결과에 없으면 새 책 입력';
+            suggest.appendChild(li);
+            return;
+        }
+        books.forEach(function (book) {
+            const li = document.createElement('li');
+            li.className = 'list-group-item';
+            li.textContent = book.title + (book.author ? ' — ' + book.author : '');
+            li.addEventListener('click', function () {
+                titleInput.value = book.title || '';
+                authorInput.value = book.author || '';
+                bookIdInput.value = book.id || '';
+                suggest.innerHTML = '';
+            });
+            suggest.appendChild(li);
+        });
+    }
+
+    titleInput.addEventListener('input', function () {
+        bookIdInput.value = '';
+        const q = titleInput.value.trim();
+        clearTimeout(timer);
+        if (!q) {
+            suggest.innerHTML = '';
+            return;
+        }
+        timer = setTimeout(function () {
+            fetch('/api/books?q=' + encodeURIComponent(q))
+                .then(function (res) { return res.json(); })
+                .then(function (data) { render(data.books || []); });
+        }, 200);
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

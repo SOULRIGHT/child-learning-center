@@ -60,6 +60,8 @@ def configure_test_environment() -> None:
     os.environ['DATABASE_URL'] = ''
     os.environ['FIREBASE_CREDENTIALS_JSON'] = ''
     os.environ['SECRET_KEY'] = 'clc-step0-test-secret'
+    os.environ['GENERAL_READING_V2_START_DATE'] = '2026-08-01'
+    os.environ['VIEWER_CHILD_WRITE_TTL_MINUTES'] = '15'
 
 
 def sqlite_uri_for(path: Path) -> str:

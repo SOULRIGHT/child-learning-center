@@ -20,8 +20,14 @@
         </div>
     </div>
     <div class="btn-group">
-        <a href="{{ url_for('points_input', child_id=child.id) }}" class="btn btn-primary">
+                        <a href="{{ url_for('points_input', child_id=child.id) }}" class="btn btn-primary">
             <i class="bi bi-plus-circle me-2"></i>포인트 입력
+        </a>
+        <a href="{{ url_for('reading.teacher_history', child_id=child.id) }}" class="btn btn-outline-success">
+            <i class="bi bi-journal-text me-2"></i>독서 기록 보기
+        </a>
+        <a href="{{ url_for('reading.teacher_editor', child_id=child.id) }}" class="btn btn-outline-success">
+            교사가 대신 기록
         </a>
         <a href="{{ url_for('points_analysis', child_id=child.id) }}" class="btn btn-outline-primary">
             <i class="bi bi-graph-up me-2"></i>포인트 분석

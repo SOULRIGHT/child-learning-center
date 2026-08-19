@@ -33,6 +33,13 @@
 
     <div class="card">
         <div class="card-body p-4">
+            {% if is_viewer_mode %}
+            <a href="{{ url_for('reading.viewer_confirm', view_token=viewer_slug) }}"
+               class="btn btn-success w-100 mb-3"
+               style="min-height: 56px; font-size: 1.15rem; border-radius: 14px;">
+                독서 기록하기
+            </a>
+            {% endif %}
             <div class="d-flex justify-content-between align-items-start mb-3">
                 <div>
                     <h3 class="mb-1 fw-bold">포인트 리포트</h3>

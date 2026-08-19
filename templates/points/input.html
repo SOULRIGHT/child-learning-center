@@ -317,6 +317,28 @@
                         <!-- 독서 -->
                         <div class="mb-4">
                             <h5 class="text-muted">독서</h5>
+                            {% if reading_policy_v2 %}
+                            <div class="btn-group w-100 d-none d-sm-flex" role="group">
+                                <input type="radio" class="btn-check" name="reading_points" id="reading_100" value="100"
+                                       {% if today_record and today_record.reading_points == 100 %}checked{% endif %}>
+                                <label class="btn btn-outline-success" for="reading_100">
+                                    <i class="fas fa-check-circle"></i> 완료 (100점)
+                                </label>
+                                <input type="radio" class="btn-check" name="reading_points" id="reading_0" value="0"
+                                       {% if not today_record or today_record.reading_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary" for="reading_0">
+                                    <i class="fas fa-times-circle"></i> 미완료 (0점)
+                                </label>
+                            </div>
+                            <div class="d-flex d-sm-none gap-2">
+                                <input type="radio" class="btn-check" name="reading_points" id="reading_100m" value="100"
+                                       {% if today_record and today_record.reading_points == 100 %}checked{% endif %}>
+                                <label class="btn btn-outline-success flex-fill mobile-radio-btn" for="reading_100m"><span class="mpb-main">완료</span><span class="mpb-pts">100점</span></label>
+                                <input type="radio" class="btn-check" name="reading_points" id="reading_0m" value="0"
+                                       {% if not today_record or today_record.reading_points == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary flex-fill mobile-radio-btn" for="reading_0m"><span class="mpb-main">미완료</span><span class="mpb-pts">0점</span></label>
+                            </div>
+                            {% else %}
                             <div class="btn-group w-100 d-none d-sm-flex" role="group">
                                 <input type="radio" class="btn-check" name="reading_points" id="reading_200" value="200" 
                                        {% if today_record and today_record.reading_points == 200 %}checked{% endif %}>
@@ -345,6 +367,21 @@
                                        {% if not today_record or today_record.reading_points == 0 %}checked{% endif %}>
                                 <label class="btn btn-outline-secondary flex-fill mobile-radio-btn" for="reading_0m"><span class="mpb-main">미완료</span><span class="mpb-pts">0점</span></label>
                             </div>
+                            {% endif %}
+                            <div class="mt-3 p-3 bg-light rounded">
+                                <div class="mb-1">
+                                    오늘 디지털 독서기록:
+                                    {% if reading_has_today_record %}있음 ✓{% else %}없음{% endif %}
+                                </div>
+                                {% if reading_current_book_title %}
+                                <div class="mb-2">현재 읽는 책: {{ reading_current_book_title }}</div>
+                                {% endif %}
+                                <div class="d-flex flex-wrap gap-2">
+                                    <a href="{{ url_for('reading.teacher_history', child_id=child.id) }}" class="btn btn-sm btn-outline-primary">독서 기록 보기</a>
+                                    <a href="{{ url_for('reading.teacher_editor', child_id=child.id, date=selected_date_iso) }}" class="btn btn-sm btn-outline-success">교사가 대신 기록</a>
+                                </div>
+                            </div>
+                        </div>
 
                         <!-- 추가 과목들 토글 버튼 -->
                         <div class="text-center mt-4 mb-3">

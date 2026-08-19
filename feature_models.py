@@ -4,8 +4,11 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from extensions import db
 from datetime import datetime
+
+from sqlalchemy import Index, UniqueConstraint, text
+
+from extensions import db
 
 
 _PUNCT_AND_SPACE_RE = re.compile(
@@ -71,3 +74,80 @@ class Book(db.Model):
 
     def __repr__(self):
         return f'<Book {self.id} {self.title}>'
+
+
+STATUS_IN_PROGRESS = 'in_progress'
+STATUS_COMPLETED = 'completed'
+STATUS_ABANDONED = 'abandoned'
+PROGRAM_TYPE_GENERAL = 'general'
+POLICY_VERSION_GENERAL_V2 = 'general_v2'
+ACTOR_CHILD = 'child'
+ACTOR_TEACHER = 'teacher'
+
+
+class ChildReading(db.Model):
+    """한 아동이 한 권을 읽은 전체 기간."""
+    __tablename__ = 'child_reading'
+    __table_args__ = (
+        Index(
+            'uq_child_reading_one_in_progress',
+            'child_id',
+            unique=True,
+            sqlite_where=text("status = 'in_progress'"),
+            postgresql_where=text("status = 'in_progress'"),
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    child_id = db.Column(db.Integer, db.ForeignKey('child.id'), nullable=False, index=True)
+    book_id = db.Column(db.Integer, db.ForeignKey('book.id'), nullable=False, index=True)
+
+    started_on = db.Column(db.Date, nullable=False)
+    completed_on = db.Column(db.Date, nullable=True)
+    ended_on = db.Column(db.Date, nullable=True)
+
+    status = db.Column(db.String(32), nullable=False, default=STATUS_IN_PROGRESS, index=True)
+    program_type = db.Column(db.String(32), nullable=False, default=PROGRAM_TYPE_GENERAL)
+    policy_version = db.Column(db.String(32), nullable=False, default=POLICY_VERSION_GENERAL_V2)
+
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    actor_type = db.Column(db.String(16), nullable=False)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    book = db.relationship('Book')
+    days = db.relationship('ReadingDay', back_populates='child_reading', lazy='dynamic')
+
+    def __repr__(self):
+        return f'<ChildReading {self.id} child={self.child_id} book={self.book_id} {self.status}>'
+
+
+class ReadingDay(db.Model):
+    """실제로 읽은 날짜의 독서기록장 한 칸."""
+    __tablename__ = 'reading_day'
+    __table_args__ = (
+        UniqueConstraint('child_reading_id', 'date', name='uq_reading_day_reading_date'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    child_reading_id = db.Column(
+        db.Integer,
+        db.ForeignKey('child_reading.id'),
+        nullable=False,
+        index=True,
+    )
+    date = db.Column(db.Date, nullable=False, index=True)
+    review_text = db.Column(db.Text, nullable=True)
+
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    actor_type = db.Column(db.String(16), nullable=False)
+    policy_version = db.Column(db.String(32), nullable=False, default=POLICY_VERSION_GENERAL_V2)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    child_reading = db.relationship('ChildReading', back_populates='days')
+
+    def __repr__(self):
+        return f'<ReadingDay {self.id} reading={self.child_reading_id} {self.date}>'

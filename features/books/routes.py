@@ -3,13 +3,8 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 from flask_login import current_user, login_required
 from sqlalchemy import func, or_
 
-from extensions import db
-from feature_models import (
-    Book,
-    clean_book_author,
-    clean_book_title,
-    normalize_book_title,
-)
+from feature_models import Book, normalize_book_title
+from features.books.service import BookCreateError, create_book_record
 
 books_bp = Blueprint('books', __name__)
 
@@ -71,34 +66,11 @@ def create_book():
         return redirect(url_for('viewer_home'))
 
     payload = request.get_json(silent=True) or {}
-    title = clean_book_title(payload.get('title'))
-    if not title:
-        return jsonify({'created': False, 'error': '제목은 필수입니다.'}), 400
+    try:
+        book, similar = create_book_record(payload.get('title'), payload.get('author'))
+    except BookCreateError as exc:
+        return jsonify({'created': False, 'error': str(exc)}), 400
 
-    author = clean_book_author(payload.get('author'))
-    normalized_key = normalize_book_title(title)
-
-    book = Book(
-        title=title,
-        author=author,
-        normalized_key=normalized_key,
-        is_recommended=False,
-        is_challenge_eligible=False,
-        is_active=True,
-        sort_order=0,
-    )
-    db.session.add(book)
-    db.session.commit()
-
-    similar = (
-        Book.query.filter(
-            Book.normalized_key == normalized_key,
-            Book.id != book.id,
-        )
-        .order_by(Book.id.asc())
-        .limit(10)
-        .all()
-    )
     return jsonify({
         'created': True,
         'book': book.to_public_dict(),
