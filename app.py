@@ -13,7 +13,6 @@ import importlib
 import re
 from urllib.parse import quote, urlparse, unquote
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response
-from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -22,6 +21,7 @@ from dotenv import load_dotenv
 from sqlalchemy import func # Added for func.date
 from sqlalchemy import text
 from viewer_slug_utils import extract_viewer_slug, generate_viewer_slug
+from extensions import db
 
 try:
     qrcode = importlib.import_module('qrcode')
@@ -119,8 +119,8 @@ else:
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# 확장 프로그램 초기화
-db = SQLAlchemy(app)
+# 확장 프로그램 초기화: db 객체는 extensions.py 에서 공유한다.
+db.init_app(app)
 migrate = Migrate(app, db)
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -410,6 +410,7 @@ def make_session_permanent():
     session.permanent = True
 
 VIEWER_ROLE_NAME = '학생열람'
+app.config['VIEWER_ROLE_NAME'] = VIEWER_ROLE_NAME
 VIEWER_ALLOWED_ENDPOINTS = {
     'index',
     'privacy_policy',
@@ -417,6 +418,7 @@ VIEWER_ALLOWED_ENDPOINTS = {
     'viewer_home',
     'viewer_report',
     'nfc_redirect',
+    'books.search_books',
     'logout',
 }
 VIEWER_CODE_RE = re.compile(r'(?P<child_id>\d+)-(?P<signature>[0-9a-fA-F]{16})')
@@ -4991,6 +4993,26 @@ def get_backup_data():
             }
             notes_data.append(note_dict)
         
+        # 도서 마스터
+        books = Book.query.all()
+        books_data = []
+        for book in books:
+            books_data.append({
+                'id': book.id,
+                'title': book.title,
+                'author': book.author,
+                'normalized_key': book.normalized_key,
+                'is_recommended': book.is_recommended,
+                'grade_band': book.grade_band,
+                'is_challenge_eligible': book.is_challenge_eligible,
+                'ai_difficulty_low': book.ai_difficulty_low,
+                'ai_difficulty_high': book.ai_difficulty_high,
+                'is_active': book.is_active,
+                'sort_order': book.sort_order,
+                'created_at': book.created_at.isoformat() if book.created_at else None,
+                'updated_at': book.updated_at.isoformat() if book.updated_at else None,
+            })
+
         # 사용자 정보
         users = User.query.all()
         users_data = []
@@ -5015,14 +5037,16 @@ def get_backup_data():
                     'daily_points': len(daily_points_data),
                     'points_history': len(history_data),
                     'child_notes': len(notes_data),
-                    'users': len(users_data)
+                    'users': len(users_data),
+                    'books': len(books_data)
                 }
             },
             'children': children_data,
             'daily_points': daily_points_data,
             'points_history': history_data,
             'child_notes': notes_data,
-            'users': users_data
+            'users': users_data,
+            'books': books_data
         }
         
         return backup_data, None
@@ -5140,6 +5164,28 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
                 user['role'],
                 user['created_at']
             ])
+
+        ws_books = wb.create_sheet("도서")
+        ws_books.append([
+            'ID', '제목', '저자', '정규화키', '추천', '학년밴드', '도전가능',
+            'AI난이도하', 'AI난이도상', '활성', '정렬', '생성일', '수정일'
+        ])
+        for book in backup_data.get('books', []):
+            ws_books.append([
+                book.get('id'),
+                book.get('title'),
+                book.get('author'),
+                book.get('normalized_key'),
+                book.get('is_recommended'),
+                book.get('grade_band'),
+                book.get('is_challenge_eligible'),
+                book.get('ai_difficulty_low'),
+                book.get('ai_difficulty_high'),
+                book.get('is_active'),
+                book.get('sort_order'),
+                book.get('created_at'),
+                book.get('updated_at'),
+            ])
         
         # 메타데이터 시트
         ws_meta = wb.create_sheet("백업메타데이터")
@@ -5152,9 +5198,10 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
         ws_meta.append(['포인트기록수', meta['records_count']['daily_points']])
         ws_meta.append(['변경이력수', meta['records_count']['points_history']])
         ws_meta.append(['사용자수', meta['records_count']['users']])
+        ws_meta.append(['도서수', meta['records_count'].get('books', 0)])
         
         # 스타일 적용
-        for ws in [ws_children, ws_points, ws_history, ws_users, ws_meta]:
+        for ws in [ws_children, ws_points, ws_history, ws_users, ws_books, ws_meta]:
             for row in ws.iter_rows(min_row=1, max_row=1):
                 for cell in row:
                     cell.font = Font(bold=True)
@@ -5668,19 +5715,30 @@ def download_backup(filename):
         mimetype=mimetype_map.get(extension, 'application/octet-stream')
     )
 
+
+# Book/Blueprint 는 db.init_app 이후 late import 한다. feature 모듈은 extensions.db 만 의존한다.
+from feature_models import Book  # noqa: E402
+from features.books.routes import books_bp  # noqa: E402
+
+app.register_blueprint(books_bp)
+
 if __name__ == '__main__':
-    # Firebase 초기화
-    initialize_firebase()
-    # 백업 스케줄러 시작
-    start_backup_scheduler()
-    
-    # 배포 환경 체크
-    if os.environ.get('FLASK_ENV') == 'production':
-        # 배포 환경에서는 debug=False로 실행
-        app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
+    if os.environ.get('CLC_TESTING') == '1':
+        # unittest가 python app.py (__main__) 초기화만 검증할 때 서버/Firebase/스케줄러를 켜지 않는다.
+        print('CLC_TESTING_MAIN_INIT_OK')
     else:
-        # 개발 환경에서는 debug=True
-        app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
+        # Firebase 초기화
+        initialize_firebase()
+        # 백업 스케줄러 시작
+        start_backup_scheduler()
+    
+        # 배포 환경 체크
+        if os.environ.get('FLASK_ENV') == 'production':
+            # 배포 환경에서는 debug=False로 실행
+            app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
+        else:
+            # 개발 환경에서는 debug=True
+            app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
    
 else:
     # 배포된 환경에서도 데이터베이스 초기화

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}도서 검색 - 아동 학습 관리 시스템{% endblock %}
+{% block page_title %}도서 검색{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <p class="text-muted mb-3">책을 검색하고, 없으면 제목과 저자만 등록할 수 있습니다.</p>
+    <div class="card mb-3">
+        <div class="card-body">
+            <label class="form-label" for="book-query">검색</label>
+            <div class="input-group">
+                <input id="book-query" class="form-control" type="text" placeholder="예: 어린왕자">
+                <button id="book-search-btn" class="btn btn-primary" type="button">검색</button>
+            </div>
+        </div>
+    </div>
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">검색 결과</h5>
+            <ul id="book-results" class="list-group"></ul>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">새 책 등록</h5>
+            <div class="mb-2">
+                <label class="form-label" for="book-title">제목</label>
+                <input id="book-title" class="form-control" type="text">
+            </div>
+            <div class="mb-2">
+                <label class="form-label" for="book-author">저자 (선택)</label>
+                <input id="book-author" class="form-control" type="text">
+            </div>
+            <button id="book-create-btn" class="btn btn-success" type="button">등록</button>
+            <p id="book-create-msg" class="mt-2 mb-0"></p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const results = document.getElementById('book-results');
+    const msg = document.getElementById('book-create-msg');
+
+    function renderBooks(books) {
+        results.innerHTML = '';
+        if (!books || !books.length) {
+            results.innerHTML = '<li class="list-group-item text-muted">결과가 없습니다.</li>';
+            return;
+        }
+        books.forEach(function (book) {
+            const li = document.createElement('li');
+            li.className = 'list-group-item';
+            li.textContent = book.title + (book.author ? ' / ' + book.author : '');
+            results.appendChild(li);
+        });
+    }
+
+    document.getElementById('book-search-btn').addEventListener('click', function () {
+        const q = document.getElementById('book-query').value || '';
+        fetch('/api/books?q=' + encodeURIComponent(q))
+            .then(function (res) { return res.json(); })
+            .then(function (data) { renderBooks(data.books || []); });
+    });
+
+    document.getElementById('book-create-btn').addEventListener('click', function () {
+        msg.textContent = '';
+        fetch('/api/books', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: document.getElementById('book-title').value,
+                author: document.getElementById('book-author').value
+            })
+        }).then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+          .then(function (result) {
+              if (!result.ok) {
+                  msg.textContent = result.data.error || '등록에 실패했습니다.';
+                  return;
+              }
+              msg.textContent = '등록되었습니다: ' + result.data.book.title;
+          });
+    });
+})();
+</script>
+{% endblock %}

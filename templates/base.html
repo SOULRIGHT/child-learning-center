@@ -79,6 +79,12 @@
                     </a>
                 </div>
                 <div class="nav-item">
+                    <a href="{{ url_for('books.books_index') }}" class="nav-link {% if ep == 'books.books_index' %}active{% endif %}">
+                        <i class="bi bi-book"></i>
+                        도서 검색
+                    </a>
+                </div>
+                <div class="nav-item">
                     <a href="{{ url_for('settings_print_children') }}" class="nav-link {% if ep in ['settings_print_children', 'settings_print_child_report'] %}active{% endif %}">
                         <i class="bi bi-printer"></i>
                         개인 리포트
