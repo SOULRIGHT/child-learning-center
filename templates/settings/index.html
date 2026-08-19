@@ -100,9 +100,12 @@
                 </div>
                 <div class="card-body">
                     <p class="text-muted mb-3">포인트 기준 및 과목 설정을 관리합니다.</p>
-                    <div class="d-grid">
+                    <div class="d-grid gap-2">
                         <a href="{{ url_for('settings_points') }}" class="btn btn-success">
                             <i class="bi bi-gear me-2"></i>포인트 설정
+                        </a>
+                        <a href="{{ url_for('presets.manage_presets') }}" class="btn btn-outline-success">
+                            수동 포인트 프리셋 관리
                         </a>
                     </div>
                 </div>

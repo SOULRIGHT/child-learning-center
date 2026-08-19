@@ -151,3 +151,32 @@ class ReadingDay(db.Model):
 
     def __repr__(self):
         return f'<ReadingDay {self.id} reading={self.child_reading_id} {self.date}>'
+
+
+class ManualPointPreset(db.Model):
+    """자주 쓰는 수동포인트 버튼 설정. 실제 지급 원장이 아니다."""
+    __tablename__ = 'manual_point_preset'
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(64), nullable=False, unique=True)
+    label = db.Column(db.String(80), nullable=False)
+    default_points = db.Column(db.Integer, nullable=False)
+    default_reason = db.Column(db.String(80), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_public_dict(self):
+        return {
+            'id': self.id,
+            'key': self.key,
+            'label': self.label,
+            'default_points': self.default_points,
+            'default_reason': self.default_reason or '',
+            'is_active': bool(self.is_active),
+            'sort_order': self.sort_order,
+        }
+
+    def __repr__(self):
+        return f'<ManualPointPreset {self.key} {self.default_points}>'

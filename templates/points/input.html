@@ -519,46 +519,16 @@
                                 <div class="manual-quick-buttons mb-3">
                                     <span class="fw-semibold small text-muted me-2">빠른 선택</span>
                                     <div class="d-flex flex-wrap gap-2">
+                                        {% for preset in manual_presets %}
                                         <button type="button"
-                                                class="btn btn-sm btn-outline-primary manual-preset"
-                                                data-preset-key="textbook"
-                                                data-subject="교재 완료"
-                                                data-points="3000"
-                                                data-reason="교재 완료">
-                                            교재 완료 +3000
+                                                class="btn btn-sm {% if preset.default_points < 0 %}btn-outline-danger{% else %}btn-outline-primary{% endif %} manual-preset"
+                                                data-preset-key="{{ preset.key }}"
+                                                data-subject="{{ preset.label }}"
+                                                data-points="{{ preset.default_points }}"
+                                                data-reason="{{ preset.default_reason or '' }}">
+                                            {{ preset.label }} {{ '%+d'|format(preset.default_points) }}
                                         </button>
-                                        <button type="button"
-                                                class="btn btn-sm btn-outline-danger manual-preset"
-                                                data-preset-key="print"
-                                                data-subject="프린트"
-                                                data-points="-100"
-                                                data-reason="프린트 사용">
-                                            프린트 -100
-                                        </button>
-                                        <button type="button"
-                                                class="btn btn-sm btn-outline-danger manual-preset"
-                                                data-preset-key="pencil"
-                                                data-subject="연필"
-                                                data-points="-300"
-                                                data-reason="연필 구매">
-                                            연필 -300
-                                        </button>
-                                        <button type="button"
-                                                class="btn btn-sm btn-outline-danger manual-preset"
-                                                data-preset-key="eraser"
-                                                data-subject="지우개"
-                                                data-points="-500"
-                                                data-reason="지우개 구매">
-                                            지우개 -500
-                                        </button>
-                                        <button type="button"
-                                                class="btn btn-sm btn-outline-danger manual-preset"
-                                                data-preset-key="eraser_1000"
-                                                data-subject="지우개"
-                                                data-points="-1000"
-                                                data-reason="지우개 2개 이상">
-                                            필통 -1000
-                                        </button>
+                                        {% endfor %}
                                     </div>
                                 </div>
                                 <div class="manual-custom-form">

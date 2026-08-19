@@ -599,6 +599,7 @@ def restrict_general_user_from_settings():
         'settings', 'settings_users', 'settings_points', 'settings_data',
         'settings_ui', 'settings_system', 'settings_security',
         'settings_print_children', 'settings_print_child_report',
+        'presets.manage_presets', 'presets.create_preset_route', 'presets.update_preset_route',
     }
 
     if endpoint in settings_endpoints:
@@ -2908,8 +2909,10 @@ def points_input(child_id):
 
     from features.reading.policy import is_general_reading_v2
     from features.reading.service import snapshot_for_date
+    from features.presets.service import list_active_presets
     reading_snapshot = snapshot_for_date(child_id, selected_date)
     reading_policy_v2 = is_general_reading_v2(selected_date)
+    manual_presets = list_active_presets()
     
     return render_template('points/input.html', 
                           child=child, 
@@ -2924,7 +2927,8 @@ def points_input(child_id):
                           manual_entries=manual_entries_for_template,
                           reading_policy_v2=reading_policy_v2,
                           reading_has_today_record=reading_snapshot['has_today_record'],
-                          reading_current_book_title=reading_snapshot['current_book_title'])
+                          reading_current_book_title=reading_snapshot['current_book_title'],
+                          manual_presets=manual_presets)
 
 def update_cumulative_points(child_id, commit=True):
     """아동의 누적 포인트를 자동으로 업데이트"""
@@ -3768,7 +3772,13 @@ def settings_points():
     """수동 포인트 관리 페이지"""
     children = Child.query.filter_by(include_in_stats=True).order_by(Child.grade, Child.name).all()
     today_iso = datetime.utcnow().strftime('%Y-%m-%d')
-    return render_template('settings/points.html', children=children, today_iso=today_iso)
+    from features.presets.service import list_active_presets
+    return render_template(
+        'settings/points.html',
+        children=children,
+        today_iso=today_iso,
+        manual_presets=list_active_presets(),
+    )
 
 @app.route('/api/children/by-grade')
 @login_required
@@ -5090,6 +5100,21 @@ def get_backup_data():
                 'updated_at': day.updated_at.isoformat() if day.updated_at else None,
             })
 
+        presets = ManualPointPreset.query.order_by(ManualPointPreset.id.asc()).all()
+        presets_data = []
+        for preset in presets:
+            presets_data.append({
+                'id': preset.id,
+                'key': preset.key,
+                'label': preset.label,
+                'default_points': preset.default_points,
+                'default_reason': preset.default_reason,
+                'is_active': bool(preset.is_active),
+                'sort_order': preset.sort_order,
+                'created_at': preset.created_at.isoformat() if preset.created_at else None,
+                'updated_at': preset.updated_at.isoformat() if preset.updated_at else None,
+            })
+
         # 사용자 정보
         users = User.query.all()
         users_data = []
@@ -5118,6 +5143,7 @@ def get_backup_data():
                     'books': len(books_data),
                     'child_readings': len(child_readings_data),
                     'reading_days': len(reading_days_data),
+                    'manual_point_presets': len(presets_data),
                 }
             },
             'children': children_data,
@@ -5128,6 +5154,7 @@ def get_backup_data():
             'books': books_data,
             'child_readings': child_readings_data,
             'reading_days': reading_days_data,
+            'manual_point_presets': presets_data,
         }
         
         return backup_data, None
@@ -5306,6 +5333,21 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
                 day.get('created_at'),
                 day.get('updated_at'),
             ])
+
+        ws_presets = wb.create_sheet("수동포인트프리셋")
+        ws_presets.append(['ID', 'key', '이름', '기본포인트', '기본사유', '활성', '순서', '생성일', '수정일'])
+        for preset in backup_data.get('manual_point_presets', []):
+            ws_presets.append([
+                preset.get('id'),
+                preset.get('key'),
+                preset.get('label'),
+                preset.get('default_points'),
+                preset.get('default_reason'),
+                preset.get('is_active'),
+                preset.get('sort_order'),
+                preset.get('created_at'),
+                preset.get('updated_at'),
+            ])
         
         # 메타데이터 시트
         ws_meta = wb.create_sheet("백업메타데이터")
@@ -5321,9 +5363,10 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
         ws_meta.append(['도서수', meta['records_count'].get('books', 0)])
         ws_meta.append(['독서책이력수', meta['records_count'].get('child_readings', 0)])
         ws_meta.append(['일별독서기록수', meta['records_count'].get('reading_days', 0)])
+        ws_meta.append(['수동포인트프리셋수', meta['records_count'].get('manual_point_presets', 0)])
         
         # 스타일 적용
-        for ws in [ws_children, ws_points, ws_history, ws_users, ws_books, ws_readings, ws_days, ws_meta]:
+        for ws in [ws_children, ws_points, ws_history, ws_users, ws_books, ws_readings, ws_days, ws_presets, ws_meta]:
             for row in ws.iter_rows(min_row=1, max_row=1):
                 for cell in row:
                     cell.font = Font(bold=True)
@@ -5839,12 +5882,14 @@ def download_backup(filename):
 
 
 # Book/Blueprint 는 db.init_app 이후 late import 한다. feature 모듈은 extensions.db 만 의존한다.
-from feature_models import Book, ChildReading, ReadingDay  # noqa: E402
+from feature_models import Book, ChildReading, ReadingDay, ManualPointPreset  # noqa: E402
 from features.books.routes import books_bp  # noqa: E402
 from features.reading.routes import reading_bp  # noqa: E402
+from features.presets.routes import presets_bp  # noqa: E402
 
 app.register_blueprint(books_bp)
 app.register_blueprint(reading_bp)
+app.register_blueprint(presets_bp)
 
 if __name__ == '__main__':
     if os.environ.get('CLC_TESTING') == '1':

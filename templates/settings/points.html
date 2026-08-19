@@ -57,9 +57,10 @@
                         <input type="text" class="form-control" id="subjectName" placeholder="연필, 지우개, 교재 완료 등" required>
                         <div class="mt-1">
                             <small class="text-muted">빠른 입력:</small>
-                            <button type="button" class="btn btn-sm btn-outline-danger ms-1" onclick="setQuickInput('연필', -300, '연필 구매')">연필</button>
-                            <button type="button" class="btn btn-sm btn-outline-warning ms-1" onclick="setQuickInput('지우개', -500, '지우개 구매')">지우개</button>
-                            <button type="button" class="btn btn-sm btn-outline-success ms-1" onclick="setQuickInput('교재 완료', 3000, '교재완료(어떤 교재)')">교재 완료</button>
+                            {% for preset in manual_presets %}
+                            <button type="button" class="btn btn-sm {% if preset.default_points < 0 %}btn-outline-danger{% else %}btn-outline-success{% endif %} ms-1"
+                                    onclick="setQuickInput('{{ preset.label }}', {{ preset.default_points }}, {{ (preset.default_reason or '')|tojson }})">{{ preset.label }}</button>
+                            {% endfor %}
                         </div>
                     </div>
                     <div class="col-md-2">

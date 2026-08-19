@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}수동 포인트 프리셋 관리{% endblock %}
+{% block page_title %}수동 포인트 프리셋 관리{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-1">수동 포인트 프리셋 관리</h4>
+        <p class="text-muted mb-0">포인트 입력 화면의 빠른 선택 버튼을 설정합니다. 과거 지급 이력은 바뀌지 않습니다.</p>
+    </div>
+    <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary">설정으로</a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">신규 추가</div>
+    <div class="card-body">
+        <form method="post" action="{{ url_for('presets.manage_presets') }}" class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label" for="key">key</label>
+                <input class="form-control" id="key" name="key" required placeholder="pencil_case">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" for="label">이름</label>
+                <input class="form-control" id="label" name="label" required placeholder="필통">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" for="default_points">기본 포인트</label>
+                <input class="form-control" id="default_points" name="default_points" type="number" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="default_reason">기본 사유</label>
+                <input class="form-control" id="default_reason" name="default_reason">
+            </div>
+            <div class="col-md-1">
+                <label class="form-label" for="sort_order">순서</label>
+                <input class="form-control" id="sort_order" name="sort_order" type="number" value="60">
+            </div>
+            <div class="col-md-1">
+                <div class="form-check mt-4">
+                    <input class="form-check-input" type="checkbox" name="is_active" value="1" id="is_active" checked>
+                    <label class="form-check-label" for="is_active">활성</label>
+                </div>
+            </div>
+            <div class="col-md-1">
+                <button class="btn btn-primary w-100" type="submit">추가</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% for preset in presets %}
+<div class="card mb-3 {% if not preset.is_active %}bg-light{% endif %}">
+    <div class="card-body">
+        <form method="post" action="{{ url_for('presets.update_preset_route', preset_id=preset.id) }}" class="row g-2 align-items-end">
+            <input type="hidden" name="action" value="update">
+            <div class="col-md-2">
+                <label class="form-label">이름</label>
+                <input class="form-control" name="label" value="{{ preset.label }}" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">key</label>
+                <input class="form-control" value="{{ preset.key }}" disabled>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">기본 포인트</label>
+                <input class="form-control" name="default_points" type="number" value="{{ preset.default_points }}" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">기본 사유</label>
+                <input class="form-control" name="default_reason" value="{{ preset.default_reason or '' }}">
+            </div>
+            <div class="col-md-1">
+                <label class="form-label">순서</label>
+                <input class="form-control" name="sort_order" type="number" value="{{ preset.sort_order }}">
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-outline-primary w-100" type="submit">저장</button>
+            </div>
+        </form>
+        <div class="d-flex align-items-center gap-2 mt-2">
+            <span class="small text-muted">{% if preset.is_active %}활성{% else %}비활성{% endif %}</span>
+            {% if preset.is_active %}
+            <form method="post" action="{{ url_for('presets.update_preset_route', preset_id=preset.id) }}">
+                <input type="hidden" name="action" value="deactivate">
+                <button class="btn btn-sm btn-outline-secondary" type="submit">비활성화</button>
+            </form>
+            {% else %}
+            <form method="post" action="{{ url_for('presets.update_preset_route', preset_id=preset.id) }}">
+                <input type="hidden" name="action" value="activate">
+                <button class="btn btn-sm btn-outline-success" type="submit">활성화</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% else %}
+<p class="text-muted">프리셋이 없습니다.</p>
+{% endfor %}
+{% endblock %}
