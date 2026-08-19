@@ -51,6 +51,44 @@ except ImportError as e:
 # 환경 변수 로드
 load_dotenv()
 
+
+def is_postgresql_database_url(database_url):
+    """DATABASE_URL 스킴이 PostgreSQL인지 판별한다."""
+    url = (database_url or '').strip().lower()
+    return url.startswith('postgresql://') or url.startswith('postgres://')
+
+
+def is_sqlite_database_url(database_url):
+    """DATABASE_URL 스킴이 SQLite인지 판별한다."""
+    url = (database_url or '').strip().lower()
+    return url.startswith('sqlite://')
+
+
+# 기존 PostgreSQL 연결 풀/keepalive 값. 값 자체는 변경하지 않는다.
+POSTGRESQL_ENGINE_OPTIONS = {
+    'pool_size': 5,            # 기본 연결 풀 크기 (메모리 절약)
+    'max_overflow': 10,        # 추가 연결 허용 (메모리 절약)
+    'pool_timeout': 30,        # 연결 대기 시간 (초)
+    'pool_recycle': 300,      # 연결 재사용 시간 (5분)
+    'pool_pre_ping': True,     # 연결 유효성 사전 검사
+    'connect_args': {
+    'connect_timeout': 10,
+    'keepalives': 1,
+    'keepalives_idle': 30,
+    'keepalives_interval': 10,
+    'keepalives_count': 5,
+    'application_name': 'child-learning-center'
+}
+}
+
+
+def sqlalchemy_engine_options_for(database_url):
+    """PostgreSQL URL에만 기존 엔진 옵션을 반환한다. SQLite에는 적용하지 않는다."""
+    if is_postgresql_database_url(database_url):
+        return POSTGRESQL_ENGINE_OPTIONS
+    return {}
+
+
 # Flask 앱 생성
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production-firebase-auth')
@@ -64,28 +102,17 @@ app.config['SESSION_COOKIE_SECURE'] = False  # 개발환경: False, 프로덕션
 # === ⏰ 시간대 설정 (2025-10-01 추가) ===
 app.config['TIMEZONE'] = 'Asia/Seoul'  # 한국 시간대
 
-# 데이터베이스 설정
-if os.environ.get('DATABASE_URL'):
-    # Railway 또는 프로덕션 환경
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+# 데이터베이스 설정: URL 존재 여부가 아니라 스킴으로 판별한다.
+database_url = (os.environ.get('DATABASE_URL') or '').strip()
+IS_POSTGRESQL = is_postgresql_database_url(database_url)
+
+if IS_POSTGRESQL:
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SESSION_COOKIE_SECURE'] = True  # 프로덕션에서는 HTTPS 강제
-    
-    # 🔧 연결 풀 설정 (간헐적 연결 오류 해결)
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'pool_size': 5,            # 기본 연결 풀 크기 (메모리 절약)
-        'max_overflow': 10,        # 추가 연결 허용 (메모리 절약)
-        'pool_timeout': 30,        # 연결 대기 시간 (초)
-        'pool_recycle': 300,      # 연결 재사용 시간 (5분)
-        'pool_pre_ping': True,     # 연결 유효성 사전 검사
-        'connect_args': {
-    'connect_timeout': 10,
-    'keepalives': 1,
-    'keepalives_idle': 30,
-    'keepalives_interval': 10,
-    'keepalives_count': 5,
-    'application_name': 'child-learning-center'
-}
-    }
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = sqlalchemy_engine_options_for(database_url)
+elif database_url:
+    # 명시적 SQLite(또는 기타 비-Postgres) URL. Postgres connect_args를 붙이지 않는다.
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 else:
     # 개발 환경 - SQLite 사용
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///child_center.db'
@@ -141,8 +168,8 @@ def set_security_headers(response):
     response.headers['Content-Security-Policy'] = csp_policy
     
     # === HTTP Strict Transport Security (HSTS) ===
-    # 프로덕션에서만 HSTS 적용 (HTTPS 필요)
-    if os.environ.get('DATABASE_URL'):  # 프로덕션 환경 감지
+    # 프로덕션(PostgreSQL)에서만 HSTS 적용 (HTTPS 필요)
+    if IS_POSTGRESQL:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'
     
     # === Permissions Policy ===
@@ -4111,11 +4138,11 @@ def settings_security():
         },
         'security_headers': {
             'csp_enabled': True,
-            'hsts_enabled': bool(os.environ.get('DATABASE_URL')),
+            'hsts_enabled': IS_POSTGRESQL,
             'permissions_policy': True,
             'xss_protection': True
         },
-        'environment': 'Production' if os.environ.get('DATABASE_URL') else 'Development'
+        'environment': 'Production' if IS_POSTGRESQL else 'Development'
     }
     
     return render_template('settings/security.html', security_status=security_status)
@@ -4132,7 +4159,7 @@ def test_security_headers():
         'timestamp': datetime.utcnow().isoformat(),
         'security_headers_test': 'OK',
         'csp_policy': 'Active',
-        'hsts_status': 'Active' if os.environ.get('DATABASE_URL') else 'Development Mode',
+        'hsts_status': 'Active' if IS_POSTGRESQL else 'Development Mode',
         'brute_force_stats': {
             'failed_attempts_tracked': len(failed_login_attempts),
             'currently_blocked_ips': len(blocked_ips)
@@ -5657,23 +5684,25 @@ if __name__ == '__main__':
    
 else:
     # 배포된 환경에서도 데이터베이스 초기화
-    with app.app_context():
-        # Firebase 초기화
-        initialize_firebase()
-        db.create_all()
-        # 운영 DB 컬럼 보정 (alembic 상태 무관하게 누락 컬럼 추가)
-        try:
-            from sqlalchemy import text
-            with db.engine.connect() as _conn:
-                _conn.execute(text('ALTER TABLE child ADD COLUMN IF NOT EXISTS viewer_slug VARCHAR(24)'))
-                _conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS ix_child_viewer_slug ON child(viewer_slug)'))
-                _conn.commit()
-        except Exception:
-            pass
-        # 기본 사용자가 없으면 생성 (한 번만) - Firebase 사용 시 임시 비활성화
-        # if not User.query.filter_by(username='center_head').first():
-        #     # init_db() 제거 - 실제 데이터 보호
-        #     pass
-    
-    # 배포 환경에서도 백업 스케줄러 시작
-    start_backup_scheduler()
+    # CLC_TESTING=1 이면 unittest import 시 로컬 DB/Firebase/백업 스레드 부작용을 건너뛴다.
+    if os.environ.get('CLC_TESTING') != '1':
+        with app.app_context():
+            # Firebase 초기화
+            initialize_firebase()
+            db.create_all()
+            # 운영 DB 컬럼 보정 (alembic 상태 무관하게 누락 컬럼 추가)
+            try:
+                from sqlalchemy import text
+                with db.engine.connect() as _conn:
+                    _conn.execute(text('ALTER TABLE child ADD COLUMN IF NOT EXISTS viewer_slug VARCHAR(24)'))
+                    _conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS ix_child_viewer_slug ON child(viewer_slug)'))
+                    _conn.commit()
+            except Exception:
+                pass
+            # 기본 사용자가 없으면 생성 (한 번만) - Firebase 사용 시 임시 비활성화
+            # if not User.query.filter_by(username='center_head').first():
+            #     # init_db() 제거 - 실제 데이터 보호
+            #     pass
+
+        # 배포 환경에서도 백업 스케줄러 시작
+        start_backup_scheduler()
