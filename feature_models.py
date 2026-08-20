@@ -180,3 +180,57 @@ class ManualPointPreset(db.Model):
 
     def __repr__(self):
         return f'<ManualPointPreset {self.key} {self.default_points}>'
+
+
+class LearningSubject(db.Model):
+    """학습진도/향후 면제권용 과목 마스터. DailyPoints 과목 컬럼과 별개다."""
+    __tablename__ = 'learning_subject'
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(64), nullable=False, unique=True)
+    name = db.Column(db.String(80), nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<LearningSubject {self.key}>'
+
+
+class LearningProgressEntry(db.Model):
+    """아동+과목+날짜 단위의 학습진도 스냅샷. 다른 날짜는 append-only."""
+    __tablename__ = 'learning_progress_entry'
+    __table_args__ = (
+        UniqueConstraint(
+            'child_id',
+            'learning_subject_id',
+            'recorded_on',
+            name='uq_progress_child_subject_date',
+        ),
+        Index('ix_progress_child_recorded_on', 'child_id', 'recorded_on'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    child_id = db.Column(db.Integer, db.ForeignKey('child.id'), nullable=False, index=True)
+    learning_subject_id = db.Column(
+        db.Integer,
+        db.ForeignKey('learning_subject.id'),
+        nullable=False,
+        index=True,
+    )
+    recorded_on = db.Column(db.Date, nullable=False, index=True)
+    textbook_title = db.Column(db.String(120), nullable=False)
+    page = db.Column(db.Integer, nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    subject = db.relationship('LearningSubject')
+
+    def __repr__(self):
+        return (
+            f'<LearningProgressEntry {self.id} child={self.child_id} '
+            f'{self.recorded_on} p{self.page}>'
+        )

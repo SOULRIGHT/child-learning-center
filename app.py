@@ -600,6 +600,7 @@ def restrict_general_user_from_settings():
         'settings_ui', 'settings_system', 'settings_security',
         'settings_print_children', 'settings_print_child_report',
         'presets.manage_presets', 'presets.create_preset_route', 'presets.update_preset_route',
+        'progress.manage_subjects', 'progress.create_subject_route', 'progress.update_subject_route',
     }
 
     if endpoint in settings_endpoints:
@@ -1522,7 +1523,9 @@ def delete_child(child_id):
     try:
         # PointsHistory, Notification은 cascade 없음 → 삭제 전에 수동 제거 (FK 오류 방지)
         from features.reading.service import delete_readings_for_child
+        from features.progress.service import delete_progress_for_child
         delete_readings_for_child(child_id)
+        delete_progress_for_child(child_id)
         PointsHistory.query.filter_by(child_id=child_id).delete()
         Notification.query.filter(Notification.child_id == child_id).delete(synchronize_session=False)
         # 관련 기록들도 함께 삭제됨 (LearningRecord, ChildNote, DailyPoints는 cascade)
@@ -1651,6 +1654,8 @@ def child_detail(child_id):
     # 총 누적 포인트 (실제 전체 누적)
     total_points = child.cumulative_points
     
+    from features.progress.service import current_progress_for_child, list_active_subjects, kst_today
+
     return render_template('children/detail.html', 
                          child=child,
                          recent_records=recent_records,
@@ -1658,11 +1663,13 @@ def child_detail(child_id):
                          recent_avg=recent_avg,
                          latest_record=latest_record,
                          total_points=total_points,
-                         # 페이지네이션 정보
                          current_page=page,
                          total_pages=total_pages,
                          total_records=total_records,
-                         per_page=per_page)
+                         per_page=per_page,
+                         current_rows=current_progress_for_child(child_id),
+                         active_subjects=list_active_subjects(),
+                         kst_today=kst_today())
 
 @app.route('/children/<int:child_id>/points/export/csv')
 @login_required
@@ -2910,6 +2917,7 @@ def points_input(child_id):
     from features.reading.policy import is_general_reading_v2
     from features.reading.service import snapshot_for_date
     from features.presets.service import list_active_presets
+    from features.progress.service import current_progress_for_child, list_active_subjects, kst_today
     reading_snapshot = snapshot_for_date(child_id, selected_date)
     reading_policy_v2 = is_general_reading_v2(selected_date)
     manual_presets = list_active_presets()
@@ -2928,7 +2936,10 @@ def points_input(child_id):
                           reading_policy_v2=reading_policy_v2,
                           reading_has_today_record=reading_snapshot['has_today_record'],
                           reading_current_book_title=reading_snapshot['current_book_title'],
-                          manual_presets=manual_presets)
+                          manual_presets=manual_presets,
+                          current_rows=current_progress_for_child(child_id),
+                          active_subjects=list_active_subjects(),
+                          kst_today=kst_today())
 
 def update_cumulative_points(child_id, commit=True):
     """아동의 누적 포인트를 자동으로 업데이트"""
@@ -4080,6 +4091,8 @@ def settings_data():
                 LearningRecord.query.delete()
                 ReadingDay.query.delete()
                 ChildReading.query.delete()
+                # LearningSubject / LearningProgressEntry 는 학기 포인트 초기화 대상이 아니다.
+                # 장기 성장 원장이므로 reset_data에서 삭제하지 않는다.
 
                 # 아동별 누적 포인트 초기화 + viewer slug 재발급
                 children = Child.query.all()
@@ -5115,6 +5128,34 @@ def get_backup_data():
                 'updated_at': preset.updated_at.isoformat() if preset.updated_at else None,
             })
 
+        subjects = LearningSubject.query.order_by(LearningSubject.id.asc()).all()
+        subjects_data = []
+        for subject in subjects:
+            subjects_data.append({
+                'id': subject.id,
+                'key': subject.key,
+                'name': subject.name,
+                'is_active': bool(subject.is_active),
+                'sort_order': subject.sort_order,
+                'created_at': subject.created_at.isoformat() if subject.created_at else None,
+                'updated_at': subject.updated_at.isoformat() if subject.updated_at else None,
+            })
+
+        progress_entries = LearningProgressEntry.query.order_by(LearningProgressEntry.id.asc()).all()
+        progress_data = []
+        for entry in progress_entries:
+            progress_data.append({
+                'id': entry.id,
+                'child_id': entry.child_id,
+                'learning_subject_id': entry.learning_subject_id,
+                'recorded_on': entry.recorded_on.isoformat() if entry.recorded_on else None,
+                'textbook_title': entry.textbook_title,
+                'page': entry.page,
+                'created_by_user_id': entry.created_by_user_id,
+                'created_at': entry.created_at.isoformat() if entry.created_at else None,
+                'updated_at': entry.updated_at.isoformat() if entry.updated_at else None,
+            })
+
         # 사용자 정보
         users = User.query.all()
         users_data = []
@@ -5144,6 +5185,8 @@ def get_backup_data():
                     'child_readings': len(child_readings_data),
                     'reading_days': len(reading_days_data),
                     'manual_point_presets': len(presets_data),
+                    'learning_subjects': len(subjects_data),
+                    'learning_progress_entries': len(progress_data),
                 }
             },
             'children': children_data,
@@ -5155,6 +5198,8 @@ def get_backup_data():
             'child_readings': child_readings_data,
             'reading_days': reading_days_data,
             'manual_point_presets': presets_data,
+            'learning_subjects': subjects_data,
+            'learning_progress_entries': progress_data,
         }
         
         return backup_data, None
@@ -5348,6 +5393,34 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
                 preset.get('created_at'),
                 preset.get('updated_at'),
             ])
+
+        ws_subjects = wb.create_sheet("학습과목")
+        ws_subjects.append(['ID', 'key', '이름', '활성', '순서', '생성일', '수정일'])
+        for subject in backup_data.get('learning_subjects', []):
+            ws_subjects.append([
+                subject.get('id'),
+                subject.get('key'),
+                subject.get('name'),
+                subject.get('is_active'),
+                subject.get('sort_order'),
+                subject.get('created_at'),
+                subject.get('updated_at'),
+            ])
+
+        ws_progress = wb.create_sheet("학습진도이력")
+        ws_progress.append(['ID', '아동ID', '과목ID', '기록일', '교재명', '페이지', '기록자ID', '생성일', '수정일'])
+        for entry in backup_data.get('learning_progress_entries', []):
+            ws_progress.append([
+                entry.get('id'),
+                entry.get('child_id'),
+                entry.get('learning_subject_id'),
+                entry.get('recorded_on'),
+                entry.get('textbook_title'),
+                entry.get('page'),
+                entry.get('created_by_user_id'),
+                entry.get('created_at'),
+                entry.get('updated_at'),
+            ])
         
         # 메타데이터 시트
         ws_meta = wb.create_sheet("백업메타데이터")
@@ -5364,9 +5437,11 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
         ws_meta.append(['독서책이력수', meta['records_count'].get('child_readings', 0)])
         ws_meta.append(['일별독서기록수', meta['records_count'].get('reading_days', 0)])
         ws_meta.append(['수동포인트프리셋수', meta['records_count'].get('manual_point_presets', 0)])
+        ws_meta.append(['학습과목수', meta['records_count'].get('learning_subjects', 0)])
+        ws_meta.append(['학습진도이력수', meta['records_count'].get('learning_progress_entries', 0)])
         
         # 스타일 적용
-        for ws in [ws_children, ws_points, ws_history, ws_users, ws_books, ws_readings, ws_days, ws_presets, ws_meta]:
+        for ws in [ws_children, ws_points, ws_history, ws_users, ws_books, ws_readings, ws_days, ws_presets, ws_subjects, ws_progress, ws_meta]:
             for row in ws.iter_rows(min_row=1, max_row=1):
                 for cell in row:
                     cell.font = Font(bold=True)
@@ -5882,14 +5957,16 @@ def download_backup(filename):
 
 
 # Book/Blueprint 는 db.init_app 이후 late import 한다. feature 모듈은 extensions.db 만 의존한다.
-from feature_models import Book, ChildReading, ReadingDay, ManualPointPreset  # noqa: E402
+from feature_models import Book, ChildReading, ReadingDay, ManualPointPreset, LearningSubject, LearningProgressEntry  # noqa: E402
 from features.books.routes import books_bp  # noqa: E402
 from features.reading.routes import reading_bp  # noqa: E402
 from features.presets.routes import presets_bp  # noqa: E402
+from features.progress.routes import progress_bp  # noqa: E402
 
 app.register_blueprint(books_bp)
 app.register_blueprint(reading_bp)
 app.register_blueprint(presets_bp)
+app.register_blueprint(progress_bp)
 
 if __name__ == '__main__':
     if os.environ.get('CLC_TESTING') == '1':

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}{{ child.name }} - 학습 진도 이력{% endblock %}
+{% block page_title %}{{ child.name }} 학습 진도{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-1">{{ child.name }} 학습 진도</h4>
+        <p class="text-muted mb-0">같은 날짜에 다시 저장하면 그날 기록만 수정됩니다. 다른 날짜는 이력이 남습니다.</p>
+    </div>
+    <a href="{{ url_for('child_detail', child_id=child.id) }}" class="btn btn-outline-secondary">아동 상세</a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">현재 진도</div>
+    <div class="card-body">
+        {% include 'progress/_current.html' %}
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">진도 기록</div>
+    <div class="card-body">
+        {% set return_to = 'history' %}
+        {% include 'progress/_form.html' %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">전체 이력</div>
+    <div class="card-body">
+        {% if rows %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>날짜</th>
+                        <th>과목</th>
+                        <th>교재</th>
+                        <th>페이지</th>
+                        <th>변화</th>
+                        <th>기록자</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td>{{ row.entry.recorded_on.isoformat() }}</td>
+                        <td>{{ row.subject.name if row.subject else '-' }}</td>
+                        <td>{{ row.entry.textbook_title }}</td>
+                        <td>{{ row.entry.page }}P</td>
+                        <td>
+                            {% if row.delta is not none %}
+                                {% if row.delta > 0 %}+{% endif %}{{ row.delta }}P
+                            {% elif row.is_new_textbook %}
+                                새 교재
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td>{{ row.created_by_name }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">아직 진도 기록이 없습니다.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

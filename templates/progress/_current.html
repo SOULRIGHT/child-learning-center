@@ -1,0 +1,26 @@
+<div class="mb-3">
+    {% if current_rows %}
+        {% for row in current_rows %}
+        <div class="mb-2">
+            <strong>{{ row.subject.name }}</strong>
+            {% if row.entry %}
+            <div class="small">
+                {{ row.entry.textbook_title }} · {{ row.entry.page }}P
+                <span class="text-muted">{{ row.entry.recorded_on.strftime('%m/%d') }} 기록</span>
+            </div>
+            {% if row.delta is not none %}
+            <div class="small {% if row.delta > 0 %}text-success{% elif row.delta < 0 %}text-muted{% endif %}">
+                지난 기록보다 {% if row.delta > 0 %}+{% endif %}{{ row.delta }}P
+            </div>
+            {% elif row.is_new_textbook %}
+            <div class="small text-muted">새 교재</div>
+            {% endif %}
+            {% else %}
+            <div class="small text-muted">기록 없음</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+        <p class="text-muted small mb-0">활성 학습 과목이 없습니다.</p>
+    {% endif %}
+</div>
