@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}추천도서 미리보기{% endblock %}
+{% block page_title %}추천도서 미리보기{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <h4 class="mb-1">등록 미리보기</h4>
+    <p class="text-muted mb-0">아직 저장되지 않았습니다. 이번 import에서 빼려면 체크를 해제하세요.</p>
+</div>
+
+<div class="alert alert-info">
+    총 {{ preview.counts.total }}권
+    · 신규 Book 생성: {{ preview.counts.create }}
+    · 기존 Book 연결: {{ preview.counts.reuse }}
+    · 확인 필요: {{ preview.counts.review }}
+    · 오류: {{ preview.counts.error }}
+</div>
+{% if preview.counts.review or preview.counts.error %}
+<div class="alert alert-warning">
+    확인 필요/오류 행은 이번 적용에서 건너뜁니다. 잘못된 합치기보다 확인이 우선입니다.
+</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('books.recommended_import_confirm') }}" id="preview-apply-form">
+    <input type="hidden" name="token" value="{{ token }}">
+    <div class="d-flex gap-2 flex-wrap mb-2">
+        <button class="btn btn-sm btn-outline-secondary" type="button" id="select-all">전체 선택</button>
+        <button class="btn btn-sm btn-outline-secondary" type="button" id="select-none">전체 해제</button>
+    </div>
+    <div class="table-responsive mb-3">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>적용</th>
+                    <th>제목</th>
+                    <th>저자</th>
+                    <th>처리 예정</th>
+                    <th>학년군</th>
+                    <th>메모</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in preview.rows %}
+                <tr>
+                    <td>
+                        {% if row.selectable %}
+                        <input class="form-check-input js-include" type="checkbox" name="include" value="{{ row.row_key }}" checked>
+                        {% else %}
+                        <span class="text-muted">제외</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ row.title or '-' }}</td>
+                    <td>{{ row.author or '-' }}</td>
+                    <td>
+                        {% if row.action == 'create' %}신규 생성
+                        {% elif row.action == 'reuse' %}기존 연결
+                        {% elif row.action == 'review' %}확인 필요
+                        {% else %}오류{% endif %}
+                    </td>
+                    <td>
+                        {% if row.grade_band == '2-3' %}2~3학년
+                        {% elif row.grade_band == '4-6' %}4~6학년
+                        {% else %}{{ row.grade_band or '-' }}{% endif %}
+                    </td>
+                    <td class="text-muted">{{ row.message or '' }}{% if row.book_title %} ({{ row.book_title }}){% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-success" type="submit" id="apply-btn" {% if preview.counts.create + preview.counts.reuse == 0 %}disabled{% endif %}>
+            선택한 {{ preview.counts.create + preview.counts.reuse }}권 적용
+        </button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('books.recommended_import') }}">다시 올리기</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const boxes = Array.prototype.slice.call(document.querySelectorAll('.js-include'));
+    const btn = document.getElementById('apply-btn');
+    function refresh() {
+        const n = boxes.filter(function (el) { return el.checked; }).length;
+        if (btn) {
+            btn.textContent = '선택한 ' + n + '권 적용';
+            btn.disabled = n === 0;
+        }
+    }
+    boxes.forEach(function (el) { el.addEventListener('change', refresh); });
+    const allBtn = document.getElementById('select-all');
+    const noneBtn = document.getElementById('select-none');
+    if (allBtn) allBtn.addEventListener('click', function () {
+        boxes.forEach(function (el) { el.checked = true; });
+        refresh();
+    });
+    if (noneBtn) noneBtn.addEventListener('click', function () {
+        boxes.forEach(function (el) { el.checked = false; });
+        refresh();
+    });
+    refresh();
+})();
+</script>
+{% endblock %}

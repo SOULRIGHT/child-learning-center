@@ -12,8 +12,18 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
+from feature_models import ChildReading
 from features.reading.access import get_child, resolve_viewer_child
+from features.reading.classify import grade_band_for_child_grade
 from features.reading.policy import activity_today, is_general_reading_v2
+from features.reading.rewards import (
+    EVENT_COMPLETE,
+    EVENT_START,
+    RewardError,
+    approve_recommended_reward,
+    reward_status_for_reading,
+    revoke_recommended_reward,
+)
 from features.reading.service import (
     ReadingError,
     abandon_current,
@@ -104,6 +114,8 @@ def _editor_context(child, activity_date, *, mode, view_token=None):
         ),
         'has_today_record': snapshot['has_today_record'],
         'is_viewer_mode': mode == 'viewer',
+        'child_grade_band': grade_band_for_child_grade(getattr(child, 'grade', None)),
+        'reward_status': None if (mode == 'viewer' or current is None) else reward_status_for_reading(current, child),
     }
 
 
@@ -261,6 +273,7 @@ def teacher_history(child_id):
             'reading': reading,
             'book': reading.book,
             'days': list_days(reading.id),
+            'reward_status': reward_status_for_reading(reading, child),
         })
     return render_template('reading/history.html', child=child, items=items)
 
@@ -342,3 +355,48 @@ def teacher_save(child_id):
 @login_required
 def teacher_abandon(child_id):
     return _handle_teacher_write(child_id, 'abandon')
+
+
+def _handle_teacher_reward(child_id, action):
+    if _is_viewer():
+        return redirect(url_for('viewer_home'))
+    child = get_child(child_id)
+    if child is None:
+        abort(404)
+    try:
+        reading_id = int(request.form.get('child_reading_id') or 0)
+    except (TypeError, ValueError):
+        abort(400)
+    reading = ChildReading.query.get(reading_id)
+    if reading is None or int(reading.child_id) != int(child.id):
+        abort(403)
+    event_type = request.form.get('event_type')
+    if event_type not in {EVENT_START, EVENT_COMPLETE}:
+        flash('알 수 없는 보상 유형입니다.', 'error')
+        return redirect(request.referrer or url_for('reading.teacher_history', child_id=child.id))
+    try:
+        if action == 'approve':
+            approve_recommended_reward(reading, current_user, event_type)
+            flash('추천독서 보상을 승인했습니다.', 'success')
+        else:
+            revoke_recommended_reward(reading, current_user, event_type)
+            flash('추천독서 보상을 취소했습니다.', 'success')
+    except RewardError as exc:
+        flash(exc.message, 'error')
+    next_url = request.form.get('next') or request.referrer
+    if next_url:
+        return redirect(next_url)
+    return redirect(url_for('reading.teacher_history', child_id=child.id))
+
+
+@reading_bp.route('/children/<int:child_id>/reading/reward/approve', methods=['POST'])
+@login_required
+def teacher_reward_approve(child_id):
+    return _handle_teacher_reward(child_id, 'approve')
+
+
+@reading_bp.route('/children/<int:child_id>/reading/reward/revoke', methods=['POST'])
+@login_required
+def teacher_reward_revoke(child_id):
+    return _handle_teacher_reward(child_id, 'revoke')
+

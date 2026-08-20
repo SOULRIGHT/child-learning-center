@@ -33,7 +33,9 @@
     <div class="card shadow-sm mb-3">
         <div class="card-body p-4">
             <p class="text-muted mb-1">현재 읽는 책</p>
-            <h2 class="reading-book-title mb-1">{{ current_book.title }}</h2>
+            <h2 class="reading-book-title mb-1">{{ current_book.title }}
+                {% if current_reading.program_type == 'recommended' %}<span class="badge bg-success align-middle fs-6">추천</span>{% endif %}
+            </h2>
             <p class="mb-4">{% if current_book.author %}{{ current_book.author }}{% else %}글쓴이 없음{% endif %}</p>
 
             <form method="post" action="{% if is_viewer_mode %}{{ url_for('reading.viewer_save', view_token=view_token) }}{% else %}{{ url_for('reading.teacher_save', child_id=child.id) }}{% endif %}">
@@ -49,6 +51,11 @@
                 </div>
                 <button type="submit" class="btn btn-primary w-100 btn-lg-touch">오늘 기록 저장</button>
             </form>
+            {% if not is_viewer_mode %}
+            {% set reading = current_reading %}
+            {% set next_url = url_for('reading.teacher_editor', child_id=child.id, date=activity_date_iso) %}
+            {% include 'reading/_reward_panel.html' %}
+            {% endif %}
         </div>
     </div>
 
@@ -79,10 +86,14 @@
                 <input type="hidden" name="date" value="{{ activity_date_iso }}">
                 {% endif %}
                 <input type="hidden" name="book_id" id="book_id" value="">
+                <div class="btn-group mb-3" role="group">
+                    <button type="button" class="btn btn-outline-success active" id="search-mode-recommended">추천도서</button>
+                    <button type="button" class="btn btn-outline-secondary" id="search-mode-all">전체 도서 검색</button>
+                </div>
                 <label class="form-label fw-bold" for="title">책 제목</label>
-                <input class="form-control mb-2" type="text" name="title" id="title" required placeholder="예: 어린 왕자" autocomplete="off">
+                <input class="form-control mb-2" type="text" name="title" id="title" required placeholder="제목을 입력해 찾아 보세요" autocomplete="off">
                 <ul id="book-suggest" class="list-group reading-suggest mb-3"></ul>
-                <p class="small text-muted">검색 결과에 없으면 새 책으로 저장돼요.</p>
+                <p class="small text-muted mb-2" id="search-hint">학년군에 맞는 추천도서만 보여 줍니다. 제목으로 검색하세요.</p>
                 <label class="form-label fw-bold" for="author">글쓴이</label>
                 <input class="form-control mb-3" type="text" name="author" id="author" placeholder="알면 적어 주세요">
                 <label class="form-label fw-bold" for="review_text_new">오늘 느낀 점</label>
@@ -103,22 +114,46 @@
     const authorInput = document.getElementById('author');
     const bookIdInput = document.getElementById('book_id');
     const suggest = document.getElementById('book-suggest');
+    const recBtn = document.getElementById('search-mode-recommended');
+    const allBtn = document.getElementById('search-mode-all');
+    const hint = document.getElementById('search-hint');
     if (!titleInput || !suggest) return;
     let timer = null;
+    let recommendedOnly = true;
+    const gradeBand = {{ (child_grade_band or '')|tojson }};
+
+    function setMode(isRecommended) {
+        recommendedOnly = isRecommended;
+        if (recBtn && allBtn) {
+            recBtn.classList.toggle('active', isRecommended);
+            recBtn.classList.toggle('btn-outline-success', !isRecommended);
+            recBtn.classList.toggle('btn-success', isRecommended);
+            allBtn.classList.toggle('active', !isRecommended);
+            allBtn.classList.toggle('btn-outline-secondary', isRecommended);
+            allBtn.classList.toggle('btn-secondary', !isRecommended);
+        }
+        if (hint) {
+            hint.textContent = isRecommended
+                ? '학년군에 맞는 추천도서만 보여 줍니다. 제목으로 검색하세요.'
+                : '전체 도서에서 찾습니다. 추천 대상이면 [추천]이 표시됩니다.';
+        }
+        searchNow();
+    }
 
     function render(books) {
         suggest.innerHTML = '';
         if (!books || !books.length) {
             const li = document.createElement('li');
             li.className = 'list-group-item text-muted';
-            li.textContent = '검색 결과에 없으면 새 책 입력';
+            li.textContent = recommendedOnly ? '추천도서에서 찾지 못했어요. 전체 검색을 이용해 보세요.' : '검색 결과에 없으면 새 책 입력';
             suggest.appendChild(li);
             return;
         }
         books.forEach(function (book) {
             const li = document.createElement('li');
             li.className = 'list-group-item';
-            li.textContent = book.title + (book.author ? ' — ' + book.author : '');
+            const rec = book.is_recommended ? ' [추천]' : '';
+            li.textContent = book.title + (book.author ? ' — ' + book.author : '') + rec;
             li.addEventListener('click', function () {
                 titleInput.value = book.title || '';
                 authorInput.value = book.author || '';
@@ -129,20 +164,31 @@
         });
     }
 
-    titleInput.addEventListener('input', function () {
-        bookIdInput.value = '';
+    function searchNow() {
         const q = titleInput.value.trim();
-        clearTimeout(timer);
-        if (!q) {
+        let url = '/api/books?q=' + encodeURIComponent(q);
+        if (recommendedOnly) {
+            url += '&recommended=1';
+            if (gradeBand) url += '&grade_band=' + encodeURIComponent(gradeBand);
+        }
+        if (!q && !recommendedOnly) {
             suggest.innerHTML = '';
             return;
         }
-        timer = setTimeout(function () {
-            fetch('/api/books?q=' + encodeURIComponent(q))
-                .then(function (res) { return res.json(); })
-                .then(function (data) { render(data.books || []); });
-        }, 200);
+        fetch(url)
+            .then(function (res) { return res.json(); })
+            .then(function (data) { render(data.books || []); });
+    }
+
+    if (recBtn) recBtn.addEventListener('click', function () { setMode(true); });
+    if (allBtn) allBtn.addEventListener('click', function () { setMode(false); });
+
+    titleInput.addEventListener('input', function () {
+        bookIdInput.value = '';
+        clearTimeout(timer);
+        timer = setTimeout(searchNow, 200);
     });
+    setMode(true);
 })();
 </script>
 {% endif %}

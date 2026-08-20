@@ -3,18 +3,18 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime
 
 from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from feature_models import LearningProgressEntry, LearningSubject
+from features.dates import kst_today
 
 KEY_RE = re.compile(r'^[a-z][a-z0-9_]{0,62}$')
 MIN_PAGE = 1
 MAX_PAGE = 2000
 TITLE_MAX = 120
-KST = timezone(timedelta(hours=9))
 
 DEFAULT_SUBJECTS = (
     {'key': 'korean', 'name': '국어', 'sort_order': 10},
@@ -28,10 +28,6 @@ class ProgressError(Exception):
         super().__init__(message)
         self.message = message
         self.code = code
-
-
-def kst_today():
-    return datetime.now(KST).date()
 
 
 def normalize_textbook_title(raw):

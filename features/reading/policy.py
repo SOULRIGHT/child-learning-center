@@ -4,6 +4,8 @@ from __future__ import annotations
 import os
 from datetime import date, datetime, timedelta, timezone
 
+from features.dates import kst_today
+
 DEFAULT_V2_START_DATE = date(2099, 1, 1)
 DEFAULT_WRITE_TTL_MINUTES = 15
 POLICY_VERSION_GENERAL_V2 = 'general_v2'
@@ -16,8 +18,8 @@ def now_utc():
 
 
 def activity_today():
-    """독서 활동일. points_input의 utcnow().date()와 같은 UTC 달력 날짜."""
-    return now_utc().date()
+    """독서 활동일은 한국 현장 달력 날짜."""
+    return kst_today()
 
 
 def _parse_date(value):

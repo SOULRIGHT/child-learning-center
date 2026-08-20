@@ -70,6 +70,9 @@ class Book(db.Model):
             'id': self.id,
             'title': self.title,
             'author': self.author,
+            'is_recommended': bool(self.is_recommended),
+            'grade_band': self.grade_band,
+            'is_active': bool(self.is_active),
         }
 
     def __repr__(self):
@@ -80,7 +83,13 @@ STATUS_IN_PROGRESS = 'in_progress'
 STATUS_COMPLETED = 'completed'
 STATUS_ABANDONED = 'abandoned'
 PROGRAM_TYPE_GENERAL = 'general'
+PROGRAM_TYPE_RECOMMENDED = 'recommended'
 POLICY_VERSION_GENERAL_V2 = 'general_v2'
+POLICY_VERSION_RECOMMENDED_V1 = 'recommended_v1'
+GRADE_BAND_2_3 = '2-3'
+GRADE_BAND_4_6 = '4-6'
+EVENT_RECOMMENDED_START = 'recommended_start'
+EVENT_RECOMMENDED_COMPLETE = 'recommended_complete'
 ACTOR_CHILD = 'child'
 ACTOR_TEACHER = 'teacher'
 
@@ -151,6 +160,42 @@ class ReadingDay(db.Model):
 
     def __repr__(self):
         return f'<ReadingDay {self.id} reading={self.child_reading_id} {self.date}>'
+
+
+class ReadingRewardEvent(db.Model):
+    """추천독서 시작/완독 보상 원장. 중복 지급 방지의 정본."""
+    __tablename__ = 'reading_reward_event'
+    __table_args__ = (
+        UniqueConstraint(
+            'child_reading_id',
+            'event_type',
+            name='uq_reading_reward_event_reading_type',
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    child_reading_id = db.Column(
+        db.Integer,
+        db.ForeignKey('child_reading.id'),
+        nullable=False,
+        index=True,
+    )
+    event_type = db.Column(db.String(32), nullable=False)
+    points = db.Column(db.Integer, nullable=False)
+    awarded_on = db.Column(db.Date, nullable=False, index=True)
+    policy_version = db.Column(db.String(32), nullable=False, default=POLICY_VERSION_RECOMMENDED_V1)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    revoked_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+    child_reading = db.relationship('ChildReading')
+
+    def __repr__(self):
+        return (
+            f'<ReadingRewardEvent {self.id} reading={self.child_reading_id} '
+            f'{self.event_type} {self.points}P>'
+        )
 
 
 class ManualPointPreset(db.Model):

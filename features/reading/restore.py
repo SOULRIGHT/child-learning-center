@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from extensions import db
-from feature_models import ChildReading, ReadingDay
+from feature_models import ChildReading, ReadingDay, ReadingRewardEvent
 
 
 def _parse_dt(value):
@@ -96,6 +96,34 @@ def restore_readings_from_backup_data(backup_data):
         if updated_at:
             day.updated_at = updated_at
         restored_days += 1
+
+    events = (backup_data or {}).get('reading_reward_events') or []
+    restored_events = 0
+    for item in events:
+        if not isinstance(item, dict):
+            continue
+        child_reading_id = item.get('child_reading_id')
+        event_type = item.get('event_type')
+        awarded_on = _parse_date(item.get('awarded_on'))
+        if not child_reading_id or not event_type or awarded_on is None:
+            continue
+        event_id = item.get('id')
+        event = ReadingRewardEvent.query.get(event_id) if event_id else None
+        if event is None:
+            event = ReadingRewardEvent(id=event_id) if event_id else ReadingRewardEvent()
+            db.session.add(event)
+        event.child_reading_id = child_reading_id
+        event.event_type = event_type
+        event.points = int(item.get('points') or 0)
+        event.awarded_on = awarded_on
+        event.policy_version = item.get('policy_version') or 'recommended_v1'
+        event.created_by_user_id = item.get('created_by_user_id')
+        event.revoked_at = _parse_dt(item.get('revoked_at'))
+        event.revoked_by_user_id = item.get('revoked_by_user_id')
+        created_at = _parse_dt(item.get('created_at'))
+        if created_at:
+            event.created_at = created_at
+        restored_events += 1
 
     db.session.commit()
     return restored_readings, restored_days

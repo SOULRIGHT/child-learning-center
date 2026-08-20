@@ -10,13 +10,15 @@ from feature_models import (
     Book,
     ChildReading,
     POLICY_VERSION_GENERAL_V2,
-    PROGRAM_TYPE_GENERAL,
     ReadingDay,
+    ReadingRewardEvent,
     STATUS_ABANDONED,
     STATUS_COMPLETED,
     STATUS_IN_PROGRESS,
 )
 from features.books.service import BookCreateError, create_book_record
+from features.reading.access import get_child
+from features.reading.classify import classify_program_type
 from features.reading.policy import (
     activity_today,
     general_reading_v2_start_date,
@@ -178,6 +180,8 @@ def start_book(
     _assert_one_day_per_child(child_id, activity_date)
 
     book, _created = _resolve_book(book_id, title, author, allow_create=allow_create_book)
+    child = get_child(child_id)
+    program_type = classify_program_type(child, book)
     reading = ChildReading(
         child_id=child_id,
         book_id=book.id,
@@ -185,7 +189,7 @@ def start_book(
         completed_on=None,
         ended_on=None,
         status=STATUS_IN_PROGRESS,
-        program_type=PROGRAM_TYPE_GENERAL,
+        program_type=program_type,
         policy_version=POLICY_VERSION_GENERAL_V2,
         created_by_user_id=user_id,
         actor_type=actor_type,
@@ -270,11 +274,14 @@ def abandon_current(child_id, user_id, actor_type, activity_date=None, expected_
 
 
 def delete_readings_for_child(child_id):
-    """아동 삭제/학기 초기화용. 일반 UI에서는 호출하지 않는다."""
+    """아동 hard delete용. 학기 포인트 초기화에서는 호출하지 않는다."""
     reading_ids = [
         row.id for row in ChildReading.query.filter_by(child_id=child_id).all()
     ]
     if reading_ids:
+        ReadingRewardEvent.query.filter(ReadingRewardEvent.child_reading_id.in_(reading_ids)).delete(
+            synchronize_session=False
+        )
         ReadingDay.query.filter(ReadingDay.child_reading_id.in_(reading_ids)).delete(
             synchronize_session=False
         )

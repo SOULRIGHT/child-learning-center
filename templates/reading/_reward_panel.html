@@ -1,0 +1,63 @@
+{% if reward_status and reward_status.is_recommended %}
+<div class="card shadow-sm mb-3">
+    <div class="card-body p-4">
+        <h3 class="h5 mb-3">추천독서 보상</h3>
+        {% if reward_status.grade_deferred %}
+        <div class="alert alert-secondary mb-0">
+            5~6학년 추천독서는 기록만 남깁니다. 보상 방식(포인트/학습면제권)은 아직 설정하지 않았습니다.
+        </div>
+        {% else %}
+        <div class="d-flex flex-wrap gap-3">
+            <div>
+                <div class="fw-bold mb-1">시작 보상 {% if reward_status.start.points %}+{{ reward_status.start.points }}P{% endif %}</div>
+                {% if reward_status.start.awarded %}
+                <span class="badge bg-success">승인됨 {{ reward_status.start.awarded_on }}</span>
+                {% if reward_status.start.can_revoke %}
+                <form method="post" action="{{ url_for('reading.teacher_reward_revoke', child_id=child.id) }}" class="d-inline">
+                    <input type="hidden" name="child_reading_id" value="{{ reading.id }}">
+                    <input type="hidden" name="event_type" value="{{ reward_status.start.event_type }}">
+                    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+                    <button class="btn btn-sm btn-outline-danger" type="submit">취소</button>
+                </form>
+                {% endif %}
+                {% elif reward_status.start.can_approve %}
+                <form method="post" action="{{ url_for('reading.teacher_reward_approve', child_id=child.id) }}" class="d-inline">
+                    <input type="hidden" name="child_reading_id" value="{{ reading.id }}">
+                    <input type="hidden" name="event_type" value="{{ reward_status.start.event_type }}">
+                    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+                    <button class="btn btn-sm btn-primary" type="submit">+{{ reward_status.start.points }} 승인</button>
+                </form>
+                {% else %}
+                <span class="text-muted">미승인</span>
+                {% endif %}
+            </div>
+            <div>
+                <div class="fw-bold mb-1">완독 보상 {% if reward_status.complete.points %}+{{ reward_status.complete.points }}P{% endif %}</div>
+                {% if reward_status.complete.awarded %}
+                <span class="badge bg-success">승인됨 {{ reward_status.complete.awarded_on }}</span>
+                {% if reward_status.complete.can_revoke %}
+                <form method="post" action="{{ url_for('reading.teacher_reward_revoke', child_id=child.id) }}" class="d-inline">
+                    <input type="hidden" name="child_reading_id" value="{{ reading.id }}">
+                    <input type="hidden" name="event_type" value="{{ reward_status.complete.event_type }}">
+                    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+                    <button class="btn btn-sm btn-outline-danger" type="submit">취소</button>
+                </form>
+                {% endif %}
+                {% elif reward_status.complete.can_approve %}
+                <form method="post" action="{{ url_for('reading.teacher_reward_approve', child_id=child.id) }}" class="d-inline">
+                    <input type="hidden" name="child_reading_id" value="{{ reading.id }}">
+                    <input type="hidden" name="event_type" value="{{ reward_status.complete.event_type }}">
+                    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+                    <button class="btn btn-sm btn-primary" type="submit">+{{ reward_status.complete.points }} 승인</button>
+                </form>
+                {% elif reward_status.status == 'abandoned' %}
+                <span class="text-muted">중단한 책은 완독 보상을 줄 수 없습니다.</span>
+                {% else %}
+                <span class="text-muted">완독 후 승인</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}

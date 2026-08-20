@@ -255,7 +255,7 @@ def parse_manual_entries(payload, author_name):
         else:
             entry_id = None
         
-        normalized.append({
+        entry = {
             'id': entry_id,
             'subject': subject[:30],
             'points': points,
@@ -263,7 +263,17 @@ def parse_manual_entries(payload, author_name):
             'created_by': item.get('created_by') or author_name,
             'created_at': item.get('created_at') or datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
             'presetKey': item.get('presetKey') or item.get('preset_key')
-        })
+        }
+        # 추천독서 보상 출처. 기존 필드만 쓰는 화면은 이 키를 무시한다.
+        for extra_key in (
+            'source_type',
+            'source_child_reading_id',
+            'source_event',
+            'source_event_id',
+        ):
+            if extra_key in item:
+                entry[extra_key] = item[extra_key]
+        normalized.append(entry)
     
     for entry in normalized:
         if entry['id'] is None:
@@ -4082,17 +4092,14 @@ def settings_data():
                 return redirect(url_for('settings_data'))
             
             try:
-                # 학기 초기화: 아동/사용자는 유지하고 기록성 데이터만 삭제
-                from feature_models import ChildReading, ReadingDay
+                # 학기 포인트 초기화: 아동/사용자와 장기 원장은 유지한다.
                 PointsHistory.query.delete()
                 Notification.query.delete()
                 ChildNote.query.delete()
                 DailyPoints.query.delete()
                 LearningRecord.query.delete()
-                ReadingDay.query.delete()
-                ChildReading.query.delete()
-                # LearningSubject / LearningProgressEntry 는 학기 포인트 초기화 대상이 아니다.
-                # 장기 성장 원장이므로 reset_data에서 삭제하지 않는다.
+                # Book / ChildReading / ReadingDay / ReadingRewardEvent /
+                # LearningSubject / LearningProgressEntry / ManualPointPreset 은 보존.
 
                 # 아동별 누적 포인트 초기화 + viewer slug 재발급
                 children = Child.query.all()
@@ -4101,7 +4108,7 @@ def settings_data():
                     child.viewer_slug = generate_unique_viewer_slug()
                 
                 db.session.commit()
-                flash('학기 데이터 초기화 완료: 아동/사용자는 유지되고 기록/포인트/메모/알림이 삭제되었습니다.', 'success')
+                flash('학기 포인트 초기화 완료: 아동/사용자와 독서·진도·추천보상 기록은 유지되고 포인트/메모/알림이 삭제되었습니다.', 'success')
             except Exception as e:
                 db.session.rollback()
                 flash(f'데이터 초기화 중 오류가 발생했습니다: {e}', 'error')
@@ -5113,6 +5120,22 @@ def get_backup_data():
                 'updated_at': day.updated_at.isoformat() if day.updated_at else None,
             })
 
+        reward_events = ReadingRewardEvent.query.order_by(ReadingRewardEvent.id.asc()).all()
+        reward_events_data = []
+        for event in reward_events:
+            reward_events_data.append({
+                'id': event.id,
+                'child_reading_id': event.child_reading_id,
+                'event_type': event.event_type,
+                'points': event.points,
+                'awarded_on': event.awarded_on.isoformat() if event.awarded_on else None,
+                'policy_version': event.policy_version,
+                'created_by_user_id': event.created_by_user_id,
+                'created_at': event.created_at.isoformat() if event.created_at else None,
+                'revoked_at': event.revoked_at.isoformat() if event.revoked_at else None,
+                'revoked_by_user_id': event.revoked_by_user_id,
+            })
+
         presets = ManualPointPreset.query.order_by(ManualPointPreset.id.asc()).all()
         presets_data = []
         for preset in presets:
@@ -5184,6 +5207,7 @@ def get_backup_data():
                     'books': len(books_data),
                     'child_readings': len(child_readings_data),
                     'reading_days': len(reading_days_data),
+                    'reading_reward_events': len(reward_events_data),
                     'manual_point_presets': len(presets_data),
                     'learning_subjects': len(subjects_data),
                     'learning_progress_entries': len(progress_data),
@@ -5197,6 +5221,7 @@ def get_backup_data():
             'books': books_data,
             'child_readings': child_readings_data,
             'reading_days': reading_days_data,
+            'reading_reward_events': reward_events_data,
             'manual_point_presets': presets_data,
             'learning_subjects': subjects_data,
             'learning_progress_entries': progress_data,
@@ -5379,6 +5404,25 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
                 day.get('updated_at'),
             ])
 
+        ws_rewards = wb.create_sheet("추천독서보상이력")
+        ws_rewards.append([
+            'ID', '독서이력ID', '이벤트', '포인트', '활동일', '정책버전',
+            '작성자ID', '생성일', '취소일', '취소자ID'
+        ])
+        for event in backup_data.get('reading_reward_events', []):
+            ws_rewards.append([
+                event.get('id'),
+                event.get('child_reading_id'),
+                event.get('event_type'),
+                event.get('points'),
+                event.get('awarded_on'),
+                event.get('policy_version'),
+                event.get('created_by_user_id'),
+                event.get('created_at'),
+                event.get('revoked_at'),
+                event.get('revoked_by_user_id'),
+            ])
+
         ws_presets = wb.create_sheet("수동포인트프리셋")
         ws_presets.append(['ID', 'key', '이름', '기본포인트', '기본사유', '활성', '순서', '생성일', '수정일'])
         for preset in backup_data.get('manual_point_presets', []):
@@ -5436,12 +5480,13 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
         ws_meta.append(['도서수', meta['records_count'].get('books', 0)])
         ws_meta.append(['독서책이력수', meta['records_count'].get('child_readings', 0)])
         ws_meta.append(['일별독서기록수', meta['records_count'].get('reading_days', 0)])
+        ws_meta.append(['추천독서보상이력수', meta['records_count'].get('reading_reward_events', 0)])
         ws_meta.append(['수동포인트프리셋수', meta['records_count'].get('manual_point_presets', 0)])
         ws_meta.append(['학습과목수', meta['records_count'].get('learning_subjects', 0)])
         ws_meta.append(['학습진도이력수', meta['records_count'].get('learning_progress_entries', 0)])
         
         # 스타일 적용
-        for ws in [ws_children, ws_points, ws_history, ws_users, ws_books, ws_readings, ws_days, ws_presets, ws_subjects, ws_progress, ws_meta]:
+        for ws in [ws_children, ws_points, ws_history, ws_users, ws_books, ws_readings, ws_days, ws_rewards, ws_presets, ws_subjects, ws_progress, ws_meta]:
             for row in ws.iter_rows(min_row=1, max_row=1):
                 for cell in row:
                     cell.font = Font(bold=True)
@@ -5957,7 +6002,7 @@ def download_backup(filename):
 
 
 # Book/Blueprint 는 db.init_app 이후 late import 한다. feature 모듈은 extensions.db 만 의존한다.
-from feature_models import Book, ChildReading, ReadingDay, ManualPointPreset, LearningSubject, LearningProgressEntry  # noqa: E402
+from feature_models import Book, ChildReading, ReadingDay, ReadingRewardEvent, ManualPointPreset, LearningSubject, LearningProgressEntry  # noqa: E402
 from features.books.routes import books_bp  # noqa: E402
 from features.reading.routes import reading_bp  # noqa: E402
 from features.presets.routes import presets_bp  # noqa: E402
