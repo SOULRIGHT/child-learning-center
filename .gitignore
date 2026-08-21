@@ -68,3 +68,6 @@ firebase_env_example.txt
 
 # SQL exports
 *.sql
+# Local generated backups
+/backups/daily/*
+/backups/realtime/*
