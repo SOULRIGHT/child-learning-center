@@ -60,6 +60,27 @@ LearningSubject / ExemptionUsage snapshot 은 기능별 임시 구조이며, 지
 
 학생은 감상문 수정, Book CRUD, 도전 신청을 이 화면에서 할 수 없다.
 
+## ✅ 독서 체감 난이도·재미 평가 수집
+
+완독 시 아동이 그 책에 대한 체감 난이도와 재미를 각각 1~5점으로 선택적으로 남길 수 있다.
+
+- 저장 위치: `ChildReading.difficulty_rating`, `ChildReading.fun_rating` (nullable 1~5)
+- Book의 `ai_difficulty_low` / `ai_difficulty_high` 와 별개다. 책 metadata가 아니라 개별 아동 경험이다
+- 난이도만 / 재미만 / 둘 다 / 둘 다 생략 모두 완독 가능. 평가 누락으로 완독·포인트·면제권을 막지 않는다
+- 일반 / 추천 / 도전 동일. `classify_program_type` 과 보상/면제권에 영향을 주지 않는다
+- `CLC_READING_INCENTIVES_ENABLED=0` 이어도 입력·조회 가능
+- 학생/교사 history에 값이 있을 때만 `난이도 n/5 · 재미 n/5` 로 표시. 학생 history는 읽기 전용
+
+## TODO: 체감 평가 후속 활용 (not implemented)
+
+수집만 한다. 아래는 아직 구현하지 않는다.
+
+- 책별/학년별 체감 난이도 분석
+- 추천도서/도전도서 적정성 분석
+- 성장 dashboard
+- 향후 개인화 추천 데이터 검토
+- 평균 차트, AI 난이도와의 결합, rating 기반 포인트/면제권/challenge 판정
+
 ## TODO: Publisher reading-activity worksheets (not implemented)
 
 실제 책 조사 중 아래 자료를 확인했다. 센터 프로그램으로 쓸 수 있으나 아직 협의되지 않았고, 하지 않을 수도 있다.

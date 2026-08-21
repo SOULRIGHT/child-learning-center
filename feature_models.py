@@ -130,6 +130,8 @@ class ChildReading(db.Model):
     program_type = db.Column(db.String(32), nullable=False, default=PROGRAM_TYPE_GENERAL)
     policy_version = db.Column(db.String(32), nullable=False, default=POLICY_VERSION_GENERAL_V2)
     reward_mode = db.Column(db.String(16), nullable=True)
+    difficulty_rating = db.Column(db.Integer, nullable=True)
+    fun_rating = db.Column(db.Integer, nullable=True)
 
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     actor_type = db.Column(db.String(16), nullable=False)

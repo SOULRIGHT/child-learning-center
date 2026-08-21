@@ -40,6 +40,13 @@
             {% endif %}
             · 시작 {{ item.reading.started_on }}
         </p>
+        {% if item.reading.difficulty_rating or item.reading.fun_rating %}
+        <p class="mb-2">
+            {% if item.reading.difficulty_rating %}난이도 {{ item.reading.difficulty_rating }}/5{% endif %}
+            {% if item.reading.difficulty_rating and item.reading.fun_rating %} · {% endif %}
+            {% if item.reading.fun_rating %}재미 {{ item.reading.fun_rating }}/5{% endif %}
+        </p>
+        {% endif %}
         {% if not is_viewer_mode %}
         {% set reading = item.reading %}
         {% set reward_status = item.reward_status %}

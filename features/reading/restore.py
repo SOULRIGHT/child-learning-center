@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 from extensions import db
 from feature_models import ChildReading, ReadingDay, ReadingRewardEvent
+from features.reading.ratings import parse_optional_rating
 
 
 def _parse_dt(value):
@@ -28,6 +29,13 @@ def _parse_date(value):
         return value
     try:
         return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def _restore_rating(value):
+    try:
+        return parse_optional_rating(value)
     except ValueError:
         return None
 
@@ -58,6 +66,9 @@ def restore_readings_from_backup_data(backup_data):
         reading.program_type = item.get('program_type') or 'general'
         reading.policy_version = item.get('policy_version') or 'general_v2'
         reading.reward_mode = item.get('reward_mode')
+
+        reading.difficulty_rating = _restore_rating(item.get('difficulty_rating'))
+        reading.fun_rating = _restore_rating(item.get('fun_rating'))
         reading.created_by_user_id = item.get('created_by_user_id')
         reading.actor_type = item.get('actor_type') or 'teacher'
         created_at = _parse_dt(item.get('created_at'))

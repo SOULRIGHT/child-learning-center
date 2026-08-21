@@ -5124,6 +5124,8 @@ def get_backup_data():
                 'program_type': reading.program_type,
                 'policy_version': reading.policy_version,
                 'reward_mode': reading.reward_mode,
+                'difficulty_rating': reading.difficulty_rating,
+                'fun_rating': reading.fun_rating,
                 'created_by_user_id': reading.created_by_user_id,
                 'actor_type': reading.actor_type,
                 'created_at': reading.created_at.isoformat() if reading.created_at else None,
@@ -5438,7 +5440,7 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
         ws_readings = wb.create_sheet("독서책이력")
         ws_readings.append([
             'ID', '아동ID', '도서ID', '시작일', '완독일', '종료일', '상태',
-            '프로그램', '정책버전', '보상방식', '작성자ID', '작성자유형', '생성일', '수정일'
+            '프로그램', '정책버전', '보상방식', '난이도', '재미', '작성자ID', '작성자유형', '생성일', '수정일'
         ])
         for reading in backup_data.get('child_readings', []):
             ws_readings.append([
@@ -5452,6 +5454,8 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
                 reading.get('program_type'),
                 reading.get('policy_version'),
                 reading.get('reward_mode'),
+                reading.get('difficulty_rating'),
+                reading.get('fun_rating'),
                 reading.get('created_by_user_id'),
                 reading.get('actor_type'),
                 reading.get('created_at'),
@@ -6155,8 +6159,13 @@ if __name__ == '__main__':
     else:
         # Firebase 초기화
         initialize_firebase()
-        # 백업 스케줄러 시작
         start_backup_scheduler()
+        with app.app_context():
+            try:
+                from features.reading.schema import ensure_child_reading_rating_columns
+                ensure_child_reading_rating_columns()
+            except Exception:
+                pass
     
         # 배포 환경 체크
         if os.environ.get('FLASK_ENV') == 'production':
@@ -6181,6 +6190,11 @@ else:
                     _conn.execute(text('ALTER TABLE child ADD COLUMN IF NOT EXISTS viewer_slug VARCHAR(24)'))
                     _conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS ix_child_viewer_slug ON child(viewer_slug)'))
                     _conn.commit()
+            except Exception:
+                pass
+            try:
+                from features.reading.schema import ensure_child_reading_rating_columns
+                ensure_child_reading_rating_columns()
             except Exception:
                 pass
             # 기본 사용자가 없으면 생성 (한 번만) - Firebase 사용 시 임시 비활성화

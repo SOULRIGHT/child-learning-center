@@ -14,6 +14,24 @@
 .reading-suggest .list-group-item { cursor: pointer; min-height: 48px; }
 .reading-complete-check { font-size: 1.1rem; }
 .reading-complete-check input { width: 1.25rem; height: 1.25rem; }
+.reading-rating-panel { display: none; }
+.reading-rating-panel.is-visible { display: block; }
+.reading-rating-choices { display: flex; gap: 0.5rem; }
+.reading-rating-choices .btn {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 48px;
+    border-radius: 12px;
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+.reading-rating-scale {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin: 0.35rem 0 0;
+}
 </style>
 {% endblock %}
 
@@ -58,9 +76,40 @@
                 {% endif %}
                 <label class="form-label fw-bold" for="review_text">오늘 느낀 점</label>
                 <textarea class="form-control mb-3" id="review_text" name="review_text" placeholder="오늘 읽은 느낌을 2~3줄 적어 보세요. 안 적어도 저장할 수 있어요.">{{ today_day.review_text if today_day and today_day.review_text else '' }}</textarea>
-                <div class="form-check reading-complete-check mb-4">
-                    <input class="form-check-input" type="checkbox" value="1" id="completed" name="completed">
-                    <label class="form-check-label" for="completed">이 책을 다 읽었어요</label>
+                <div class="form-check reading-complete-check mb-3">
+                    <input class="form-check-input" type="checkbox" value="1" id="reading-completed" name="completed">
+                    <label class="form-check-label" for="reading-completed">이 책을 다 읽었어요</label>
+                </div>
+                <div id="reading-rating-panel" class="reading-rating-panel mb-4">
+                    <p class="small text-muted mb-2">완독할 때 선택사항입니다.</p>
+                    <p class="fw-bold mb-2">이 책은 얼마나 어려웠나요? <span class="text-muted fw-normal">(선택)</span></p>
+                    <div class="reading-rating-choices mb-1">
+                        <input type="radio" class="btn-check" name="difficulty_rating" id="difficulty-1" value="1" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="difficulty-1">1</label>
+                        <input type="radio" class="btn-check" name="difficulty_rating" id="difficulty-2" value="2" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="difficulty-2">2</label>
+                        <input type="radio" class="btn-check" name="difficulty_rating" id="difficulty-3" value="3" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="difficulty-3">3</label>
+                        <input type="radio" class="btn-check" name="difficulty_rating" id="difficulty-4" value="4" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="difficulty-4">4</label>
+                        <input type="radio" class="btn-check" name="difficulty_rating" id="difficulty-5" value="5" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="difficulty-5">5</label>
+                    </div>
+                    <p class="reading-rating-scale mb-3"><span>1 쉬움</span><span>3 보통</span><span>5 어려움</span></p>
+                    <p class="fw-bold mb-2">이 책은 얼마나 재미있었나요? <span class="text-muted fw-normal">(선택)</span></p>
+                    <div class="reading-rating-choices mb-1">
+                        <input type="radio" class="btn-check" name="fun_rating" id="fun-1" value="1" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="fun-1">1</label>
+                        <input type="radio" class="btn-check" name="fun_rating" id="fun-2" value="2" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="fun-2">2</label>
+                        <input type="radio" class="btn-check" name="fun_rating" id="fun-3" value="3" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="fun-3">3</label>
+                        <input type="radio" class="btn-check" name="fun_rating" id="fun-4" value="4" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="fun-4">4</label>
+                        <input type="radio" class="btn-check" name="fun_rating" id="fun-5" value="5" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="fun-5">5</label>
+                    </div>
+                    <p class="reading-rating-scale"><span>1 별로</span><span>3 보통</span><span>5 재미있음</span></p>
                 </div>
                 <button type="submit" class="btn btn-primary w-100 btn-lg-touch">오늘 기록 저장</button>
             </form>
@@ -118,6 +167,22 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+(function () {
+    var box = document.getElementById('reading-completed');
+    var panel = document.getElementById('reading-rating-panel');
+    if (!box || !panel) return;
+    function sync() {
+        if (box.checked) {
+            panel.classList.add('is-visible');
+        } else {
+            panel.classList.remove('is-visible');
+        }
+    }
+    box.addEventListener('change', sync);
+    sync();
+})();
+</script>
 {% if not current_reading %}
 <script>
 (function () {

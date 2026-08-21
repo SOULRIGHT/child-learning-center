@@ -293,6 +293,8 @@ def _handle_viewer_write(view_token, action):
                 review_text=request.form.get('review_text'),
                 mark_completed=mark_completed,
                 expected_reading_id=expected_reading_id,
+                difficulty_rating=request.form.get('difficulty_rating'),
+                fun_rating=request.form.get('fun_rating'),
             )
             flash('오늘 독서기록을 저장했어요.', 'success')
         elif action == 'abandon':
@@ -411,6 +413,8 @@ def _handle_teacher_write(child_id, action):
                 review_text=request.form.get('review_text'),
                 mark_completed=request.form.get('completed') in {'1', 'on', 'true', 'yes'},
                 expected_reading_id=expected_reading_id,
+                difficulty_rating=request.form.get('difficulty_rating'),
+                fun_rating=request.form.get('fun_rating'),
             )
             flash('오늘 독서기록을 저장했습니다.', 'success')
         elif action == 'abandon':

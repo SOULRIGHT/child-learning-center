@@ -25,6 +25,7 @@ from features.reading.policy import (
     general_reading_v2_start_date,
     is_general_reading_v2,
 )
+from features.reading.ratings import parse_optional_rating
 
 
 class ReadingError(Exception):
@@ -240,6 +241,18 @@ def start_book(
     return reading, day
 
 
+def _parse_completion_ratings(difficulty_rating, fun_rating):
+    try:
+        difficulty = parse_optional_rating(difficulty_rating)
+    except ValueError as exc:
+        raise ReadingError('난이도는 1부터 5까지 고를 수 있어요.', code='invalid_rating') from exc
+    try:
+        fun = parse_optional_rating(fun_rating)
+    except ValueError as exc:
+        raise ReadingError('재미는 1부터 5까지 고를 수 있어요.', code='invalid_rating') from exc
+    return difficulty, fun
+
+
 def save_today(
     child_id,
     user_id,
@@ -248,8 +261,16 @@ def save_today(
     review_text=None,
     mark_completed=False,
     expected_reading_id=None,
+    difficulty_rating=None,
+    fun_rating=None,
 ):
     activity_date = _ensure_policy_date(activity_date)
+    parsed_difficulty = None
+    parsed_fun = None
+    if mark_completed:
+        parsed_difficulty, parsed_fun = _parse_completion_ratings(
+            difficulty_rating, fun_rating,
+        )
     reading = get_in_progress(child_id)
     if reading is None:
         raise ReadingError('지금 읽고 있는 책이 없어요.', code='no_current_book')
@@ -265,6 +286,8 @@ def save_today(
         reading.status = STATUS_COMPLETED
         reading.completed_on = activity_date
         reading.ended_on = activity_date
+        reading.difficulty_rating = parsed_difficulty
+        reading.fun_rating = parsed_fun
 
     try:
         db.session.commit()
@@ -274,7 +297,16 @@ def save_today(
     return reading, day
 
 
-def complete_current(child_id, user_id, actor_type, activity_date=None, review_text=None, expected_reading_id=None):
+def complete_current(
+    child_id,
+    user_id,
+    actor_type,
+    activity_date=None,
+    review_text=None,
+    expected_reading_id=None,
+    difficulty_rating=None,
+    fun_rating=None,
+):
     return save_today(
         child_id,
         user_id,
@@ -283,6 +315,8 @@ def complete_current(child_id, user_id, actor_type, activity_date=None, review_t
         review_text=review_text,
         mark_completed=True,
         expected_reading_id=expected_reading_id,
+        difficulty_rating=difficulty_rating,
+        fun_rating=fun_rating,
     )
 
 
