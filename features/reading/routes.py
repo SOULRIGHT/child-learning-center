@@ -34,8 +34,7 @@ from features.reading.service import (
     abandon_current,
     actor_type_for_user,
     get_day,
-    list_days,
-    list_readings_for_child,
+    history_items_for_child,
     save_today,
     snapshot_for_date,
     start_book,
@@ -80,6 +79,54 @@ def _viewer_write_guard(child, view_token):
         flash('독서기록을 저장할 수 없어요.', 'error')
         return _redirect_confirm(view_token)
     return None
+
+
+def _viewer_read_guard(child, view_token):
+    reason = viewer_session.read_block_reason(session, child)
+    if reason == 'unverified':
+        flash('본인 확인이 필요해요. QR을 스캔해 주세요.', 'warning')
+        return redirect(url_for('reading.viewer_confirm', view_token=view_token, next='history'))
+    if reason == 'child_mismatch':
+        flash('다른 아동의 기록은 볼 수 없어요.', 'error')
+        abort(403)
+    if reason:
+        flash('독서기록을 볼 수 없어요.', 'error')
+        return redirect(url_for('viewer_home') if _is_viewer() else url_for('dashboard'))
+    return None
+
+
+def _confirm_next_url(view_token):
+    next_name = (request.form.get('next') or request.args.get('next') or '').strip().lower()
+    if next_name == 'history':
+        return url_for('reading.viewer_history', view_token=view_token)
+    return url_for('reading.viewer_editor', view_token=view_token)
+
+
+def _render_history(child, *, is_viewer_mode, view_token=None):
+    items = history_items_for_child(child.id)
+    exemption_status = None
+    if not is_viewer_mode:
+        enriched = []
+        for item in items:
+            reading = item['reading']
+            enriched.append({
+                **item,
+                'reward_status': _with_mode_blocks(
+                    reward_status_for_reading(reading, child),
+                    reading,
+                ),
+            })
+        items = enriched
+        if grade_supports_reward_choice(getattr(child, 'grade', None)):
+            exemption_status = child_exemption_snapshot(child.id)
+    return render_template(
+        'reading/history.html',
+        child=child,
+        items=items,
+        exemption_status=exemption_status,
+        is_viewer_mode=is_viewer_mode,
+        view_token=view_token,
+    )
 
 
 def _assert_reading_child(child, expected_reading_id):
@@ -166,15 +213,18 @@ def viewer_confirm(view_token):
         answer = (request.form.get('confirm') or '').strip().lower()
         if answer in {'yes', 'y', '1'}:
             viewer_session.set_verified_child(session, child)
-            return redirect(url_for('reading.viewer_editor', view_token=slug or view_token))
+            return redirect(_confirm_next_url(slug or view_token))
         viewer_session.clear_verified_child(session)
         flash('올바른 아동의 QR을 다시 스캔해 주세요.', 'info')
         return redirect(url_for('viewer_home') if _is_viewer() else url_for('dashboard'))
 
+    next_name = (request.args.get('next') or '').strip().lower()
+    confirm_next = 'history' if next_name == 'history' else ''
     return render_template(
         'reading/confirm.html',
         child=child,
         view_token=slug or view_token,
+        confirm_next=confirm_next,
     )
 
 
@@ -293,38 +343,31 @@ def teacher_editor(child_id):
     )
 
 
+@reading_bp.route('/viewer/report/<string:view_token>/reading/history', methods=['GET'])
+@login_required
+def viewer_history(view_token):
+    child, slug = resolve_viewer_child(view_token)
+    if not child:
+        flash('유효하지 않은 리포트 링크입니다.', 'error')
+        return redirect(url_for('viewer_home') if _is_viewer() else url_for('dashboard'))
+    token = slug or view_token
+    if not _is_viewer():
+        return redirect(url_for('reading.teacher_history', child_id=child.id))
+    blocked = _viewer_read_guard(child, token)
+    if blocked:
+        return blocked
+    return _render_history(child, is_viewer_mode=True, view_token=token)
+
+
 @reading_bp.route('/children/<int:child_id>/reading/history', methods=['GET'])
 @login_required
 def teacher_history(child_id):
-    # TODO: Viewer self reading history (read-only)
-    # 학생열람은 작성만 가능하고, 자기 독서기록 읽기 전용 조회는 후속 Step에서 구현한다.
-    # 기존 QR/viewer 권한과 검증된 child session(viewer_child_id / viewer_slug) 범위만 사용한다.
-    # 자기 아동만, 다른 아동 접근 금지. ReadingRewardEvent / ExemptionTicketSource /
-    # 승인자 / policy_version 등 관리자 audit 은 노출하지 않는다.
     if _is_viewer():
         return redirect(url_for('viewer_home'))
     child = get_child(child_id)
     if child is None:
         abort(404)
-    readings = list_readings_for_child(child.id)
-    items = []
-    for reading in readings:
-        items.append({
-            'reading': reading,
-            'book': reading.book,
-            'days': list_days(reading.id),
-            'reward_status': _with_mode_blocks(reward_status_for_reading(reading, child), reading),
-        })
-    exemption_status = None
-    if grade_supports_reward_choice(getattr(child, 'grade', None)):
-        exemption_status = child_exemption_snapshot(child.id)
-    return render_template(
-        'reading/history.html',
-        child=child,
-        items=items,
-        exemption_status=exemption_status,
-        is_viewer_mode=False,
-    )
+    return _render_history(child, is_viewer_mode=False)
 
 
 def _handle_teacher_write(child_id, action):

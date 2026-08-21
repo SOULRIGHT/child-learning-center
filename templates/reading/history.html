@@ -1,9 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}{{ child.name }} 독서 기록{% endblock %}
-{% block page_title %}독서 기록 보기{% endblock %}
+{% block title %}{% if is_viewer_mode %}내 독서 기록{% else %}{{ child.name }} 독서 기록{% endif %}{% endblock %}
+{% block page_title %}{% if is_viewer_mode %}내 독서 기록{% else %}독서 기록 보기{% endif %}{% endblock %}
 
 {% block content %}
+{% if is_viewer_mode %}
+<div class="d-flex gap-2 mb-3 flex-wrap">
+    <a href="{{ url_for('viewer_report', view_token=view_token) }}" class="btn btn-outline-secondary">뒤로가기</a>
+</div>
+{% else %}
 <div class="d-flex gap-2 mb-3 flex-wrap">
     <a href="{{ url_for('reading.teacher_editor', child_id=child.id) }}" class="btn btn-primary">교사가 대신 기록</a>
     <a href="{{ url_for('points_input', child_id=child.id) }}" class="btn btn-outline-secondary">포인트 입력으로</a>
@@ -13,6 +18,7 @@
 {% set compact = true %}
 {% set next_url = url_for('reading.teacher_history', child_id=child.id) %}
 {% include 'exemption/_status.html' %}
+{% endif %}
 {% endif %}
 <h3 class="mb-3">{{ child.name }}</h3>
 {% if not items %}
@@ -34,10 +40,12 @@
             {% endif %}
             · 시작 {{ item.reading.started_on }}
         </p>
+        {% if not is_viewer_mode %}
         {% set reading = item.reading %}
         {% set reward_status = item.reward_status %}
         {% set next_url = url_for('reading.teacher_history', child_id=child.id) %}
         {% include 'reading/_reward_panel.html' %}
+        {% endif %}
         {% if item.days %}
         <ul class="list-group">
             {% for day in item.days %}

@@ -456,6 +456,7 @@ VIEWER_ALLOWED_ENDPOINTS = {
     'books.search_books',
     'reading.viewer_confirm',
     'reading.viewer_editor',
+    'reading.viewer_history',
     'logout',
 }
 VIEWER_WRITE_ENDPOINTS = {

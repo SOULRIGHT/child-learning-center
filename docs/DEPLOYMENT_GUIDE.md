@@ -62,6 +62,8 @@ python app.py
 # http://localhost:5000
 ```
 
+`--no-reload`로 띄운 개발 서버에 새 Flask route를 추가했다면 서버를 재시작한다. 템플릿만 갱신되고 route map이 옛것이면 `url_for`가 BuildError를 낸다.
+
 ### 4. Git 변경사항 커밋
 ```bash
 # 변경된 파일들 스테이징

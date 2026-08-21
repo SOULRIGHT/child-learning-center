@@ -27,33 +27,38 @@ LearningSubject / ExemptionUsage snapshot 은 기능별 임시 구조이며, 지
 
 이번 Step에서는 구현하지 않는다. 코드 정본은 `features/subjects.py` 임시 registry.
 
-## TODO: Viewer self reading history (read-only)
+## ✅ Viewer self reading history (read-only)
 
-학생열람 계정은 현재 자기 아동의 독서 기록을 작성할 수 있지만, 나중에 같은 기록을 읽기 전용으로 다시 볼 수 있어야 한다.
-이번 Step에서는 구현하지 않는다. 후속 Step에서 한다.
+학생열람 계정은 검증된 자기 child context에서 기존 ChildReading / ReadingDay 기록을 읽기 전용으로 다시 볼 수 있다.
 
-범위:
+구현:
 
-- 학생열람 계정 + 검증된 `viewer_child_id` / `viewer_slug` 기준
-- 기존 QR/viewer 권한 모델과 검증된 child session 범위만 사용. 우회하지 않는다
-- 자기 아동의 독서기록만 조회. 다른 아동 기록 접근 절대 불가
-- 읽기 전용. 작성/수정/삭제 없음
+- 공용 학생열람 계정 + QR/`viewer_slug` + 검증된 `viewer_child_id` 세션을 재사용한다
+- 기존 `reading/history.html` 을 viewer 조건으로 재사용한다. 별도 history 시스템을 만들지 않는다
+- 진입: 개인 리포트·독서 작성 화면의 **내 독서 기록** (`/viewer/report/<slug>/reading/history`)
+- 읽기 권한은 write TTL(15분)과 분리한다. 검증된 child가 맞으면 TTL이 지나도 조회 가능
+- 교사/관리자 기존 `/children/<id>/reading/history` 전체 열람은 유지한다
+- `CLC_READING_INCENTIVES_ENABLED=0` 이어도 조회는 동작한다
 
-보여줄 것:
+개발 참고: `--no-reload` Flask 개발 서버에 새 route를 추가한 뒤에는 서버를 재시작해야 route map이 갱신된다. 템플릿만 먼저 바뀌면 `url_for` BuildError가 날 수 있다. 앱 코드를 stale route map에 맞춰 우회하지 않는다.
 
-- 책 제목, 저자
-- 시작일, 완독일
-- 상태(in_progress / completed / abandoned를 사용자 친화적으로 표시)
-- 본인이 작성한 ReadingDay 감상 기록
-- 일반독서 / 추천독서 / 도전독서 정도의 구분
+보여주는 것:
 
-보여주지 말 것:
+- 책 제목, 지은이
+- 일반 / [추천] / [도전]
+- 읽는 중 / 완독 / 중단
+- 시작일, 완독일 또는 종료일
+- ReadingDay 날짜와 학생이 작성한 감상(`review_text`)
+- 현재 읽는 중인 책 포함
 
-- ReadingRewardEvent 내부 ledger
-- ExemptionTicketSource
-- 관리자 승인자
-- 내부 policy_version
-- 기타 관리자용 audit 정보
+보여주지 않는 것:
+
+- 포인트 승인 / reward revoke / reward_mode 관리자 변경
+- 면제권 발급·사용·취소 UI
+- Book 관리, 다른 아동 기록, 관리자 audit
+- ReadingRewardEvent event_type, ExemptionTicketSource, policy_version, created_by_user_id, actor_type 등
+
+학생은 감상문 수정, Book CRUD, 도전 신청을 이 화면에서 할 수 없다.
 
 ## TODO: Publisher reading-activity worksheets (not implemented)
 

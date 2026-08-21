@@ -20,7 +20,10 @@
 {% block content %}
 <div class="reading-editor">
     {% if is_viewer_mode %}
-    <a href="{{ url_for('viewer_report', view_token=view_token) }}" class="btn btn-outline-secondary mb-3">뒤로가기</a>
+    <div class="d-flex gap-2 mb-3 flex-wrap">
+        <a href="{{ url_for('viewer_report', view_token=view_token) }}" class="btn btn-outline-secondary">뒤로가기</a>
+        <a href="{{ url_for('reading.viewer_history', view_token=view_token) }}" class="btn btn-outline-primary">내 독서 기록</a>
+    </div>
     {% else %}
     <div class="d-flex gap-2 mb-3 flex-wrap">
         <a href="{{ url_for('points_input', child_id=child.id, date=activity_date_iso) }}" class="btn btn-outline-secondary">포인트 입력으로</a>

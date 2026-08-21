@@ -62,6 +62,21 @@ def is_write_fresh(session, child):
     return age <= write_ttl_delta()
 
 
+def read_block_reason(session, child):
+    """읽기 전용 조회. 검증된 child context는 필요하지만 write TTL은 요구하지 않는다."""
+    if child is None:
+        return 'child_missing'
+    session_id = verified_child_id(session)
+    if session_id is None:
+        return 'unverified'
+    if session_id != int(child.id):
+        return 'child_mismatch'
+    if session.get(SESSION_CHILD_SLUG) and getattr(child, 'viewer_slug', None):
+        if str(session.get(SESSION_CHILD_SLUG)) != str(child.viewer_slug):
+            return 'child_mismatch'
+    return None
+
+
 def write_block_reason(session, child):
     if child is None:
         return 'child_missing'

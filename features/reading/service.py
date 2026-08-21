@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 
 from extensions import db
 from feature_models import (
@@ -92,6 +93,35 @@ def list_days(child_reading_id):
         .order_by(ReadingDay.date.asc(), ReadingDay.id.asc())
         .all()
     )
+
+
+def history_items_for_child(child_id):
+    """한 아동의 책/일자 기록을 묶어 반환. Book은 joinedload, ReadingDay는 IN 한 번."""
+    readings = (
+        ChildReading.query.options(joinedload(ChildReading.book))
+        .filter_by(child_id=child_id)
+        .order_by(ChildReading.started_on.desc(), ChildReading.id.desc())
+        .all()
+    )
+    if not readings:
+        return []
+    reading_ids = [reading.id for reading in readings]
+    days = (
+        ReadingDay.query.filter(ReadingDay.child_reading_id.in_(reading_ids))
+        .order_by(ReadingDay.date.asc(), ReadingDay.id.asc())
+        .all()
+    )
+    days_by_reading = {reading_id: [] for reading_id in reading_ids}
+    for day in days:
+        days_by_reading[day.child_reading_id].append(day)
+    return [
+        {
+            'reading': reading,
+            'book': reading.book,
+            'days': days_by_reading[reading.id],
+        }
+        for reading in readings
+    ]
 
 
 def _ensure_policy_date(activity_date):

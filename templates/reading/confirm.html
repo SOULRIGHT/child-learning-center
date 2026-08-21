@@ -16,9 +16,12 @@
 <div class="reading-confirm-wrap">
     <div class="card reading-confirm-card shadow-sm">
         <div class="card-body p-4 text-center">
-            <p class="text-muted mb-2">독서 기록 전에 한 번 확인해요</p>
+            <p class="text-muted mb-2">{% if confirm_next|default('') == 'history' %}내 독서 기록을 보기 전에 한 번 확인해요{% else %}독서 기록 전에 한 번 확인해요{% endif %}</p>
             <p class="reading-confirm-name mb-3">{{ child.name }} 아동이 맞나요?</p>
             <form method="post" class="reading-confirm-actions">
+                {% if confirm_next|default('') == 'history' %}
+                <input type="hidden" name="next" value="history">
+                {% endif %}
                 <div class="d-grid gap-2">
                     <button type="submit" name="confirm" value="yes" class="btn btn-primary">네, 맞아요</button>
                     <button type="submit" name="confirm" value="no" class="btn btn-outline-secondary">아니요</button>

@@ -252,6 +252,12 @@ class CoreRegressionTests(unittest.TestCase):
             nfc.headers.get('Location', ''),
         )
 
+        followed = self.client.get(f'/nfc/{self.child_a.id}', follow_redirects=True)
+        self.assertEqual(followed.status_code, 200)
+        html = followed.get_data(as_text=True)
+        self.assertIn(self.child_a.name, html)
+        self.assertIn('개인 리포트', html)
+
     def test_viewer_cannot_post_points_or_manual_points(self):
         """학생열람 POST는 포인트/수동포인트를 저장하지 못한다."""
         self._login(self.viewer)
