@@ -1,4 +1,4 @@
-"""추천독서 교사 승인 보상. DailyPoints.reading_points는 건드리지 않는다."""
+"""추천/도전 독서 교사 승인 보상. DailyPoints.reading_points는 건드리지 않는다."""
 from __future__ import annotations
 
 import json
@@ -9,9 +9,13 @@ from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from feature_models import (
+    EVENT_CHALLENGE_COMPLETE,
+    EVENT_CHALLENGE_START,
     EVENT_RECOMMENDED_COMPLETE,
     EVENT_RECOMMENDED_START,
+    POLICY_VERSION_CHALLENGE_V1,
     POLICY_VERSION_RECOMMENDED_V1,
+    PROGRAM_TYPE_CHALLENGE,
     PROGRAM_TYPE_RECOMMENDED,
     ReadingRewardEvent,
     STATUS_ABANDONED,
@@ -21,15 +25,51 @@ from feature_models import (
 from features.reading.access import model_named
 from features.dates import kst_today
 from features.exemption.policy import REWARD_MODE_EXEMPTION, REWARD_MODE_POINTS, grade_supports_reward_choice
+from features.reading.policy import reading_incentives_enabled
 
-SOURCE_TYPE = 'recommended_reading'
 EVENT_START = EVENT_RECOMMENDED_START
 EVENT_COMPLETE = EVENT_RECOMMENDED_COMPLETE
+SOURCE_TYPE = 'recommended_reading'
 
-_EVENT_LABELS = {
-    EVENT_START: ('추천독서 시작', '추천독서 시작 승인', 'start'),
-    EVENT_COMPLETE: ('추천독서 완독', '추천독서 완독 승인', 'complete'),
+READING_REWARD_POLICIES = {
+    PROGRAM_TYPE_RECOMMENDED: {
+        'start_points': {2: 100, 3: 100, 4: 100, 5: 100, 6: 100},
+        'complete_points': {2: 100, 3: 100, 4: 200, 5: 200, 6: 200},
+        'auto_points_grades': (2, 3, 4),
+        'choice_grades': (5, 6),
+        'start_event': EVENT_RECOMMENDED_START,
+        'complete_event': EVENT_RECOMMENDED_COMPLETE,
+        'policy_version': POLICY_VERSION_RECOMMENDED_V1,
+        'source_type': 'recommended_reading',
+        'start_label': ('추천독서 시작', '추천독서 시작 승인', 'start'),
+        'complete_label': ('추천독서 완독', '추천독서 완독 승인', 'complete'),
+        'panel_title': '추천독서 보상',
+        'program_label': '추천독서',
+    },
+    PROGRAM_TYPE_CHALLENGE: {
+        'start_points': {5: 200, 6: 200},
+        'complete_points': {5: 400, 6: 400},
+        'auto_points_grades': (),
+        'choice_grades': (5, 6),
+        'start_event': EVENT_CHALLENGE_START,
+        'complete_event': EVENT_CHALLENGE_COMPLETE,
+        'policy_version': POLICY_VERSION_CHALLENGE_V1,
+        'source_type': 'challenge_reading',
+        'start_label': ('도전독서 시작', '도전독서 시작 승인', 'start'),
+        'complete_label': ('도전독서 완독', '도전독서 완독 승인', 'complete'),
+        'panel_title': '도전독서 보상',
+        'program_label': '도전독서',
+    },
 }
+
+INCENTIVE_PROGRAM_TYPES = frozenset(READING_REWARD_POLICIES)
+START_EVENT_TYPES = frozenset(
+    policy['start_event'] for policy in READING_REWARD_POLICIES.values()
+)
+COMPLETE_EVENT_TYPES = frozenset(
+    policy['complete_event'] for policy in READING_REWARD_POLICIES.values()
+)
+ALL_REWARD_EVENT_TYPES = START_EVENT_TYPES | COMPLETE_EVENT_TYPES
 
 
 class RewardError(Exception):
@@ -46,24 +86,41 @@ def _parse_grade(raw):
         return None
 
 
+def policy_for_program(program_type):
+    return READING_REWARD_POLICIES.get(program_type)
+
+
+def event_types_for_program(program_type):
+    policy = policy_for_program(program_type)
+    if policy is None:
+        return None, None
+    return policy['start_event'], policy['complete_event']
+
+
+def incentive_reward_points(program_type, grade, event_type, reward_mode=None):
+    policy = policy_for_program(program_type)
+    if policy is None:
+        return None
+    parsed = _parse_grade(grade)
+    if event_type == policy['start_event']:
+        table = policy['start_points']
+    elif event_type == policy['complete_event']:
+        table = policy['complete_points']
+    else:
+        return None
+    points = table.get(parsed)
+    if points is None:
+        return None
+    if parsed in policy['auto_points_grades']:
+        return points
+    if parsed in policy['choice_grades'] and reward_mode == REWARD_MODE_POINTS:
+        return points
+    return None
+
+
 def recommended_reward_points(grade, event_type, reward_mode=None):
     """2~4학년은 기존 정책. 5~6학년은 reward_mode=points 일 때만 점수를 준다."""
-    parsed = _parse_grade(grade)
-    if event_type == EVENT_START:
-        if parsed in (2, 3, 4):
-            return 100
-        if parsed in (5, 6) and reward_mode == REWARD_MODE_POINTS:
-            return 100
-        return None
-    if event_type == EVENT_COMPLETE:
-        if parsed in (2, 3):
-            return 100
-        if parsed == 4:
-            return 200
-        if parsed in (5, 6) and reward_mode == REWARD_MODE_POINTS:
-            return 200
-        return None
-    return None
+    return incentive_reward_points(PROGRAM_TYPE_RECOMMENDED, grade, event_type, reward_mode)
 
 
 def _load_history(daily_record):
@@ -174,7 +231,7 @@ def _get_or_create_daily(child_id, activity_date, user_id):
     return daily
 
 
-def _append_manual_item(daily_record, *, event, user_name, subject, reason, source_event):
+def _append_manual_item(daily_record, *, event, user_name, subject, reason, source_event, source_type):
     history = _load_history(daily_record)
     next_id = (max((int(item.get('id') or 0) for item in history), default=0) + 1) if history else 1
     history.append({
@@ -184,7 +241,7 @@ def _append_manual_item(daily_record, *, event, user_name, subject, reason, sour
         'reason': reason,
         'created_by': user_name,
         'created_at': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
-        'source_type': SOURCE_TYPE,
+        'source_type': source_type,
         'source_child_reading_id': event.child_reading_id,
         'source_event': source_event,
         'source_event_id': event.id,
@@ -193,7 +250,7 @@ def _append_manual_item(daily_record, *, event, user_name, subject, reason, sour
     return history
 
 
-def _remove_manual_item(daily_record, event, source_event):
+def _remove_manual_item(daily_record, event, source_event, source_type):
     history = _load_history(daily_record)
     kept = []
     removed = None
@@ -201,7 +258,7 @@ def _remove_manual_item(daily_record, event, source_event):
         if removed is None and (
             item.get('source_event_id') == event.id
             or (
-                item.get('source_type') == SOURCE_TYPE
+                item.get('source_type') == source_type
                 and item.get('source_child_reading_id') == event.child_reading_id
                 and item.get('source_event') == source_event
             )
@@ -224,10 +281,20 @@ def is_active_event(event):
     return event is not None and event.revoked_at is None
 
 
+def has_active_point_rewards(reading):
+    if reading is None:
+        return False
+    start_type, complete_type = event_types_for_program(reading.program_type)
+    types = [item for item in (start_type, complete_type) if item]
+    if not types:
+        types = list(ALL_REWARD_EVENT_TYPES)
+    return any(is_active_event(get_event(reading.id, event_type)) for event_type in types)
+
+
 def activity_date_for_event(reading, event_type):
-    if event_type == EVENT_START:
+    if event_type in START_EVENT_TYPES:
         return reading.started_on
-    if event_type == EVENT_COMPLETE:
+    if event_type in COMPLETE_EVENT_TYPES:
         return reading.completed_on
     return None
 
@@ -237,19 +304,37 @@ def reward_status_for_reading(reading, child):
         return None
     grade = getattr(child, 'grade', None)
     mode = getattr(reading, 'reward_mode', None)
-    start_points = recommended_reward_points(grade, EVENT_START, mode)
-    complete_points = recommended_reward_points(grade, EVENT_COMPLETE, mode)
-    start_event = get_event(reading.id, EVENT_START)
-    complete_event = get_event(reading.id, EVENT_COMPLETE)
+    policy = policy_for_program(reading.program_type)
+    incentives_on = reading_incentives_enabled()
     is_recommended = reading.program_type == PROGRAM_TYPE_RECOMMENDED
-    can_choose_mode = is_recommended and grade_supports_reward_choice(grade)
+    is_challenge = reading.program_type == PROGRAM_TYPE_CHALLENGE
+    is_incentive = policy is not None
+    auto_points = bool(policy and _parse_grade(grade) in policy['auto_points_grades'])
+    can_choose_mode = bool(
+        is_incentive
+        and grade_supports_reward_choice(grade)
+        and incentives_on
+    )
     needs_mode = can_choose_mode and not mode
     is_exemption_mode = mode == REWARD_MODE_EXEMPTION
-    is_points_mode = mode == REWARD_MODE_POINTS or (is_recommended and not can_choose_mode)
+    is_points_mode = mode == REWARD_MODE_POINTS or auto_points
+    start_type = policy['start_event'] if policy else EVENT_START
+    complete_type = policy['complete_event'] if policy else EVENT_COMPLETE
+    start_points = incentive_reward_points(reading.program_type, grade, start_type, mode) if policy else None
+    complete_points = incentive_reward_points(reading.program_type, grade, complete_type, mode) if policy else None
+    start_event = get_event(reading.id, start_type)
+    complete_event = get_event(reading.id, complete_type)
     abandoned = reading.status == STATUS_ABANDONED
     completed = reading.status == STATUS_COMPLETED
+    can_mutate = bool(is_incentive and incentives_on)
     return {
         'is_recommended': is_recommended,
+        'is_challenge': is_challenge,
+        'is_incentive': is_incentive,
+        'show_reward_panel': is_incentive,
+        'panel_title': policy['panel_title'] if policy else '',
+        'program_label': policy['program_label'] if policy else '',
+        'incentives_enabled': incentives_on,
         'grade_deferred': needs_mode,
         'needs_mode': needs_mode,
         'can_choose_mode': can_choose_mode,
@@ -258,33 +343,33 @@ def reward_status_for_reading(reading, child):
         'is_points_mode': is_points_mode,
         'grade': grade,
         'start': {
-            'event_type': EVENT_START,
+            'event_type': start_type,
             'points': start_points,
             'awarded': is_active_event(start_event),
             'revoked': start_event is not None and start_event.revoked_at is not None,
             'can_approve': bool(
-                is_recommended
+                can_mutate
                 and start_points
                 and not is_active_event(start_event)
                 and reading.started_on is not None
             ),
-            'can_revoke': bool(is_recommended and is_active_event(start_event)),
+            'can_revoke': bool(is_incentive and is_active_event(start_event)),
             'awarded_on': start_event.awarded_on.isoformat() if is_active_event(start_event) and start_event.awarded_on else None,
         },
         'complete': {
-            'event_type': EVENT_COMPLETE,
+            'event_type': complete_type,
             'points': complete_points,
             'awarded': is_active_event(complete_event),
             'revoked': complete_event is not None and complete_event.revoked_at is not None,
             'can_approve': bool(
-                is_recommended
+                can_mutate
                 and complete_points
                 and completed
                 and not abandoned
                 and reading.completed_on is not None
                 and not is_active_event(complete_event)
             ),
-            'can_revoke': bool(is_recommended and is_active_event(complete_event)),
+            'can_revoke': bool(is_incentive and is_active_event(complete_event)),
             'awarded_on': complete_event.awarded_on.isoformat() if is_active_event(complete_event) and complete_event.awarded_on else None,
         },
         'status': reading.status,
@@ -296,10 +381,13 @@ def approve_recommended_reward(reading, user, event_type):
     """교사 승인 전용. 학생 POST로 호출되면 안 된다. 같은 이벤트는 한 번만 지급."""
     if reading is None:
         raise RewardError('독서 기록을 찾을 수 없습니다.', code='reading_missing')
-    if event_type not in {EVENT_START, EVENT_COMPLETE}:
+    if not reading_incentives_enabled():
+        raise RewardError('현재 추천/도전 추가 보상 프로그램이 중단되어 있습니다.', code='incentives_disabled')
+    policy = policy_for_program(reading.program_type)
+    if policy is None:
+        raise RewardError('이 독서 기록에는 추가 보상을 지급할 수 없습니다.', code='not_recommended')
+    if event_type not in {policy['start_event'], policy['complete_event']}:
         raise RewardError('알 수 없는 보상 유형입니다.', code='invalid_event')
-    if reading.program_type != PROGRAM_TYPE_RECOMMENDED:
-        raise RewardError('추천독서가 아니라 보상을 지급할 수 없습니다.', code='not_recommended')
 
     Child = model_named('Child')
     User = model_named('User')
@@ -309,26 +397,27 @@ def approve_recommended_reward(reading, user, event_type):
     user_id = user.id if hasattr(user, 'id') else user
     actor = user if hasattr(user, 'id') else User.query.get(user_id)
     user_name = getattr(actor, 'name', None) or getattr(actor, 'username', None) or str(user_id)
+    program_label = policy['program_label']
 
-    if event_type == EVENT_COMPLETE:
+    if event_type == policy['complete_event']:
         if reading.status == STATUS_ABANDONED:
             raise RewardError('중단한 책은 완독 보상을 줄 수 없습니다.', code='abandoned')
         if reading.status != STATUS_COMPLETED or reading.completed_on is None:
             raise RewardError('완독 후에만 완독 보상을 줄 수 있습니다.', code='not_completed')
 
-    points = recommended_reward_points(child.grade, event_type, reading.reward_mode)
+    points = incentive_reward_points(reading.program_type, child.grade, event_type, reading.reward_mode)
     if points is None:
-        if _parse_grade(child.grade) in (5, 6):
+        if _parse_grade(child.grade) in policy['choice_grades']:
             if reading.reward_mode == REWARD_MODE_EXEMPTION:
                 raise RewardError(
-                    '면제권 방식에서는 추천독서 포인트를 지급하지 않습니다.',
+                    f'면제권 방식에서는 {program_label} 포인트를 지급하지 않습니다.',
                     code='exemption_mode',
                 )
             raise RewardError(
-                '5~6학년 추천독서는 먼저 보상 방식(포인트/면제권)을 선택해야 합니다.',
+                f'5~6학년 {program_label}는 먼저 보상 방식(포인트/면제권)을 선택해야 합니다.',
                 code='mode_unset',
             )
-        raise RewardError('이 학년에는 추천독서 보상이 없습니다.', code='not_eligible')
+        raise RewardError(f'이 학년에는 {program_label} 보상이 없습니다.', code='not_eligible')
 
     awarded_on = activity_date_for_event(reading, event_type)
     if awarded_on is None:
@@ -340,7 +429,10 @@ def approve_recommended_reward(reading, user, event_type):
     if is_active_event(existing):
         return existing, False
 
-    subject, reason, source_event = _EVENT_LABELS[event_type]
+    if event_type == policy['start_event']:
+        subject, reason, source_event = policy['start_label']
+    else:
+        subject, reason, source_event = policy['complete_label']
     created_new = existing is None
     if existing is None:
         existing = ReadingRewardEvent(
@@ -348,7 +440,7 @@ def approve_recommended_reward(reading, user, event_type):
             event_type=event_type,
             points=int(points),
             awarded_on=awarded_on,
-            policy_version=POLICY_VERSION_RECOMMENDED_V1,
+            policy_version=policy['policy_version'],
             created_by_user_id=user_id,
             revoked_at=None,
             revoked_by_user_id=None,
@@ -365,7 +457,7 @@ def approve_recommended_reward(reading, user, event_type):
     else:
         existing.points = int(points)
         existing.awarded_on = awarded_on
-        existing.policy_version = POLICY_VERSION_RECOMMENDED_V1
+        existing.policy_version = policy['policy_version']
         existing.created_by_user_id = user_id
         existing.revoked_at = None
         existing.revoked_by_user_id = None
@@ -380,6 +472,7 @@ def approve_recommended_reward(reading, user, event_type):
         subject=subject,
         reason=reason,
         source_event=source_event,
+        source_type=policy['source_type'],
     )
     new_total = _recalc_daily_total(daily)
     _add_points_history(
@@ -407,7 +500,8 @@ def approve_recommended_reward(reading, user, event_type):
 def revoke_recommended_reward(reading, user, event_type):
     if reading is None:
         raise RewardError('독서 기록을 찾을 수 없습니다.', code='reading_missing')
-    if event_type not in {EVENT_START, EVENT_COMPLETE}:
+    policy = policy_for_program(reading.program_type)
+    if policy is None or event_type not in {policy['start_event'], policy['complete_event']}:
         raise RewardError('알 수 없는 보상 유형입니다.', code='invalid_event')
 
     event = get_event(reading.id, event_type)
@@ -415,12 +509,15 @@ def revoke_recommended_reward(reading, user, event_type):
         raise RewardError('취소할 보상이 없습니다.', code='not_awarded')
 
     user_id = user.id if hasattr(user, 'id') else user
-    _subject, _reason, source_event = _EVENT_LABELS[event_type]
+    if event_type == policy['start_event']:
+        _subject, _reason, source_event = policy['start_label']
+    else:
+        _subject, _reason, source_event = policy['complete_label']
     DailyPoints = model_named('DailyPoints')
     daily = DailyPoints.query.filter_by(child_id=reading.child_id, date=event.awarded_on).first()
     old_total = daily.total_points if daily is not None else 0
     if daily is not None:
-        _remove_manual_item(daily, event, source_event)
+        _remove_manual_item(daily, event, source_event, policy['source_type'])
         new_total = _recalc_daily_total(daily)
     else:
         new_total = 0
@@ -433,7 +530,7 @@ def revoke_recommended_reward(reading, user, event_type):
         user_id,
         old_total,
         new_total,
-        '추천독서 보상 취소',
+        f'{policy["program_label"]} 보상 취소',
         '삭제',
     )
     _recalc_cumulative(reading.child_id)

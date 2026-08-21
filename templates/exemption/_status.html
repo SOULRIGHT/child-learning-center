@@ -25,6 +25,9 @@
         {% else %}
         <p class="mb-2">다음 면제권까지 추천도서 {{ exemption_status.have }} / {{ exemption_status.needed }}권</p>
         {% endif %}
+        {% if exemption_status.challenge_ready_count %}
+        <p class="mb-2">도전독서 완독 대기 {{ exemption_status.challenge_ready_count }}권 (1권당 면제권 1장)</p>
+        {% endif %}
 
         {% if exemption_status.can_issue %}
         <p class="mb-3">면제권 발급 가능</p>

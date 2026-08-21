@@ -23,6 +23,7 @@
     <div class="card-body">
         <h5 class="mb-1">{{ item.book.title if item.book else '알 수 없는 책' }}
             {% if item.reading.program_type == 'recommended' %}<span class="badge bg-success">추천</span>{% endif %}
+            {% if item.reading.program_type == 'challenge' %}<span class="badge bg-warning text-dark">도전</span>{% endif %}
         </h5>
         <p class="text-muted mb-2">
             {% if item.book and item.book.author %}{{ item.book.author }} · {% endif %}

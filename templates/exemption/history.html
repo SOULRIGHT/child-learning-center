@@ -37,7 +37,7 @@
                 <td>{{ item.subject.name if item.subject else '-' }}</td>
                 <td>
                     {% for source in item.sources %}
-                    <div>추천독서 {{ loop.index }}권 · {{ source.title }}</div>
+                    <div>{% if source.program_type == 'challenge' %}도전독서{% else %}추천독서{% endif %} {{ loop.index }}권 · {{ source.title }}</div>
                     {% else %}
                     -
                     {% endfor %}

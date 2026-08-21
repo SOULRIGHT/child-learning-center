@@ -71,6 +71,7 @@ class Book(db.Model):
             'title': self.title,
             'author': self.author,
             'is_recommended': bool(self.is_recommended),
+            'is_challenge_eligible': bool(self.is_challenge_eligible),
             'grade_band': self.grade_band,
             'is_active': bool(self.is_active),
         }
@@ -84,12 +85,16 @@ STATUS_COMPLETED = 'completed'
 STATUS_ABANDONED = 'abandoned'
 PROGRAM_TYPE_GENERAL = 'general'
 PROGRAM_TYPE_RECOMMENDED = 'recommended'
+PROGRAM_TYPE_CHALLENGE = 'challenge'
 POLICY_VERSION_GENERAL_V2 = 'general_v2'
 POLICY_VERSION_RECOMMENDED_V1 = 'recommended_v1'
+POLICY_VERSION_CHALLENGE_V1 = 'challenge_v1'
 GRADE_BAND_2_3 = '2-3'
 GRADE_BAND_4_6 = '4-6'
 EVENT_RECOMMENDED_START = 'recommended_start'
 EVENT_RECOMMENDED_COMPLETE = 'recommended_complete'
+EVENT_CHALLENGE_START = 'challenge_start'
+EVENT_CHALLENGE_COMPLETE = 'challenge_complete'
 ACTOR_CHILD = 'child'
 ACTOR_TEACHER = 'teacher'
 REWARD_MODE_POINTS = 'points'

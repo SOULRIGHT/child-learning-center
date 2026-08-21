@@ -45,7 +45,7 @@ LearningSubject / ExemptionUsage snapshot 은 기능별 임시 구조이며, 지
 - 시작일, 완독일
 - 상태(in_progress / completed / abandoned를 사용자 친화적으로 표시)
 - 본인이 작성한 ReadingDay 감상 기록
-- 일반독서 / 추천독서 정도의 구분
+- 일반독서 / 추천독서 / 도전독서 정도의 구분
 
 보여주지 말 것:
 
@@ -54,6 +54,31 @@ LearningSubject / ExemptionUsage snapshot 은 기능별 임시 구조이며, 지
 - 관리자 승인자
 - 내부 policy_version
 - 기타 관리자용 audit 정보
+
+## TODO: Publisher reading-activity worksheets (not implemented)
+
+실제 책 조사 중 아래 자료를 확인했다. 센터 프로그램으로 쓸 수 있으나 아직 협의되지 않았고, 하지 않을 수도 있다.
+
+- 아이세움 2~3학년 추천도서: 뒤쪽에 논술 문제, 줄거리, 책 내용/의미 서술 등 독후활동
+- 삼성출판사 4~6학년 책: 작가 알기, 줄거리, 작품 이해, 생각하고 표현하기, 철학적/토론형 질문(예: "지킬은 살인자인가?" 유형)
+
+이번 Step에서 퀴즈, AI 문제 생성, 출판사 문제 DB 입력, 독후활동 workflow는 구현하지 않는다.
+후속 Step에서 기존 AI 3문항 퀴즈 계획과 이 출판사 활동자료를 함께 다시 검토한다.
+
+## TODO: Challenge-reading operational notes (observation only)
+
+약 10개 독서기록장 표본 관찰이다. 통계적으로 확정된 사실은 아니다.
+
+- 추천/두꺼운 책 평균 완독은 대략 4~5일
+- 추천도서 대부분은 200페이지를 조금 넘는 수준
+- 일부 300페이지 이상 장편/고난도 책은 약 2주 소요
+
+현재 운영 판단:
+
+- 추천독서 이후 면제권은 2권당 1장 정책을 당장 유지
+- 도전독서는 1권당 티켓 1장으로 별도 강화
+- 페이지 수만으로 자동 challenge 판정하지 않음
+
 
 ## 🆕 **최신 업데이트 (2025-09-30)**
 - **실제 가명 시드 데이터 시스템**: 29명의 실제 가명으로 운영용 데이터 생성 (seed_name.py)

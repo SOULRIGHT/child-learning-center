@@ -11,6 +11,7 @@ from feature_models import (
     ExemptionTicket,
     ExemptionTicketSource,
     ExemptionUsage,
+    PROGRAM_TYPE_CHALLENGE,
     PROGRAM_TYPE_RECOMMENDED,
     REWARD_MODE_EXEMPTION,
     REWARD_MODE_POINTS,
@@ -23,6 +24,7 @@ from feature_models import (
 from features.dates import kst_today
 from features.exemption.policy import (
     DEFAULT_EXEMPTION_SUBJECT_KEYS,
+    EXEMPTION_CHALLENGE_COUNT,
     EXEMPTION_FIRST_RECOMMENDED_COUNT,
     EXEMPTION_MAX_ACTIVE,
     EXEMPTION_NEXT_RECOMMENDED_COUNT,
@@ -35,7 +37,8 @@ from features.exemption.policy import (
 )
 from features.subjects import exemption_subject_choices
 from features.reading.access import get_child
-from features.reading.rewards import EVENT_COMPLETE, EVENT_START, get_event, is_active_event
+from features.reading.policy import reading_incentives_enabled
+from features.reading.rewards import INCENTIVE_PROGRAM_TYPES, has_active_point_rewards
 
 
 class ExemptionError(Exception):
@@ -108,12 +111,12 @@ def consuming_ticket_for_reading(child_reading_id):
     )
 
 
-def qualifying_completions(child_id):
+def qualifying_completions(child_id, program_type=PROGRAM_TYPE_RECOMMENDED):
     return (
         ChildReading.query
         .filter_by(
             child_id=child_id,
-            program_type=PROGRAM_TYPE_RECOMMENDED,
+            program_type=program_type,
             status=STATUS_COMPLETED,
             reward_mode=REWARD_MODE_EXEMPTION,
         )
@@ -123,21 +126,104 @@ def qualifying_completions(child_id):
     )
 
 
-def unconsumed_qualifying_completions(child_id):
+def unconsumed_qualifying_completions(child_id, program_type=PROGRAM_TYPE_RECOMMENDED):
     consumed = consumed_source_reading_ids(child_id)
-    return [row for row in qualifying_completions(child_id) if row.id not in consumed]
+    return [row for row in qualifying_completions(child_id, program_type) if row.id not in consumed]
 
 
-def sources_needed(non_revoked_count):
-    if non_revoked_count <= 0:
+def sources_needed(recommended_ticket_count):
+    if recommended_ticket_count <= 0:
         return EXEMPTION_FIRST_RECOMMENDED_COUNT
     return EXEMPTION_NEXT_RECOMMENDED_COUNT
 
 
-def has_active_point_rewards(reading):
-    return is_active_event(get_event(reading.id, EVENT_START)) or is_active_event(
-        get_event(reading.id, EVENT_COMPLETE)
+def _ticket_source_program_type(ticket):
+    rows = (
+        ExemptionTicketSource.query
+        .filter_by(exemption_ticket_id=ticket.id)
+        .order_by(ExemptionTicketSource.id.asc())
+        .all()
     )
+    types = []
+    for row in rows:
+        reading = row.child_reading or ChildReading.query.get(row.child_reading_id)
+        if reading is None:
+            continue
+        types.append(reading.program_type)
+    unique = {item for item in types if item}
+    if PROGRAM_TYPE_RECOMMENDED in unique:
+        return PROGRAM_TYPE_RECOMMENDED
+    if PROGRAM_TYPE_CHALLENGE in unique:
+        return PROGRAM_TYPE_CHALLENGE
+    return None
+
+
+def recommended_source_ticket_count(child_id):
+    count = 0
+    for ticket in _non_revoked_tickets(child_id):
+        if _ticket_source_program_type(ticket) == PROGRAM_TYPE_RECOMMENDED:
+            count += 1
+    return count
+
+
+def _recommended_entitlement_groups(readings, recommended_ticket_count):
+    remaining = list(readings)
+    groups = []
+    first = recommended_ticket_count <= 0
+    while remaining:
+        needed = EXEMPTION_FIRST_RECOMMENDED_COUNT if first else EXEMPTION_NEXT_RECOMMENDED_COUNT
+        first = False
+        chunk = remaining[:needed]
+        remaining = remaining[needed:]
+        ready = len(chunk) == needed
+        last = chunk[-1]
+        groups.append({
+            'program_type': PROGRAM_TYPE_RECOMMENDED,
+            'readings': chunk,
+            'needed': needed,
+            'have': len(chunk) if not ready else needed,
+            'ready': ready,
+            'qualified_on': last.completed_on if ready else None,
+            'tie_id': last.id,
+        })
+    return groups
+
+
+def _challenge_entitlement_groups(readings):
+    groups = []
+    for reading in readings:
+        groups.append({
+            'program_type': PROGRAM_TYPE_CHALLENGE,
+            'readings': [reading],
+            'needed': EXEMPTION_CHALLENGE_COUNT,
+            'have': EXEMPTION_CHALLENGE_COUNT,
+            'ready': True,
+            'qualified_on': reading.completed_on,
+            'tie_id': reading.id,
+        })
+    return groups
+
+
+def entitlement_groups(child_id):
+    """추천(1권 이후 2권)과 도전(1권) 자격을 분리한 뒤, 완성된 것만 FIFO로 정렬한다."""
+    rec_issued = recommended_source_ticket_count(child_id)
+    rec_groups = _recommended_entitlement_groups(
+        unconsumed_qualifying_completions(child_id, PROGRAM_TYPE_RECOMMENDED),
+        rec_issued,
+    )
+    ch_groups = _challenge_entitlement_groups(
+        unconsumed_qualifying_completions(child_id, PROGRAM_TYPE_CHALLENGE),
+    )
+    ready = [group for group in rec_groups + ch_groups if group['ready']]
+    ready.sort(key=lambda group: (group['qualified_on'], group['tie_id']))
+    return rec_groups, ch_groups, ready
+
+
+def next_ready_entitlement_group(child_id):
+    _rec_groups, _ch_groups, ready = entitlement_groups(child_id)
+    if not ready:
+        return None
+    return ready[0]
 
 
 def reward_mode_change_block(reading, new_mode):
@@ -153,7 +239,7 @@ def reward_mode_change_block(reading, new_mode):
     if has_active_point_rewards(reading) and new_mode == REWARD_MODE_EXEMPTION:
         return (
             'points_already_awarded',
-            '이미 지급된 추천독서 포인트가 있습니다. 면제권 방식으로 변경하려면 기존 추천독서 포인트를 취소해야 합니다.',
+            '이미 지급된 독서 포인트가 있습니다. 면제권 방식으로 변경하려면 기존 독서 포인트를 취소해야 합니다.',
         )
 
     ticket = consuming_ticket_for_reading(reading.id)
@@ -165,29 +251,31 @@ def reward_mode_change_block(reading, new_mode):
     if status == TICKET_STATUS_USED:
         return (
             'source_used',
-            '이 추천도서는 이미 면제권 발급에 반영되어 포인트 보상으로 변경할 수 없습니다.',
+            '이미 면제권 발급에 반영되어 포인트 보상으로 변경할 수 없습니다.',
         )
     if status == TICKET_STATUS_EXPIRED:
         return (
             'source_expired',
-            '이 추천도서는 이미 면제권 발급에 반영되어 있습니다. 만료된 면제권은 되돌릴 수 없어 포인트 보상으로 변경할 수 없습니다.',
+            '이미 면제권 발급에 반영되어 있습니다. 만료된 면제권은 되돌릴 수 없어 포인트 보상으로 변경할 수 없습니다.',
         )
     return (
         'source_active',
-        '이 추천도서는 현재 보유 중인 면제권 발급에 반영되어 있습니다. 포인트 보상으로 변경하려면 미사용 면제권을 먼저 취소해야 합니다.',
+        '현재 보유 중인 면제권 발급에 반영되어 있습니다. 포인트 보상으로 변경하려면 미사용 면제권을 먼저 취소해야 합니다.',
     )
 
 
 def set_reward_mode(reading, new_mode, user=None):
     if reading is None:
         raise ExemptionError('독서 기록을 찾을 수 없습니다.', code='reading_missing')
-    if reading.program_type != PROGRAM_TYPE_RECOMMENDED:
-        raise ExemptionError('추천독서만 보상 방식을 선택할 수 있습니다.', code='not_recommended')
+    if not reading_incentives_enabled():
+        raise ExemptionError('현재 추천/도전 추가 보상 프로그램이 중단되어 있습니다.', code='incentives_disabled')
+    if reading.program_type not in INCENTIVE_PROGRAM_TYPES:
+        raise ExemptionError('추천독서 또는 도전독서만 보상 방식을 선택할 수 있습니다.', code='not_recommended')
     child = get_child(reading.child_id)
     if child is None:
         raise ExemptionError('아동을 찾을 수 없습니다.', code='child_missing')
     if not grade_supports_reward_choice(child.grade):
-        raise ExemptionError('5~6학년 추천독서만 보상 방식을 선택할 수 있습니다.', code='not_eligible')
+        raise ExemptionError('5~6학년 추천/도전독서만 보상 방식을 선택할 수 있습니다.', code='not_eligible')
     if new_mode not in REWARD_MODES:
         raise ExemptionError('보상 방식은 포인트 또는 면제권만 선택할 수 있습니다.', code='invalid_mode')
     code, message = reward_mode_change_block(reading, new_mode)
@@ -264,7 +352,8 @@ def _source_payloads(ticket):
         book = reading.book if reading is not None else None
         payloads.append({
             'child_reading_id': row.child_reading_id,
-            'title': book.title if book is not None else f'추천독서 #{row.child_reading_id}',
+            'title': book.title if book is not None else f'독서 #{row.child_reading_id}',
+            'program_type': reading.program_type if reading is not None else None,
         })
     return payloads
 
@@ -277,10 +366,17 @@ def child_exemption_snapshot(child_id, today=None, *, persist_expiry=False):
         expire_stale_tickets(child_id, today)
 
     eligible_grade = bool(child is not None and grade_supports_reward_choice(child.grade))
-    unconsumed = unconsumed_qualifying_completions(child_id)
+    incentives_on = reading_incentives_enabled()
+    rec_groups, ch_groups, ready_groups = entitlement_groups(child_id)
+    next_group = ready_groups[0] if ready_groups else None
+    rec_unconsumed = []
+    for group in rec_groups:
+        rec_unconsumed.extend(group['readings'])
+    rec_issued = recommended_source_ticket_count(child_id)
+    unconsumed = rec_unconsumed
     non_revoked = _non_revoked_tickets(child_id)
-    needed = sources_needed(len(non_revoked))
-    condition_met = len(unconsumed) >= needed
+    needed = sources_needed(rec_issued)
+    condition_met = next_group is not None
     held = _held_active_ticket(child_id, today)
     last = _last_non_revoked_ticket(child_id)
     cooldown_until = next_issue_on(last.issued_on) if last is not None else None
@@ -288,13 +384,15 @@ def child_exemption_snapshot(child_id, today=None, *, persist_expiry=False):
     holding_blocks = held is not None
     can_issue = bool(
         eligible_grade
+        and incentives_on
         and condition_met
         and not holding_blocks
         and not cooldown_blocks
-        and len(unconsumed) >= needed
     )
     issue_block = None
-    if condition_met and holding_blocks:
+    if condition_met and not incentives_on:
+        issue_block = 'incentives_off'
+    elif condition_met and holding_blocks:
         issue_block = 'holding'
     elif condition_met and cooldown_blocks:
         issue_block = 'cooldown'
@@ -332,10 +430,20 @@ def child_exemption_snapshot(child_id, today=None, *, persist_expiry=False):
         'today': today,
         'held_ticket': held,
         'held_count': 1 if held is not None else 0,
-        'is_first_ticket': len(non_revoked) == 0,
+        'is_first_ticket': rec_issued == 0,
         'needed': needed,
         'have': min(len(unconsumed), needed),
         'unconsumed_count': len(unconsumed),
+        'challenge_ready_count': sum(1 for group in ch_groups if group['ready']),
+        'next_group_program_type': None if next_group is None else next_group['program_type'],
+        'next_group': None if next_group is None else {
+            'program_type': next_group['program_type'],
+            'needed': next_group['needed'],
+            'have': next_group['have'],
+            'ready': next_group['ready'],
+            'reading_ids': [row.id for row in next_group['readings']],
+        },
+        'incentives_enabled': incentives_on,
         'condition_met': condition_met,
         'can_issue': can_issue,
         'issue_block': issue_block,
@@ -361,6 +469,8 @@ def issue_exemption_ticket(child_id, user, today=None):
         raise ExemptionError('아동을 찾을 수 없습니다.', code='child_missing')
     if not grade_supports_reward_choice(child.grade):
         raise ExemptionError('5~6학년만 면제권을 발급할 수 있습니다.', code='not_eligible')
+    if not reading_incentives_enabled():
+        raise ExemptionError('현재 추천/도전 추가 보상 프로그램이 중단되어 있습니다.', code='incentives_disabled')
 
     expire_stale_tickets(child_id, today)
     snapshot = child_exemption_snapshot(child_id, today, persist_expiry=False)
@@ -372,8 +482,11 @@ def issue_exemption_ticket(child_id, user, today=None):
     if not snapshot['condition_met']:
         raise ExemptionError('면제권 발급 조건이 아직 충족되지 않았습니다.', code='not_ready')
 
-    sources = unconsumed_qualifying_completions(child_id)[: snapshot['needed']]
-    if len(sources) < snapshot['needed']:
+    group = next_ready_entitlement_group(child_id)
+    if group is None:
+        raise ExemptionError('면제권 발급 조건이 아직 충족되지 않았습니다.', code='not_ready')
+    sources = group['readings']
+    if not sources:
         raise ExemptionError('면제권 발급 조건이 아직 충족되지 않았습니다.', code='not_ready')
 
     user_id = _user_id(user)

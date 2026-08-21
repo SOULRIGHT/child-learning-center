@@ -12,15 +12,18 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
-from feature_models import ChildReading
+from feature_models import ChildReading, STATUS_COMPLETED
 from features.exemption.policy import REWARD_MODE_EXEMPTION, REWARD_MODE_POINTS, grade_supports_reward_choice
-from features.exemption.service import child_exemption_snapshot, reward_mode_change_block
+from features.exemption.service import (
+    child_exemption_snapshot,
+    consuming_ticket_for_reading,
+    reward_mode_change_block,
+)
 from features.reading.access import get_child, resolve_viewer_child
 from features.reading.classify import grade_band_for_child_grade
 from features.reading.policy import activity_today, is_general_reading_v2
 from features.reading.rewards import (
-    EVENT_COMPLETE,
-    EVENT_START,
+    ALL_REWARD_EVENT_TYPES,
     RewardError,
     approve_recommended_reward,
     reward_status_for_reading,
@@ -94,7 +97,17 @@ def _assert_reading_child(child, expected_reading_id):
 
 
 def _with_mode_blocks(reward_status, reading):
-    if not reward_status or not reward_status.get('can_choose_mode') or reading is None:
+    if not reward_status or reading is None:
+        return reward_status
+    ticket = consuming_ticket_for_reading(reading.id)
+    reward_status['exemption_applied'] = ticket is not None
+    reward_status['exemption_pending'] = bool(
+        reading.reward_mode == REWARD_MODE_EXEMPTION
+        and reading.status == STATUS_COMPLETED
+        and reading.completed_on is not None
+        and ticket is None
+    )
+    if not reward_status.get('can_choose_mode'):
         return reward_status
     points_code, points_msg = reward_mode_change_block(reading, REWARD_MODE_POINTS)
     exemption_code, exemption_msg = reward_mode_change_block(reading, REWARD_MODE_EXEMPTION)
@@ -407,16 +420,16 @@ def _handle_teacher_reward(child_id, action):
     if reading is None or int(reading.child_id) != int(child.id):
         abort(403)
     event_type = request.form.get('event_type')
-    if event_type not in {EVENT_START, EVENT_COMPLETE}:
+    if event_type not in ALL_REWARD_EVENT_TYPES:
         flash('알 수 없는 보상 유형입니다.', 'error')
         return redirect(request.referrer or url_for('reading.teacher_history', child_id=child.id))
     try:
         if action == 'approve':
             approve_recommended_reward(reading, current_user, event_type)
-            flash('추천독서 보상을 승인했습니다.', 'success')
+            flash('독서 보상을 승인했습니다.', 'success')
         else:
             revoke_recommended_reward(reading, current_user, event_type)
-            flash('추천독서 보상을 취소했습니다.', 'success')
+            flash('독서 보상을 취소했습니다.', 'success')
     except RewardError as exc:
         flash(exc.message, 'error')
     next_url = request.form.get('next') or request.referrer

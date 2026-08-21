@@ -195,6 +195,8 @@ def _match_existing_book(title, author, extra_candidates=None):
 
     candidate = combined[0]
     if _authors_clearly_match(candidate.author, author):
+        if getattr(candidate, 'is_challenge_eligible', False):
+            return ACTION_ERROR, candidate, '이미 도전도서인 책은 추천도서로 지정할 수 없습니다.'
         return ACTION_REUSE, candidate, None
     if _authors_clearly_different(candidate.author, author):
         return ACTION_CREATE, None, None
@@ -344,6 +346,11 @@ def apply_preview(preview, selected_row_keys=None):
                 raise RecommendedImportError('제목은 필수입니다.', code='title_required')
 
             if current_action == ACTION_REUSE and existing is not None:
+                if existing.is_challenge_eligible:
+                    raise RecommendedImportError(
+                        '이미 도전도서인 책은 추천도서로 지정할 수 없습니다.',
+                        code='challenge_conflict',
+                    )
                 existing.is_recommended = True
                 existing.grade_band = grade_band
                 reused += 1

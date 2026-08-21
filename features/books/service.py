@@ -7,6 +7,10 @@ from feature_models import (
     normalize_book_title,
 )
 
+BOOK_FLAG_CONFLICT_MESSAGE = '추천도서와 도전도서를 동시에 지정할 수 없습니다.'
+CHALLENGE_ON_RECOMMENDED_MESSAGE = '이미 추천도서로 지정된 책은 도전도서로 지정할 수 없습니다.'
+RECOMMENDED_ON_CHALLENGE_MESSAGE = '이미 도전도서인 책은 추천도서로 지정할 수 없습니다.'
+
 
 class BookCreateError(ValueError):
     pass
@@ -77,6 +81,11 @@ def unlist_recommended_book(book):
     return update_recommended_flags(book, is_recommended=False)
 
 
+def unlist_challenge_book(book):
+    """도전도서 표시만 해제한다. 책과 과거 독서/보상 원장은 남긴다."""
+    return update_challenge_flag(book, is_challenge_eligible=False)
+
+
 def delete_unused_book(book):
     """ChildReading이 없는 Book만 hard delete. 관련 원장은 cascade하지 않는다."""
     if book is None:
@@ -97,7 +106,10 @@ def update_recommended_flags(book, is_recommended=None, grade_band=None):
     if book is None:
         raise BookCreateError('책을 찾을 수 없습니다.')
     if is_recommended is not None:
-        book.is_recommended = bool(is_recommended)
+        want_recommended = bool(is_recommended)
+        if want_recommended and book.is_challenge_eligible:
+            raise BookCreateError(RECOMMENDED_ON_CHALLENGE_MESSAGE)
+        book.is_recommended = want_recommended
     if grade_band is not None:
         text = str(grade_band).strip()
         if text == '':
@@ -109,5 +121,49 @@ def update_recommended_flags(book, is_recommended=None, grade_band=None):
             book.grade_band = parsed
     if book.is_recommended and not book.grade_band:
         raise BookCreateError('추천도서는 학년군(2-3 또는 4-6)이 필요합니다.')
+    if book.is_recommended and book.is_challenge_eligible:
+        raise BookCreateError(BOOK_FLAG_CONFLICT_MESSAGE)
     db.session.commit()
     return book
+
+
+def update_challenge_flag(book, is_challenge_eligible):
+    if book is None:
+        raise BookCreateError('책을 찾을 수 없습니다.')
+    want_challenge = bool(is_challenge_eligible)
+    if want_challenge and book.is_recommended:
+        raise BookCreateError(CHALLENGE_ON_RECOMMENDED_MESSAGE)
+    book.is_challenge_eligible = want_challenge
+    if book.is_recommended and book.is_challenge_eligible:
+        raise BookCreateError(BOOK_FLAG_CONFLICT_MESSAGE)
+    db.session.commit()
+    return book
+
+
+def register_challenge_book(title, author=None):
+    """기존 Book search 정책을 재사용한다. ambiguous면 자동 merge하지 않는다."""
+    from features.books.import_service import (
+        ACTION_CREATE,
+        ACTION_ERROR,
+        ACTION_REUSE,
+        ACTION_REVIEW,
+        _match_existing_book,
+    )
+
+    action, existing, message = _match_existing_book(title, author)
+    if action == ACTION_ERROR:
+        raise BookCreateError(message or '제목은 필수입니다.')
+    if action == ACTION_REVIEW:
+        raise BookCreateError(message or '같은 제목의 책이 여러 권 있어 확인이 필요합니다.')
+    if action == ACTION_REUSE and existing is not None:
+        if existing.is_recommended:
+            raise BookCreateError(CHALLENGE_ON_RECOMMENDED_MESSAGE)
+        existing.is_challenge_eligible = True
+        db.session.commit()
+        return existing, False
+    if action != ACTION_CREATE:
+        raise BookCreateError(message or '도전도서로 등록할 수 없습니다.')
+    book, _similar = create_book_record(title, author, commit=False)
+    book.is_challenge_eligible = True
+    db.session.commit()
+    return book, True

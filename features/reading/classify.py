@@ -4,6 +4,7 @@ from __future__ import annotations
 from feature_models import (
     GRADE_BAND_2_3,
     GRADE_BAND_4_6,
+    PROGRAM_TYPE_CHALLENGE,
     PROGRAM_TYPE_GENERAL,
     PROGRAM_TYPE_RECOMMENDED,
 )
@@ -68,11 +69,18 @@ def classify_program_type(child, book):
     """같은 Child + Book이면 교사/학생 UI와 무관하게 같은 결과를 반환한다.
 
     과거 ChildReading을 재분류하지 않는다. 새로 시작할 때만 호출한다.
+    학생 request의 program_type은 사용하지 않는다.
     """
-    if book is None or not bool(getattr(book, 'is_recommended', False)):
+    if book is None:
         return PROGRAM_TYPE_GENERAL
-    child_band = grade_band_for_child_grade(getattr(child, 'grade', None))
-    book_band = normalize_grade_band(getattr(book, 'grade_band', None))
-    if child_band and book_band and child_band == book_band:
-        return PROGRAM_TYPE_RECOMMENDED
+    if bool(getattr(book, 'is_recommended', False)):
+        child_band = grade_band_for_child_grade(getattr(child, 'grade', None))
+        book_band = normalize_grade_band(getattr(book, 'grade_band', None))
+        if child_band and book_band and child_band == book_band:
+            return PROGRAM_TYPE_RECOMMENDED
+        return PROGRAM_TYPE_GENERAL
+    if bool(getattr(book, 'is_challenge_eligible', False)):
+        if _parse_grade(getattr(child, 'grade', None)) in (5, 6):
+            return PROGRAM_TYPE_CHALLENGE
+        return PROGRAM_TYPE_GENERAL
     return PROGRAM_TYPE_GENERAL

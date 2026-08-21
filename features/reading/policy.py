@@ -10,6 +10,34 @@ DEFAULT_V2_START_DATE = date(2099, 1, 1)
 DEFAULT_WRITE_TTL_MINUTES = 15
 POLICY_VERSION_GENERAL_V2 = 'general_v2'
 PROGRAM_TYPE_GENERAL = 'general'
+READING_INCENTIVES_ENV = 'CLC_READING_INCENTIVES_ENABLED'
+
+
+def _parse_enabled_flag(raw, default=True):
+    if raw is None:
+        return default
+    text = str(raw).strip().lower()
+    if text == '':
+        return default
+    return text not in {'0', 'false', 'off', 'no'}
+
+
+def reading_incentives_enabled():
+    """추천/도전 추가포인트·면제권 프로그램 스위치. 기본 ON.
+
+    OFF여도 Book/ChildReading/ReadingDay 원장과 DailyPoints 입력은 유지한다.
+    """
+    env_raw = os.environ.get(READING_INCENTIVES_ENV)
+    if env_raw is not None and str(env_raw).strip() != '':
+        return _parse_enabled_flag(env_raw, default=True)
+    try:
+        from flask import current_app
+        configured = current_app.config.get(READING_INCENTIVES_ENV)
+        if configured is not None:
+            return bool(configured)
+    except RuntimeError:
+        pass
+    return True
 
 
 def now_utc():

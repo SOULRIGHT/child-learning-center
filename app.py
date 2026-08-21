@@ -436,6 +436,16 @@ app.config['VIEWER_CHILD_WRITE_TTL_MINUTES'] = int(
     os.environ.get('VIEWER_CHILD_WRITE_TTL_MINUTES') or '15'
 )
 
+def _config_enabled_flag(env_name, default=True):
+    raw = os.environ.get(env_name)
+    if raw is None or str(raw).strip() == '':
+        return default
+    return str(raw).strip().lower() not in {'0', 'false', 'off', 'no'}
+
+app.config['CLC_READING_INCENTIVES_ENABLED'] = _config_enabled_flag(
+    'CLC_READING_INCENTIVES_ENABLED', True
+)
+
 VIEWER_ALLOWED_ENDPOINTS = {
     'index',
     'privacy_policy',

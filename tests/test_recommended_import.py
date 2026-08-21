@@ -209,6 +209,7 @@ class RecommendedImportTests(unittest.TestCase):
         book = Book.query.one()
         self.assertEqual(book.title, '엑셀책')
         self.assertTrue(book.is_recommended)
+        self.assertFalse(book.is_challenge_eligible)
 
     def test_tab_separated_paste(self):
         rows = parse_paste_text('탭책\t탭작가')
@@ -450,6 +451,19 @@ class RecommendedImportTests(unittest.TestCase):
         unused, _ = create_book_record('서비스삭제책', None)
         delete_unused_book(unused)
         self.assertIsNone(Book.query.filter_by(title='서비스삭제책').first())
+
+    def test_cannot_import_recommended_onto_challenge_book(self):
+        book, _ = create_book_record('충돌책', '같은작가')
+        from features.books.service import update_challenge_flag
+        update_challenge_flag(book, True)
+        rows = parse_paste_text('충돌책 | 같은작가')
+        preview = preview_rows(rows, default_grade_band='4-6')
+        self.assertEqual(preview['counts']['error'], 1)
+        self.assertIn('도전도서', preview['rows'][0]['message'])
+        apply_preview(preview)
+        saved = Book.query.one()
+        self.assertTrue(saved.is_challenge_eligible)
+        self.assertFalse(saved.is_recommended)
 
 
 if __name__ == '__main__':

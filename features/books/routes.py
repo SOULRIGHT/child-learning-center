@@ -30,7 +30,10 @@ from features.books.service import (
     BookCreateError,
     create_book_record,
     delete_unused_book,
+    register_challenge_book,
+    unlist_challenge_book,
     unlist_recommended_book,
+    update_challenge_flag,
     update_recommended_flags,
     used_book_ids,
 )
@@ -86,6 +89,8 @@ def books_index():
     query = Book.query
     if filter_key == 'recommended':
         query = query.filter(Book.is_recommended.is_(True))
+    elif filter_key == 'challenge':
+        query = query.filter(Book.is_challenge_eligible.is_(True))
     elif filter_key == GRADE_BAND_2_3:
         query = query.filter(Book.is_recommended.is_(True), Book.grade_band == GRADE_BAND_2_3)
     elif filter_key == GRADE_BAND_4_6:
@@ -101,7 +106,12 @@ def books_index():
 
     total = query.count()
     books = (
-        query.order_by(Book.is_recommended.desc(), Book.grade_band.asc(), Book.id.desc())
+        query.order_by(
+            Book.is_challenge_eligible.desc(),
+            Book.is_recommended.desc(),
+            Book.grade_band.asc(),
+            Book.id.desc(),
+        )
         .offset((page - 1) * MANAGE_PAGE_SIZE)
         .limit(MANAGE_PAGE_SIZE)
         .all()
@@ -221,6 +231,49 @@ def unlist_book(book_id):
     try:
         unlist_recommended_book(book)
         flash('추천도서에서 제외했습니다. 책은 남아 있고, 과거 독서 기록은 그대로입니다.', 'success')
+    except BookCreateError as exc:
+        flash(str(exc), 'error')
+    return _redirect_books_index()
+
+
+@books_bp.route('/books/challenge', methods=['POST'])
+@login_required
+def create_challenge_book():
+    blocked = _forbid_viewer()
+    if blocked:
+        return blocked
+    try:
+        book, created = register_challenge_book(request.form.get('title'), request.form.get('author'))
+        if created:
+            flash(f'도전도서 «{book.title}»을 등록했습니다.', 'success')
+        else:
+            flash(f'기존 도서 «{book.title}»을 도전도서로 지정했습니다.', 'success')
+    except BookCreateError as exc:
+        flash(str(exc), 'error')
+    return redirect(url_for(
+        'books.books_index',
+        filter='challenge',
+        q=request.form.get('q') or '',
+        page=1,
+    ))
+
+
+@books_bp.route('/books/<int:book_id>/challenge', methods=['POST'])
+@login_required
+def update_book_challenge(book_id):
+    blocked = _forbid_viewer()
+    if blocked:
+        return blocked
+    book = Book.query.get_or_404(book_id)
+    raw = request.form.get('is_challenge_eligible')
+    want_challenge = raw in {'1', 'on', 'true', 'yes'}
+    try:
+        if want_challenge:
+            update_challenge_flag(book, True)
+            flash('도전도서로 지정했습니다.', 'success')
+        else:
+            unlist_challenge_book(book)
+            flash('도전도서에서 제외했습니다. 책은 남아 있고, 과거 독서 기록은 그대로입니다.', 'success')
     except BookCreateError as exc:
         flash(str(exc), 'error')
     return _redirect_books_index()

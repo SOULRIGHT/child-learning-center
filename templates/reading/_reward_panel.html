@@ -1,7 +1,10 @@
-{% if reward_status and reward_status.is_recommended %}
-<div class="card shadow-sm mb-3">
+{% if reward_status and reward_status.show_reward_panel %}
+<div class="card shadow-sm mb-3 reading-reward-panel" data-reading-id="{{ reading.id }}">
     <div class="card-body p-4">
-        <h3 class="h5 mb-3">추천독서 보상</h3>
+        <h3 class="h5 mb-3">{{ reward_status.panel_title or '독서 보상' }}</h3>
+        {% if not reward_status.incentives_enabled %}
+        <div class="alert alert-secondary mb-3">추천/도전 추가 보상 프로그램이 중단되어 있습니다. 독서 기록은 계속 작성할 수 있습니다.</div>
+        {% endif %}
         {% if reward_status.can_choose_mode %}
         <div class="mb-3">
             <div class="fw-bold mb-2">보상 방식
@@ -42,26 +45,13 @@
             보상 방식을 아직 선택하지 않았습니다. 시작은 그대로 가능하고, 포인트 승인이나 면제권 진행은 선택 후에 적용됩니다.
         </div>
         {% elif reward_status.is_exemption_mode %}
-        <p class="mb-2">추천독서 추가 포인트는 없습니다. 완독은 면제권 진행에 포함됩니다.</p>
-        {% if exemption_status %}
-            {% if exemption_status.is_first_ticket %}
-            <p class="mb-2">면제권 진행: 첫 보상 · 완독 {{ exemption_status.have }} / {{ exemption_status.needed }}권</p>
-            {% else %}
-            <p class="mb-2">다음 면제권까지 {{ exemption_status.have }} / {{ exemption_status.needed }}권 완료</p>
-            {% endif %}
-            {% if exemption_status.can_issue %}
-            <p class="mb-2">면제권 발급 가능</p>
-            {% elif exemption_status.issue_block == 'holding' %}
-            <p class="mb-2 text-muted">조건은 충족했지만 현재 면제권을 보유 중입니다.</p>
-            {% elif exemption_status.issue_block == 'cooldown' and exemption_status.next_issue_on %}
-            <p class="mb-2">조건 충족 · {{ exemption_status.next_issue_on.month }}/{{ exemption_status.next_issue_on.day }}부터 발급 가능</p>
-            {% endif %}
-            {% if not is_viewer_mode|default(false) and exemption_status.can_issue %}
-            <form method="post" action="{{ url_for('exemption.issue_ticket', child_id=child.id) }}">
-                {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
-                <button class="btn btn-sm btn-primary" type="submit">면제권 발급 · 종이 전달</button>
-            </form>
-            {% endif %}
+        <p class="mb-2">{{ reward_status.program_label or '추천독서' }} 추가 포인트는 없습니다.</p>
+        {% if reward_status.exemption_applied %}
+        <p class="mb-0">이 {{ reward_status.program_label or '추천독서' }}는 이미 면제권 발급에 반영되었습니다.</p>
+        {% elif reward_status.exemption_pending %}
+        <p class="mb-0">완독은 면제권 진행에 포함됩니다.</p>
+        {% else %}
+        <p class="mb-0">완독하면 면제권 진행에 포함됩니다.</p>
         {% endif %}
         {% else %}
         <div class="d-flex flex-wrap gap-3">
