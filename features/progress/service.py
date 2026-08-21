@@ -10,17 +10,14 @@ from sqlalchemy.exc import IntegrityError
 from extensions import db
 from feature_models import LearningProgressEntry, LearningSubject
 from features.dates import kst_today
+from features.subjects import PROGRESS_SUBJECT_KEYS, progress_default_subjects
 
 KEY_RE = re.compile(r'^[a-z][a-z0-9_]{0,62}$')
 MIN_PAGE = 1
 MAX_PAGE = 2000
 TITLE_MAX = 120
 
-DEFAULT_SUBJECTS = (
-    {'key': 'korean', 'name': '국어', 'sort_order': 10},
-    {'key': 'math', 'name': '수학', 'sort_order': 20},
-    {'key': 'ssen', 'name': '쎈', 'sort_order': 30},
-)
+DEFAULT_SUBJECTS = progress_default_subjects()
 
 
 class ProgressError(Exception):
@@ -118,6 +115,12 @@ def list_subjects(include_inactive=True):
 def list_active_subjects():
     """활성 과목 SELECT만 수행한다. 누락 row를 재생성하지 않는다."""
     return list_subjects(include_inactive=False)
+
+
+def list_progress_input_subjects():
+    """진도 입력에 쓰는 현재 고정 3과목. 관리 UI 없이 운영한다."""
+    wanted = set(PROGRESS_SUBJECT_KEYS)
+    return [row for row in list_active_subjects() if row.key in wanted]
 
 
 def get_subject(subject_id):
@@ -280,7 +283,7 @@ def save_progress_entry(child_id, learning_subject_id, textbook_title, page, rec
 def current_progress_for_child(child_id):
     """활성 과목별 최신 스냅샷. GET 조회는 SELECT만 한다."""
     rows = []
-    for subject in list_active_subjects():
+    for subject in list_progress_input_subjects():
         latest = (
             LearningProgressEntry.query
             .filter_by(child_id=child_id, learning_subject_id=subject.id)

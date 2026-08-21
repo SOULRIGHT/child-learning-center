@@ -10,7 +10,7 @@ from features.progress.service import (
     get_subject,
     history_for_child,
     kst_today,
-    list_active_subjects,
+    list_progress_input_subjects,
     list_subjects,
     save_progress_entry,
     set_subject_active,
@@ -109,7 +109,7 @@ def history(child_id):
         child=child,
         rows=history_for_child(child_id),
         current_rows=current_progress_for_child(child_id),
-        active_subjects=list_active_subjects(),
+        active_subjects=list_progress_input_subjects(),
         kst_today=kst_today(),
     )
 

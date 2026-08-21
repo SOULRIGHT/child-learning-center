@@ -18,15 +18,15 @@
         <form method="post" action="{{ url_for('progress.manage_subjects') }}" class="row g-2 align-items-end">
             <div class="col-md-2">
                 <label class="form-label" for="key">key</label>
-                <input class="form-control" id="key" name="key" required placeholder="math">
+                <input class="form-control" id="key" name="key" required placeholder="예: science">
             </div>
             <div class="col-md-3">
                 <label class="form-label" for="name">이름</label>
-                <input class="form-control" id="name" name="name" required placeholder="수학">
+                <input class="form-control" id="name" name="name" required placeholder="예: 과학">
             </div>
             <div class="col-md-2">
                 <label class="form-label" for="sort_order">순서</label>
-                <input class="form-control" id="sort_order" name="sort_order" type="number" value="40">
+                <input class="form-control" id="sort_order" name="sort_order" type="number" placeholder="예: 40">
             </div>
             <div class="col-md-2">
                 <div class="form-check mt-4">

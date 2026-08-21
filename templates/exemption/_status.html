@@ -1,0 +1,68 @@
+{% if exemption_status and exemption_status.eligible_grade %}
+<div class="card shadow-sm {% if compact|default(false) %}mb-3{% else %}mb-4{% endif %}">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span>면제권</span>
+        {% if not is_viewer_mode|default(false) %}
+        <a href="{{ url_for('exemption.history', child_id=child.id) }}" class="btn btn-sm btn-outline-secondary">이력</a>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        {% if exemption_status.held_ticket %}
+        <p class="mb-2 fw-bold">면제권 1장 보유</p>
+        <p class="text-muted mb-3">
+            {{ exemption_status.held_ticket.issued_on.month }}/{{ exemption_status.held_ticket.issued_on.day }} 발급
+            · {{ exemption_status.held_ticket.expires_on.month }}/{{ exemption_status.held_ticket.expires_on.day }}까지
+        </p>
+        {% elif exemption_status.today_usage %}
+        <p class="mb-2 fw-bold">오늘 학습면제: {{ exemption_status.today_subject.name if exemption_status.today_subject else '과목' }}</p>
+        <p class="text-muted mb-3">면제권 사용 완료</p>
+        {% else %}
+        <p class="mb-3">보유: 없음</p>
+        {% endif %}
+
+        {% if exemption_status.is_first_ticket %}
+        <p class="mb-2">다음 면제권 진행: 첫 보상 · 완독 {{ exemption_status.have }} / {{ exemption_status.needed }}권</p>
+        {% else %}
+        <p class="mb-2">다음 면제권까지 추천도서 {{ exemption_status.have }} / {{ exemption_status.needed }}권</p>
+        {% endif %}
+
+        {% if exemption_status.can_issue %}
+        <p class="mb-3">면제권 발급 가능</p>
+        {% elif exemption_status.issue_block == 'holding' %}
+        <p class="mb-3 text-muted">조건은 충족했지만 현재 면제권을 보유 중입니다.</p>
+        {% elif exemption_status.issue_block == 'cooldown' and exemption_status.next_issue_on %}
+        <p class="mb-3">조건 충족 · {{ exemption_status.next_issue_on.month }}/{{ exemption_status.next_issue_on.day }}부터 발급 가능</p>
+        {% endif %}
+
+        {% if not is_viewer_mode|default(false) %}
+        <div class="d-flex flex-wrap gap-2">
+            {% if exemption_status.can_issue %}
+            <form method="post" action="{{ url_for('exemption.issue_ticket', child_id=child.id) }}">
+                {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+                <button class="btn btn-primary" type="submit">면제권 발급 · 종이 전달</button>
+            </form>
+            {% endif %}
+            {% if exemption_status.held_ticket %}
+            <form method="post" action="{{ url_for('exemption.use_ticket', child_id=child.id, ticket_id=exemption_status.held_ticket.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
+                {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+                <div>
+                    <label class="form-label small mb-1" for="exemption_subject_{{ exemption_status.held_ticket.id }}">면제 과목</label>
+                    <select class="form-select form-select-sm" id="exemption_subject_{{ exemption_status.held_ticket.id }}" name="subject_key" required onchange="this.form.querySelector('[data-exemption-use-submit]').disabled = !this.value">
+                        <option value="" selected>과목을 선택하세요</option>
+                        {% for subject in exemption_status.eligible_subjects %}
+                        <option value="{{ subject.key }}">{{ subject.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label small mb-1" for="exemption_used_on_{{ exemption_status.held_ticket.id }}">사용일</label>
+                    <input class="form-control form-control-sm" type="date" id="exemption_used_on_{{ exemption_status.held_ticket.id }}" name="used_on" value="{{ exemption_status.today.isoformat() }}">
+                </div>
+                <button class="btn btn-outline-primary" type="submit" data-exemption-use-submit disabled>면제권 사용 · 종이 회수</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}

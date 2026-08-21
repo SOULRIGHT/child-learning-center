@@ -453,6 +453,8 @@ VIEWER_WRITE_ENDPOINTS = {
     'reading.viewer_start',
     'reading.viewer_save',
     'reading.viewer_abandon',
+    'exemption.viewer_set_reward_mode',
+    'devdate.set_activity_date',
 }
 VIEWER_CODE_RE = re.compile(r'(?P<child_id>\d+)-(?P<signature>[0-9a-fA-F]{16})')
 
@@ -1532,8 +1534,10 @@ def delete_child(child_id):
     
     try:
         # PointsHistory, Notification은 cascade 없음 → 삭제 전에 수동 제거 (FK 오류 방지)
+        from features.exemption.service import delete_exemptions_for_child
         from features.reading.service import delete_readings_for_child
         from features.progress.service import delete_progress_for_child
+        delete_exemptions_for_child(child_id)
         delete_readings_for_child(child_id)
         delete_progress_for_child(child_id)
         PointsHistory.query.filter_by(child_id=child_id).delete()
@@ -1664,7 +1668,8 @@ def child_detail(child_id):
     # 총 누적 포인트 (실제 전체 누적)
     total_points = child.cumulative_points
     
-    from features.progress.service import current_progress_for_child, list_active_subjects, kst_today
+    from features.progress.service import current_progress_for_child, list_progress_input_subjects, kst_today
+    from features.exemption.service import child_exemption_snapshot
 
     return render_template('children/detail.html', 
                          child=child,
@@ -1678,8 +1683,10 @@ def child_detail(child_id):
                          total_records=total_records,
                          per_page=per_page,
                          current_rows=current_progress_for_child(child_id),
-                         active_subjects=list_active_subjects(),
-                         kst_today=kst_today())
+                         active_subjects=list_progress_input_subjects(),
+                         kst_today=kst_today(),
+                         exemption_status=child_exemption_snapshot(child_id),
+                         is_viewer_mode=False)
 
 @app.route('/children/<int:child_id>/points/export/csv')
 @login_required
@@ -2680,7 +2687,8 @@ def points_input(child_id):
                 flash('❌ 날짜 형식이 잘못되었습니다.', 'error')
                 return redirect(url_for('points_input', child_id=child_id))
         else:
-            selected_date = datetime.utcnow().date()
+            from features.dates import kst_today as _kst_today
+            selected_date = _kst_today()
         
         # 기존 기록이 있는지 확인
         existing_record = DailyPoints.query.filter_by(
@@ -2886,7 +2894,8 @@ def points_input(child_id):
             return redirect(url_for('points_input', child_id=child_id, date=selected_date.isoformat()))
     
     # 기본 표시 날짜 (오늘)
-    today = datetime.utcnow().date()
+    from features.dates import kst_today as _kst_today
+    today = _kst_today()
     selected_date = request.args.get('date')
     if selected_date:
         try:
@@ -2907,7 +2916,7 @@ def points_input(child_id):
         manual_entries_for_template = []
     
     # 오늘/선택 날짜 문자열 계산
-    today_date = datetime.utcnow().strftime('%Y년 %m월 %d일')
+    today_date = today.strftime('%Y년 %m월 %d일')
     selected_date_display = selected_date.strftime('%Y년 %m월 %d일')
     selected_date_iso = selected_date.strftime('%Y-%m-%d')
     today_iso = today.strftime('%Y-%m-%d')
@@ -2927,7 +2936,8 @@ def points_input(child_id):
     from features.reading.policy import is_general_reading_v2
     from features.reading.service import snapshot_for_date
     from features.presets.service import list_active_presets
-    from features.progress.service import current_progress_for_child, list_active_subjects, kst_today
+    from features.progress.service import current_progress_for_child, list_progress_input_subjects, kst_today
+    from features.exemption.service import child_exemption_snapshot
     reading_snapshot = snapshot_for_date(child_id, selected_date)
     reading_policy_v2 = is_general_reading_v2(selected_date)
     manual_presets = list_active_presets()
@@ -2948,8 +2958,10 @@ def points_input(child_id):
                           reading_current_book_title=reading_snapshot['current_book_title'],
                           manual_presets=manual_presets,
                           current_rows=current_progress_for_child(child_id),
-                          active_subjects=list_active_subjects(),
-                          kst_today=kst_today())
+                          active_subjects=list_progress_input_subjects(),
+                          kst_today=kst_today(),
+                          exemption_status=child_exemption_snapshot(child_id, selected_date),
+                          is_viewer_mode=False)
 
 def update_cumulative_points(child_id, commit=True):
     """아동의 누적 포인트를 자동으로 업데이트"""
@@ -4099,7 +4111,8 @@ def settings_data():
                 DailyPoints.query.delete()
                 LearningRecord.query.delete()
                 # Book / ChildReading / ReadingDay / ReadingRewardEvent /
-                # LearningSubject / LearningProgressEntry / ManualPointPreset 은 보존.
+                # LearningSubject / LearningProgressEntry / ManualPointPreset /
+                # ExemptionTicket / ExemptionTicketSource / ExemptionUsage 은 보존.
 
                 # 아동별 누적 포인트 초기화 + viewer slug 재발급
                 children = Child.query.all()
@@ -4108,7 +4121,7 @@ def settings_data():
                     child.viewer_slug = generate_unique_viewer_slug()
                 
                 db.session.commit()
-                flash('학기 포인트 초기화 완료: 아동/사용자와 독서·진도·추천보상 기록은 유지되고 포인트/메모/알림이 삭제되었습니다.', 'success')
+                flash('학기 포인트 초기화 완료: 아동/사용자와 독서·진도·추천보상·면제권 기록은 유지되고 포인트/메모/알림이 삭제되었습니다.', 'success')
             except Exception as e:
                 db.session.rollback()
                 flash(f'데이터 초기화 중 오류가 발생했습니다: {e}', 'error')
@@ -5099,6 +5112,7 @@ def get_backup_data():
                 'status': reading.status,
                 'program_type': reading.program_type,
                 'policy_version': reading.policy_version,
+                'reward_mode': reading.reward_mode,
                 'created_by_user_id': reading.created_by_user_id,
                 'actor_type': reading.actor_type,
                 'created_at': reading.created_at.isoformat() if reading.created_at else None,
@@ -5179,6 +5193,45 @@ def get_backup_data():
                 'updated_at': entry.updated_at.isoformat() if entry.updated_at else None,
             })
 
+        exemption_tickets = ExemptionTicket.query.order_by(ExemptionTicket.id.asc()).all()
+        exemption_tickets_data = []
+        for ticket in exemption_tickets:
+            exemption_tickets_data.append({
+                'id': ticket.id,
+                'child_id': ticket.child_id,
+                'issued_on': ticket.issued_on.isoformat() if ticket.issued_on else None,
+                'expires_on': ticket.expires_on.isoformat() if ticket.expires_on else None,
+                'status': ticket.status,
+                'policy_version': ticket.policy_version,
+                'issued_by_user_id': ticket.issued_by_user_id,
+                'created_at': ticket.created_at.isoformat() if ticket.created_at else None,
+                'revoked_at': ticket.revoked_at.isoformat() if ticket.revoked_at else None,
+                'revoked_by_user_id': ticket.revoked_by_user_id,
+            })
+
+        exemption_sources = ExemptionTicketSource.query.order_by(ExemptionTicketSource.id.asc()).all()
+        exemption_sources_data = []
+        for source in exemption_sources:
+            exemption_sources_data.append({
+                'id': source.id,
+                'exemption_ticket_id': source.exemption_ticket_id,
+                'child_reading_id': source.child_reading_id,
+                'created_at': source.created_at.isoformat() if source.created_at else None,
+            })
+
+        exemption_usages = ExemptionUsage.query.order_by(ExemptionUsage.id.asc()).all()
+        exemption_usages_data = []
+        for usage in exemption_usages:
+            exemption_usages_data.append({
+                'id': usage.id,
+                'exemption_ticket_id': usage.exemption_ticket_id,
+                'subject_key': usage.subject_key,
+                'subject_name': usage.subject_name,
+                'used_on': usage.used_on.isoformat() if usage.used_on else None,
+                'recorded_by_user_id': usage.recorded_by_user_id,
+                'created_at': usage.created_at.isoformat() if usage.created_at else None,
+            })
+
         # 사용자 정보
         users = User.query.all()
         users_data = []
@@ -5211,6 +5264,9 @@ def get_backup_data():
                     'manual_point_presets': len(presets_data),
                     'learning_subjects': len(subjects_data),
                     'learning_progress_entries': len(progress_data),
+                    'exemption_tickets': len(exemption_tickets_data),
+                    'exemption_ticket_sources': len(exemption_sources_data),
+                    'exemption_usages': len(exemption_usages_data),
                 }
             },
             'children': children_data,
@@ -5225,6 +5281,9 @@ def get_backup_data():
             'manual_point_presets': presets_data,
             'learning_subjects': subjects_data,
             'learning_progress_entries': progress_data,
+            'exemption_tickets': exemption_tickets_data,
+            'exemption_ticket_sources': exemption_sources_data,
+            'exemption_usages': exemption_usages_data,
         }
         
         return backup_data, None
@@ -5368,7 +5427,7 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
         ws_readings = wb.create_sheet("독서책이력")
         ws_readings.append([
             'ID', '아동ID', '도서ID', '시작일', '완독일', '종료일', '상태',
-            '프로그램', '정책버전', '작성자ID', '작성자유형', '생성일', '수정일'
+            '프로그램', '정책버전', '보상방식', '작성자ID', '작성자유형', '생성일', '수정일'
         ])
         for reading in backup_data.get('child_readings', []):
             ws_readings.append([
@@ -5381,6 +5440,7 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
                 reading.get('status'),
                 reading.get('program_type'),
                 reading.get('policy_version'),
+                reading.get('reward_mode'),
                 reading.get('created_by_user_id'),
                 reading.get('actor_type'),
                 reading.get('created_at'),
@@ -5465,6 +5525,48 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
                 entry.get('created_at'),
                 entry.get('updated_at'),
             ])
+
+        ws_exemption = wb.create_sheet("면제권")
+        ws_exemption.append([
+            'ID', '아동ID', '발급일', '만료일', '상태', '정책버전',
+            '발급자ID', '생성일', '취소일', '취소자ID',
+        ])
+        for ticket in backup_data.get('exemption_tickets', []):
+            ws_exemption.append([
+                ticket.get('id'),
+                ticket.get('child_id'),
+                ticket.get('issued_on'),
+                ticket.get('expires_on'),
+                ticket.get('status'),
+                ticket.get('policy_version'),
+                ticket.get('issued_by_user_id'),
+                ticket.get('created_at'),
+                ticket.get('revoked_at'),
+                ticket.get('revoked_by_user_id'),
+            ])
+
+        ws_exemption_src = wb.create_sheet("면제권출처")
+        ws_exemption_src.append(['ID', '면제권ID', '독서이력ID', '생성일'])
+        for source in backup_data.get('exemption_ticket_sources', []):
+            ws_exemption_src.append([
+                source.get('id'),
+                source.get('exemption_ticket_id'),
+                source.get('child_reading_id'),
+                source.get('created_at'),
+            ])
+
+        ws_exemption_use = wb.create_sheet("면제권사용이력")
+        ws_exemption_use.append(['ID', '면제권ID', '과목key', '과목이름', '사용일', '기록자ID', '생성일'])
+        for usage in backup_data.get('exemption_usages', []):
+            ws_exemption_use.append([
+                usage.get('id'),
+                usage.get('exemption_ticket_id'),
+                usage.get('subject_key'),
+                usage.get('subject_name'),
+                usage.get('used_on'),
+                usage.get('recorded_by_user_id'),
+                usage.get('created_at'),
+            ])
         
         # 메타데이터 시트
         ws_meta = wb.create_sheet("백업메타데이터")
@@ -5484,9 +5586,16 @@ def create_excel_backup(backup_data, backup_dir, backup_type='manual'):
         ws_meta.append(['수동포인트프리셋수', meta['records_count'].get('manual_point_presets', 0)])
         ws_meta.append(['학습과목수', meta['records_count'].get('learning_subjects', 0)])
         ws_meta.append(['학습진도이력수', meta['records_count'].get('learning_progress_entries', 0)])
+        ws_meta.append(['면제권수', meta['records_count'].get('exemption_tickets', 0)])
+        ws_meta.append(['면제권출처수', meta['records_count'].get('exemption_ticket_sources', 0)])
+        ws_meta.append(['면제권사용이력수', meta['records_count'].get('exemption_usages', 0)])
         
         # 스타일 적용
-        for ws in [ws_children, ws_points, ws_history, ws_users, ws_books, ws_readings, ws_days, ws_rewards, ws_presets, ws_subjects, ws_progress, ws_meta]:
+        for ws in [
+            ws_children, ws_points, ws_history, ws_users, ws_books, ws_readings, ws_days,
+            ws_rewards, ws_presets, ws_subjects, ws_progress, ws_exemption, ws_exemption_src,
+            ws_exemption_use, ws_meta,
+        ]:
             for row in ws.iter_rows(min_row=1, max_row=1):
                 for cell in row:
                     cell.font = Font(bold=True)
@@ -6002,16 +6111,31 @@ def download_backup(filename):
 
 
 # Book/Blueprint 는 db.init_app 이후 late import 한다. feature 모듈은 extensions.db 만 의존한다.
-from feature_models import Book, ChildReading, ReadingDay, ReadingRewardEvent, ManualPointPreset, LearningSubject, LearningProgressEntry  # noqa: E402
+from feature_models import (  # noqa: E402
+    Book,
+    ChildReading,
+    ReadingDay,
+    ReadingRewardEvent,
+    ManualPointPreset,
+    LearningSubject,
+    LearningProgressEntry,
+    ExemptionTicket,
+    ExemptionTicketSource,
+    ExemptionUsage,
+)
 from features.books.routes import books_bp  # noqa: E402
 from features.reading.routes import reading_bp  # noqa: E402
 from features.presets.routes import presets_bp  # noqa: E402
 from features.progress.routes import progress_bp  # noqa: E402
+from features.exemption.routes import exemption_bp  # noqa: E402
+from features.devdate.routes import devdate_bp  # noqa: E402
 
 app.register_blueprint(books_bp)
 app.register_blueprint(reading_bp)
 app.register_blueprint(presets_bp)
 app.register_blueprint(progress_bp)
+app.register_blueprint(exemption_bp)
+app.register_blueprint(devdate_bp)
 
 if __name__ == '__main__':
     if os.environ.get('CLC_TESTING') == '1':

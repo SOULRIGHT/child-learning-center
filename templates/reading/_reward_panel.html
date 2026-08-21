@@ -2,17 +2,74 @@
 <div class="card shadow-sm mb-3">
     <div class="card-body p-4">
         <h3 class="h5 mb-3">추천독서 보상</h3>
-        {% if reward_status.grade_deferred %}
-        <div class="alert alert-secondary mb-0">
-            5~6학년 추천독서는 기록만 남깁니다. 보상 방식(포인트/학습면제권)은 아직 설정하지 않았습니다.
+        {% if reward_status.can_choose_mode %}
+        <div class="mb-3">
+            <div class="fw-bold mb-2">보상 방식
+                {% if not reward_status.reward_mode %}
+                <span class="text-muted fw-normal">아직 선택하지 않음</span>
+                {% elif reward_status.reward_mode == 'points' %}
+                <span class="badge bg-primary">포인트</span>
+                {% elif reward_status.reward_mode == 'exemption' %}
+                <span class="badge bg-info text-dark">면제권</span>
+                {% endif %}
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                {% set mode_action = url_for('exemption.viewer_set_reward_mode', view_token=view_token) if is_viewer_mode|default(false) else url_for('exemption.teacher_set_reward_mode', child_id=child.id) %}
+                <form method="post" action="{{ mode_action }}">
+                    <input type="hidden" name="child_reading_id" value="{{ reading.id }}">
+                    <input type="hidden" name="reward_mode" value="points">
+                    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+                    <button class="btn btn-sm {% if reward_status.reward_mode == 'points' %}btn-primary{% else %}btn-outline-primary{% endif %}" type="submit" {% if reward_status.mode_blocks and reward_status.mode_blocks.points.code %}disabled title="{{ reward_status.mode_blocks.points.message }}"{% endif %}>포인트</button>
+                </form>
+                <form method="post" action="{{ mode_action }}">
+                    <input type="hidden" name="child_reading_id" value="{{ reading.id }}">
+                    <input type="hidden" name="reward_mode" value="exemption">
+                    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+                    <button class="btn btn-sm {% if reward_status.reward_mode == 'exemption' %}btn-info{% else %}btn-outline-info{% endif %}" type="submit" {% if reward_status.mode_blocks and reward_status.mode_blocks.exemption.code %}disabled title="{{ reward_status.mode_blocks.exemption.message }}"{% endif %}>면제권</button>
+                </form>
+            </div>
+            {% if reward_status.mode_blocks and reward_status.mode_blocks.exemption.code and reward_status.reward_mode == 'points' %}
+            <p class="small text-muted mt-2 mb-0">{{ reward_status.mode_blocks.exemption.message }}</p>
+            {% endif %}
+            {% if reward_status.mode_blocks and reward_status.mode_blocks.points.code and reward_status.reward_mode == 'exemption' %}
+            <p class="small text-muted mt-2 mb-0">{{ reward_status.mode_blocks.points.message }}</p>
+            {% endif %}
         </div>
+        {% endif %}
+
+        {% if reward_status.needs_mode %}
+        <div class="alert alert-secondary mb-0">
+            보상 방식을 아직 선택하지 않았습니다. 시작은 그대로 가능하고, 포인트 승인이나 면제권 진행은 선택 후에 적용됩니다.
+        </div>
+        {% elif reward_status.is_exemption_mode %}
+        <p class="mb-2">추천독서 추가 포인트는 없습니다. 완독은 면제권 진행에 포함됩니다.</p>
+        {% if exemption_status %}
+            {% if exemption_status.is_first_ticket %}
+            <p class="mb-2">면제권 진행: 첫 보상 · 완독 {{ exemption_status.have }} / {{ exemption_status.needed }}권</p>
+            {% else %}
+            <p class="mb-2">다음 면제권까지 {{ exemption_status.have }} / {{ exemption_status.needed }}권 완료</p>
+            {% endif %}
+            {% if exemption_status.can_issue %}
+            <p class="mb-2">면제권 발급 가능</p>
+            {% elif exemption_status.issue_block == 'holding' %}
+            <p class="mb-2 text-muted">조건은 충족했지만 현재 면제권을 보유 중입니다.</p>
+            {% elif exemption_status.issue_block == 'cooldown' and exemption_status.next_issue_on %}
+            <p class="mb-2">조건 충족 · {{ exemption_status.next_issue_on.month }}/{{ exemption_status.next_issue_on.day }}부터 발급 가능</p>
+            {% endif %}
+            {% if not is_viewer_mode|default(false) and exemption_status.can_issue %}
+            <form method="post" action="{{ url_for('exemption.issue_ticket', child_id=child.id) }}">
+                {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+                <button class="btn btn-sm btn-primary" type="submit">면제권 발급 · 종이 전달</button>
+            </form>
+            {% endif %}
+        {% endif %}
         {% else %}
         <div class="d-flex flex-wrap gap-3">
             <div>
                 <div class="fw-bold mb-1">시작 보상 {% if reward_status.start.points %}+{{ reward_status.start.points }}P{% endif %}</div>
                 {% if reward_status.start.awarded %}
                 <span class="badge bg-success">승인됨 {{ reward_status.start.awarded_on }}</span>
-                {% if reward_status.start.can_revoke %}
+                {% if reward_status.start.can_revoke and not is_viewer_mode|default(false) %}
                 <form method="post" action="{{ url_for('reading.teacher_reward_revoke', child_id=child.id) }}" class="d-inline">
                     <input type="hidden" name="child_reading_id" value="{{ reading.id }}">
                     <input type="hidden" name="event_type" value="{{ reward_status.start.event_type }}">
@@ -20,7 +77,7 @@
                     <button class="btn btn-sm btn-outline-danger" type="submit">취소</button>
                 </form>
                 {% endif %}
-                {% elif reward_status.start.can_approve %}
+                {% elif reward_status.start.can_approve and not is_viewer_mode|default(false) %}
                 <form method="post" action="{{ url_for('reading.teacher_reward_approve', child_id=child.id) }}" class="d-inline">
                     <input type="hidden" name="child_reading_id" value="{{ reading.id }}">
                     <input type="hidden" name="event_type" value="{{ reward_status.start.event_type }}">
@@ -28,14 +85,14 @@
                     <button class="btn btn-sm btn-primary" type="submit">+{{ reward_status.start.points }} 승인</button>
                 </form>
                 {% else %}
-                <span class="text-muted">미승인</span>
+                <span class="text-muted">{% if is_viewer_mode|default(false) %}교사가 승인합니다{% else %}미승인{% endif %}</span>
                 {% endif %}
             </div>
             <div>
                 <div class="fw-bold mb-1">완독 보상 {% if reward_status.complete.points %}+{{ reward_status.complete.points }}P{% endif %}</div>
                 {% if reward_status.complete.awarded %}
                 <span class="badge bg-success">승인됨 {{ reward_status.complete.awarded_on }}</span>
-                {% if reward_status.complete.can_revoke %}
+                {% if reward_status.complete.can_revoke and not is_viewer_mode|default(false) %}
                 <form method="post" action="{{ url_for('reading.teacher_reward_revoke', child_id=child.id) }}" class="d-inline">
                     <input type="hidden" name="child_reading_id" value="{{ reading.id }}">
                     <input type="hidden" name="event_type" value="{{ reward_status.complete.event_type }}">
@@ -43,7 +100,7 @@
                     <button class="btn btn-sm btn-outline-danger" type="submit">취소</button>
                 </form>
                 {% endif %}
-                {% elif reward_status.complete.can_approve %}
+                {% elif reward_status.complete.can_approve and not is_viewer_mode|default(false) %}
                 <form method="post" action="{{ url_for('reading.teacher_reward_approve', child_id=child.id) }}" class="d-inline">
                     <input type="hidden" name="child_reading_id" value="{{ reading.id }}">
                     <input type="hidden" name="event_type" value="{{ reward_status.complete.event_type }}">
@@ -53,7 +110,7 @@
                 {% elif reward_status.status == 'abandoned' %}
                 <span class="text-muted">중단한 책은 완독 보상을 줄 수 없습니다.</span>
                 {% else %}
-                <span class="text-muted">완독 후 승인</span>
+                <span class="text-muted">{% if is_viewer_mode|default(false) %}완독 후 교사가 승인합니다{% else %}완독 후 승인{% endif %}</span>
                 {% endif %}
             </div>
         </div>

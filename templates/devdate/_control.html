@@ -1,0 +1,30 @@
+{% if current_user.is_authenticated and dev_date_control_enabled %}
+<div class="dev-date-control {% if dev_activity_date_overridden %}is-overridden{% endif %}">
+    <span class="badge {% if dev_activity_date_overridden %}bg-warning text-dark{% else %}bg-secondary{% endif %}">DEV</span>
+    {% if dev_activity_date_overridden %}
+    <span class="dev-date-label">테스트 날짜 {{ dev_activity_date.isoformat() }}</span>
+    {% else %}
+    <span class="dev-date-label">{{ dev_activity_date.isoformat() }}</span>
+    {% endif %}
+    <form method="post" action="{{ url_for('devdate.set_activity_date') }}" class="d-inline">
+        <input type="hidden" name="next" value="{{ request.path }}{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">
+        <input type="hidden" name="action" value="prev">
+        <button class="btn btn-sm btn-outline-secondary" type="submit" title="이전 날짜">◀</button>
+    </form>
+    <form method="post" action="{{ url_for('devdate.set_activity_date') }}" class="d-inline">
+        <input type="hidden" name="next" value="{{ request.path }}{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">
+        <input type="hidden" name="action" value="set">
+        <input class="form-control form-control-sm dev-date-input" type="date" name="date" value="{{ dev_activity_date.isoformat() }}" onchange="this.form.submit()">
+    </form>
+    <form method="post" action="{{ url_for('devdate.set_activity_date') }}" class="d-inline">
+        <input type="hidden" name="next" value="{{ request.path }}{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">
+        <input type="hidden" name="action" value="next">
+        <button class="btn btn-sm btn-outline-secondary" type="submit" title="다음 날짜">▶</button>
+    </form>
+    <form method="post" action="{{ url_for('devdate.set_activity_date') }}" class="d-inline">
+        <input type="hidden" name="next" value="{{ request.path }}{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">
+        <input type="hidden" name="action" value="today">
+        <button class="btn btn-sm {% if dev_activity_date_overridden %}btn-warning{% else %}btn-outline-secondary{% endif %}" type="submit">오늘</button>
+    </form>
+</div>
+{% endif %}

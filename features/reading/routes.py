@@ -13,6 +13,8 @@ from flask import (
 from flask_login import current_user, login_required
 
 from feature_models import ChildReading
+from features.exemption.policy import REWARD_MODE_EXEMPTION, REWARD_MODE_POINTS, grade_supports_reward_choice
+from features.exemption.service import child_exemption_snapshot, reward_mode_change_block
 from features.reading.access import get_child, resolve_viewer_child
 from features.reading.classify import grade_band_for_child_grade
 from features.reading.policy import activity_today, is_general_reading_v2
@@ -91,12 +93,31 @@ def _assert_reading_child(child, expected_reading_id):
     return target
 
 
+def _with_mode_blocks(reward_status, reading):
+    if not reward_status or not reward_status.get('can_choose_mode') or reading is None:
+        return reward_status
+    points_code, points_msg = reward_mode_change_block(reading, REWARD_MODE_POINTS)
+    exemption_code, exemption_msg = reward_mode_change_block(reading, REWARD_MODE_EXEMPTION)
+    reward_status['mode_blocks'] = {
+        'points': {'code': points_code, 'message': points_msg},
+        'exemption': {'code': exemption_code, 'message': exemption_msg},
+    }
+    return reward_status
+
+
 def _editor_context(child, activity_date, *, mode, view_token=None):
     snapshot = snapshot_for_date(child.id, activity_date)
     current = snapshot['current_reading']
     today_day = None
     if current is not None:
         today_day = get_day(current.id, activity_date)
+    reward_status = None if current is None else _with_mode_blocks(
+        reward_status_for_reading(current, child),
+        current,
+    )
+    exemption_status = None
+    if grade_supports_reward_choice(getattr(child, 'grade', None)):
+        exemption_status = child_exemption_snapshot(child.id)
     return {
         'child': child,
         'activity_date': activity_date,
@@ -115,7 +136,8 @@ def _editor_context(child, activity_date, *, mode, view_token=None):
         'has_today_record': snapshot['has_today_record'],
         'is_viewer_mode': mode == 'viewer',
         'child_grade_band': grade_band_for_child_grade(getattr(child, 'grade', None)),
-        'reward_status': None if (mode == 'viewer' or current is None) else reward_status_for_reading(current, child),
+        'reward_status': reward_status,
+        'exemption_status': exemption_status,
     }
 
 
@@ -261,6 +283,11 @@ def teacher_editor(child_id):
 @reading_bp.route('/children/<int:child_id>/reading/history', methods=['GET'])
 @login_required
 def teacher_history(child_id):
+    # TODO: Viewer self reading history (read-only)
+    # 학생열람은 작성만 가능하고, 자기 독서기록 읽기 전용 조회는 후속 Step에서 구현한다.
+    # 기존 QR/viewer 권한과 검증된 child session(viewer_child_id / viewer_slug) 범위만 사용한다.
+    # 자기 아동만, 다른 아동 접근 금지. ReadingRewardEvent / ExemptionTicketSource /
+    # 승인자 / policy_version 등 관리자 audit 은 노출하지 않는다.
     if _is_viewer():
         return redirect(url_for('viewer_home'))
     child = get_child(child_id)
@@ -273,9 +300,18 @@ def teacher_history(child_id):
             'reading': reading,
             'book': reading.book,
             'days': list_days(reading.id),
-            'reward_status': reward_status_for_reading(reading, child),
+            'reward_status': _with_mode_blocks(reward_status_for_reading(reading, child), reading),
         })
-    return render_template('reading/history.html', child=child, items=items)
+    exemption_status = None
+    if grade_supports_reward_choice(getattr(child, 'grade', None)):
+        exemption_status = child_exemption_snapshot(child.id)
+    return render_template(
+        'reading/history.html',
+        child=child,
+        items=items,
+        exemption_status=exemption_status,
+        is_viewer_mode=False,
+    )
 
 
 def _handle_teacher_write(child_id, action):

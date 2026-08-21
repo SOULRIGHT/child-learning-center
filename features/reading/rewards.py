@@ -20,6 +20,7 @@ from feature_models import (
 )
 from features.reading.access import model_named
 from features.dates import kst_today
+from features.exemption.policy import REWARD_MODE_EXEMPTION, REWARD_MODE_POINTS, grade_supports_reward_choice
 
 SOURCE_TYPE = 'recommended_reading'
 EVENT_START = EVENT_RECOMMENDED_START
@@ -45,22 +46,22 @@ def _parse_grade(raw):
         return None
 
 
-def recommended_reward_points(grade, event_type):
-    """5~6학년은 Step 6 전이므로 None. 암묵적 point route를 주지 않는다."""
+def recommended_reward_points(grade, event_type, reward_mode=None):
+    """2~4학년은 기존 정책. 5~6학년은 reward_mode=points 일 때만 점수를 준다."""
     parsed = _parse_grade(grade)
     if event_type == EVENT_START:
         if parsed in (2, 3, 4):
             return 100
-        if parsed in (5, 6):
-            return None
+        if parsed in (5, 6) and reward_mode == REWARD_MODE_POINTS:
+            return 100
         return None
     if event_type == EVENT_COMPLETE:
         if parsed in (2, 3):
             return 100
         if parsed == 4:
             return 200
-        if parsed in (5, 6):
-            return None
+        if parsed in (5, 6) and reward_mode == REWARD_MODE_POINTS:
+            return 200
         return None
     return None
 
@@ -235,17 +236,26 @@ def reward_status_for_reading(reading, child):
     if reading is None:
         return None
     grade = getattr(child, 'grade', None)
-    start_points = recommended_reward_points(grade, EVENT_START)
-    complete_points = recommended_reward_points(grade, EVENT_COMPLETE)
+    mode = getattr(reading, 'reward_mode', None)
+    start_points = recommended_reward_points(grade, EVENT_START, mode)
+    complete_points = recommended_reward_points(grade, EVENT_COMPLETE, mode)
     start_event = get_event(reading.id, EVENT_START)
     complete_event = get_event(reading.id, EVENT_COMPLETE)
     is_recommended = reading.program_type == PROGRAM_TYPE_RECOMMENDED
-    deferred = is_recommended and start_points is None and complete_points is None
+    can_choose_mode = is_recommended and grade_supports_reward_choice(grade)
+    needs_mode = can_choose_mode and not mode
+    is_exemption_mode = mode == REWARD_MODE_EXEMPTION
+    is_points_mode = mode == REWARD_MODE_POINTS or (is_recommended and not can_choose_mode)
     abandoned = reading.status == STATUS_ABANDONED
     completed = reading.status == STATUS_COMPLETED
     return {
         'is_recommended': is_recommended,
-        'grade_deferred': deferred,
+        'grade_deferred': needs_mode,
+        'needs_mode': needs_mode,
+        'can_choose_mode': can_choose_mode,
+        'reward_mode': mode,
+        'is_exemption_mode': is_exemption_mode,
+        'is_points_mode': is_points_mode,
         'grade': grade,
         'start': {
             'event_type': EVENT_START,
@@ -254,7 +264,6 @@ def reward_status_for_reading(reading, child):
             'revoked': start_event is not None and start_event.revoked_at is not None,
             'can_approve': bool(
                 is_recommended
-                and not deferred
                 and start_points
                 and not is_active_event(start_event)
                 and reading.started_on is not None
@@ -269,7 +278,6 @@ def reward_status_for_reading(reading, child):
             'revoked': complete_event is not None and complete_event.revoked_at is not None,
             'can_approve': bool(
                 is_recommended
-                and not deferred
                 and complete_points
                 and completed
                 and not abandoned
@@ -308,12 +316,17 @@ def approve_recommended_reward(reading, user, event_type):
         if reading.status != STATUS_COMPLETED or reading.completed_on is None:
             raise RewardError('완독 후에만 완독 보상을 줄 수 있습니다.', code='not_completed')
 
-    points = recommended_reward_points(child.grade, event_type)
+    points = recommended_reward_points(child.grade, event_type, reading.reward_mode)
     if points is None:
         if _parse_grade(child.grade) in (5, 6):
+            if reading.reward_mode == REWARD_MODE_EXEMPTION:
+                raise RewardError(
+                    '면제권 방식에서는 추천독서 포인트를 지급하지 않습니다.',
+                    code='exemption_mode',
+                )
             raise RewardError(
-                '5~6학년 추천독서는 보상 방식을 아직 설정하지 않았습니다.',
-                code='grade_deferred',
+                '5~6학년 추천독서는 먼저 보상 방식(포인트/면제권)을 선택해야 합니다.',
+                code='mode_unset',
             )
         raise RewardError('이 학년에는 추천독서 보상이 없습니다.', code='not_eligible')
 

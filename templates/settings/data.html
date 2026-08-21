@@ -139,8 +139,8 @@
                     {% if current_user.role == '개발자' %}
                     <div class="alert alert-warning">
                         <h6>🔴 학기 포인트 초기화</h6>
-                        <p>포인트·메모·알림만 삭제합니다. 아동/사용자와 도서·독서기록·추천보상·학습진도·프리셋은 유지됩니다.</p>
-                        <form method="POST" onsubmit="return confirm('학기 포인트를 초기화할까요? 독서·진도 기록은 유지됩니다.')">
+                        <p>포인트·메모·알림만 삭제합니다. 아동/사용자와 도서·독서기록·추천보상·학습진도·프리셋·면제권 장부는 유지됩니다.</p>
+                        <form method="POST" onsubmit="return confirm('학기 포인트를 초기화할까요? 독서·진도·면제권 기록은 유지됩니다.')">
                             <input type="hidden" name="action" value="reset_data">
                             <button type="submit" class="btn btn-danger">
                                 <i class="fas fa-trash"></i> 학기 포인트 초기화

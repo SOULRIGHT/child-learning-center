@@ -242,12 +242,12 @@ class RecommendedReadingLifecycleTests(unittest.TestCase):
             self.assertEqual(reading.program_type, 'recommended')
             with self.assertRaises(RewardError) as start_err:
                 approve_recommended_reward(reading, self.teacher, EVENT_RECOMMENDED_START)
-            self.assertEqual(start_err.exception.code, 'grade_deferred')
+            self.assertEqual(start_err.exception.code, 'mode_unset')
             complete_current(child.id, self.teacher.id, 'teacher', activity_date=self.today)
             reading = ChildReading.query.get(reading.id)
             with self.assertRaises(RewardError) as complete_err:
                 approve_recommended_reward(reading, self.teacher, EVENT_RECOMMENDED_COMPLETE)
-            self.assertEqual(complete_err.exception.code, 'grade_deferred')
+            self.assertEqual(complete_err.exception.code, 'mode_unset')
         self.assertEqual(DailyPoints.query.count(), 0)
         self.assertEqual(ReadingRewardEvent.query.count(), 0)
         self.assertIsNone(recommended_reward_points(5, EVENT_RECOMMENDED_START))

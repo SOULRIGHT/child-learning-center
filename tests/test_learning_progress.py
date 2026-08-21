@@ -26,6 +26,7 @@ from features.progress.service import (  # noqa: E402
     history_for_child,
     kst_today,
     list_active_subjects,
+    list_progress_input_subjects,
     save_progress_entry,
     set_subject_active,
     update_subject,
@@ -313,10 +314,62 @@ class LearningProgressTests(unittest.TestCase):
         self._login(self.teacher_id)
         self.client.get(f'/points/input/{self.child_id}')
         self.client.get(f'/children/{self.child_id}')
-        self.client.get('/settings/learning-subjects')
+        subjects_page = self.client.get('/settings/learning-subjects')
         self.client.get(f'/children/{self.child_id}/progress')
         self.assertEqual(LearningSubject.query.count(), 0)
         self.assertEqual(LearningProgressEntry.query.count(), 0)
+        html = subjects_page.get_data(as_text=True)
+        self.assertIn('신규 추가', html)
+        self.assertNotIn('value="math"', html)
+        self.assertNotIn('value="수학"', html)
+        self.assertNotIn('value="40"', html)
+        self.assertNotIn('is_exemption_eligible', html)
+        self.assertIn('placeholder="예: science"', html)
+        self.assertIn('placeholder="예: 과학"', html)
+
+    def test_settings_hides_learning_subject_manage_link(self):
+        self._login(self.teacher_id)
+        html = self.client.get('/settings').get_data(as_text=True)
+        self.assertNotIn('학습 과목 관리', html)
+        self.assertNotIn('learning-subjects', html)
+
+    def test_progress_input_shows_fixed_korean_math_ssen_only(self):
+        ensure_default_subjects()
+        create_subject('science', '과학', sort_order=90)
+        science = LearningSubject.query.filter_by(key='science').one()
+        self._login(self.teacher_id)
+        html = self.client.get(f'/children/{self.child_id}').get_data(as_text=True)
+        self.assertEqual(
+            [row.key for row in list_progress_input_subjects()],
+            ['korean', 'math', 'ssen'],
+        )
+        self.assertIn('국어', html)
+        self.assertIn('수학', html)
+        self.assertIn('쎈', html)
+        self.assertNotIn(f'<option value="{science.id}">과학</option>', html)
+        self.assertEqual(
+            [row['subject'].key for row in current_progress_for_child(self.child_id)],
+            ['korean', 'math', 'ssen'],
+        )
+
+    def test_daily_points_subject_columns_unchanged(self):
+        from features.subjects import CURRENT_SUBJECTS
+        cols = {column.name for column in DailyPoints.__table__.columns}
+        self.assertEqual(
+            {item['daily_points_field'] for item in CURRENT_SUBJECTS.values()},
+            {
+                'korean_points',
+                'math_points',
+                'ssen_points',
+                'reading_points',
+                'piano_points',
+                'english_points',
+                'advanced_math_points',
+                'writing_points',
+            },
+        )
+        self.assertTrue({item['daily_points_field'] for item in CURRENT_SUBJECTS.values()} <= cols)
+        self.assertIn('manual_points', cols)
 
     def test_27_28_29_backup_restore(self):
         self._save(page=74, recorded_on=self.today - timedelta(days=1))
@@ -427,6 +480,126 @@ class LearningProgressTests(unittest.TestCase):
         self.assertEqual(ensure_default_subjects(), 3)
         self.assertEqual(ensure_default_subjects(), 0)
         self.assertEqual([row.key for row in list_active_subjects()], [item['key'] for item in DEFAULT_SUBJECTS])
+
+    def test_corrective_migration_seeds_missing_defaults_without_overwrite(self):
+        migration_path = Path(__file__).resolve().parents[1] / (
+            'migrations/versions/e5b2c81d4a70_ensure_default_learning_subjects.py'
+        )
+        spec = importlib.util.spec_from_file_location('subject_seed_migration', migration_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        from alembic.operations import Operations
+        from alembic.runtime.migration import MigrationContext
+        from sqlalchemy import create_engine, text
+
+        with tempfile.TemporaryDirectory(prefix='clc_subject_seed_') as tmp:
+            db_path = Path(tmp) / 'partial.db'
+            engine = create_engine('sqlite:///' + db_path.resolve().as_posix())
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(
+                        "CREATE TABLE learning_subject ("
+                        "id INTEGER PRIMARY KEY,"
+                        "key VARCHAR(64) NOT NULL,"
+                        "name VARCHAR(80) NOT NULL,"
+                        "is_active BOOLEAN NOT NULL DEFAULT 1,"
+                        "sort_order INTEGER NOT NULL DEFAULT 0,"
+                        "created_at DATETIME,"
+                        "updated_at DATETIME"
+                        ")"
+                    ))
+                    conn.execute(text(
+                        "INSERT INTO learning_subject (key, name, is_active, sort_order) "
+                        "VALUES ('math', '사용자수학', 0, 99), ('ssen', '사용자쎈', 1, 7)"
+                    ))
+                    context = MigrationContext.configure(conn)
+                    with Operations.context(context):
+                        module.upgrade()
+                    rows = conn.execute(text(
+                        "SELECT key, name, is_active, sort_order "
+                        "FROM learning_subject ORDER BY key"
+                    )).fetchall()
+            finally:
+                engine.dispose()
+
+        by_key = {row[0]: row for row in rows}
+        self.assertEqual(by_key['korean'][1], '국어')
+        self.assertTrue(by_key['korean'][2])
+        self.assertEqual(by_key['korean'][3], 10)
+        self.assertEqual(by_key['math'][1], '사용자수학')
+        self.assertFalse(by_key['math'][2])
+        self.assertEqual(by_key['math'][3], 99)
+        self.assertEqual(by_key['ssen'][1], '사용자쎈')
+        self.assertTrue(by_key['ssen'][2])
+        self.assertEqual(by_key['ssen'][3], 7)
+        self.assertEqual(len(rows), 3)
+
+    def test_latest_migration_chain_has_default_subjects(self):
+        progress_path = Path(__file__).resolve().parents[1] / (
+            'migrations/versions/a9c4e81f6b30_create_learning_progress.py'
+        )
+        exemption_path = Path(__file__).resolve().parents[1] / (
+            'migrations/versions/d4e8a01c5b92_add_exemption_ticket_ledger.py'
+        )
+        seed_path = Path(__file__).resolve().parents[1] / (
+            'migrations/versions/e5b2c81d4a70_ensure_default_learning_subjects.py'
+        )
+        modules = []
+        for path, name in (
+            (progress_path, 'progress_mig'),
+            (exemption_path, 'exemption_mig'),
+            (seed_path, 'seed_mig'),
+        ):
+            spec = importlib.util.spec_from_file_location(name, path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            modules.append(module)
+
+        from alembic.operations import Operations
+        from alembic.runtime.migration import MigrationContext
+        from sqlalchemy import create_engine, text
+
+        with tempfile.TemporaryDirectory(prefix='clc_chain_mig_') as tmp:
+            db_path = Path(tmp) / 'chain.db'
+            engine = create_engine('sqlite:///' + db_path.resolve().as_posix())
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("CREATE TABLE child (id INTEGER PRIMARY KEY)"))
+                    conn.execute(text("CREATE TABLE user (id INTEGER PRIMARY KEY)"))
+                    conn.execute(text(
+                        "CREATE TABLE child_reading ("
+                        "id INTEGER PRIMARY KEY, child_id INTEGER, status VARCHAR(16)"
+                        ")"
+                    ))
+                    context = MigrationContext.configure(conn)
+                    with Operations.context(context):
+                        modules[0].upgrade()
+                    conn.execute(text("DELETE FROM learning_subject"))
+                    context = MigrationContext.configure(conn)
+                    with Operations.context(context):
+                        modules[1].upgrade()
+                        modules[2].upgrade()
+                    rows = conn.execute(text(
+                        "SELECT key, name, sort_order FROM learning_subject ORDER BY sort_order, id"
+                    )).fetchall()
+                    subject_cols = [
+                        row[1] for row in conn.execute(text("PRAGMA table_info(learning_subject)")).fetchall()
+                    ]
+                    usage_cols = [
+                        row[1] for row in conn.execute(text("PRAGMA table_info(exemption_usage)")).fetchall()
+                    ]
+            finally:
+                engine.dispose()
+
+        self.assertEqual(
+            [(row[0], row[1], row[2]) for row in rows],
+            [('korean', '국어', 10), ('math', '수학', 20), ('ssen', '쎈', 30)],
+        )
+        self.assertNotIn('is_exemption_eligible', subject_cols)
+        self.assertIn('subject_key', usage_cols)
+        self.assertIn('subject_name', usage_cols)
+        self.assertNotIn('learning_subject_id', usage_cols)
 
 
 if __name__ == '__main__':

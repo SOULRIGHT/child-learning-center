@@ -643,6 +643,11 @@
                             </button>
                         </div>
                     </form>
+                    {% if exemption_status and exemption_status.eligible_grade %}
+                    {% set compact = true %}
+                    {% set next_url = url_for('points_input', child_id=child.id, date=selected_date_iso) %}
+                    {% include 'exemption/_status.html' %}
+                    {% endif %}
                     <div class="mt-4 pt-3 border-top">
                         <h5 class="mb-1">학습 진도 (선택)</h5>
                         <p class="text-muted small">포인트 저장과 별개입니다. 입력하지 않아도 포인트는 그대로 저장됩니다.</p>

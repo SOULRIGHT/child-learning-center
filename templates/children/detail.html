@@ -96,6 +96,12 @@
     </div>
 </div>
 
+{% if exemption_status %}
+{% set compact = false %}
+{% set next_url = url_for('child_detail', child_id=child.id) %}
+{% include 'exemption/_status.html' %}
+{% endif %}
+
 <!-- 통계 요약 카드 -->
 <div class="row mb-4 mt-3">
     <div class="col-lg-3 col-md-6 col-6 mb-3">

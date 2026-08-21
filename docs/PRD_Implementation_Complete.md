@@ -12,6 +12,49 @@
 - ✅ **백업 시스템 완성**
 - ✅ **실제 사용 가능**
 
+## TODO: Unified dynamic Subject architecture
+
+현재 운영 과목의 정본은 DailyPoints 고정 컬럼이다.
+LearningSubject / ExemptionUsage snapshot 은 기능별 임시 구조이며, 지금은 통합하지 않는다.
+
+최종적으로는:
+
+- 기존 DailyPoints 고정 과목 제거/호환 이관
+- 하나의 Subject PK 기반 master 도입
+- points / progress / exemption 모두 같은 Subject FK 사용
+- 센터별 UI에서 과목 추가/비활성/정렬/기능별 사용 여부 관리
+- 기존 역사 데이터 보존 migration 필요
+
+이번 Step에서는 구현하지 않는다. 코드 정본은 `features/subjects.py` 임시 registry.
+
+## TODO: Viewer self reading history (read-only)
+
+학생열람 계정은 현재 자기 아동의 독서 기록을 작성할 수 있지만, 나중에 같은 기록을 읽기 전용으로 다시 볼 수 있어야 한다.
+이번 Step에서는 구현하지 않는다. 후속 Step에서 한다.
+
+범위:
+
+- 학생열람 계정 + 검증된 `viewer_child_id` / `viewer_slug` 기준
+- 기존 QR/viewer 권한 모델과 검증된 child session 범위만 사용. 우회하지 않는다
+- 자기 아동의 독서기록만 조회. 다른 아동 기록 접근 절대 불가
+- 읽기 전용. 작성/수정/삭제 없음
+
+보여줄 것:
+
+- 책 제목, 저자
+- 시작일, 완독일
+- 상태(in_progress / completed / abandoned를 사용자 친화적으로 표시)
+- 본인이 작성한 ReadingDay 감상 기록
+- 일반독서 / 추천독서 정도의 구분
+
+보여주지 말 것:
+
+- ReadingRewardEvent 내부 ledger
+- ExemptionTicketSource
+- 관리자 승인자
+- 내부 policy_version
+- 기타 관리자용 audit 정보
+
 ## 🆕 **최신 업데이트 (2025-09-30)**
 - **실제 가명 시드 데이터 시스템**: 29명의 실제 가명으로 운영용 데이터 생성 (seed_name.py)
 - **환경 분리 시스템**: 로컬(SQLite)과 배포(Supabase) 환경 완전 분리

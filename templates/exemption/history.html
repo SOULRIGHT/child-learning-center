@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}{{ child.name }} 면제권 이력{% endblock %}
+{% block page_title %}면제권 이력{% endblock %}
+
+{% block content %}
+<div class="d-flex gap-2 mb-3 flex-wrap">
+    <a href="{{ url_for('child_detail', child_id=child.id) }}" class="btn btn-outline-secondary">아동 상세</a>
+    <a href="{{ url_for('points_input', child_id=child.id) }}" class="btn btn-outline-secondary">포인트 입력</a>
+</div>
+<h3 class="mb-3">{{ child.name }}</h3>
+{% set exemption_status = snapshot %}
+{% set compact = false %}
+{% include 'exemption/_status.html' %}
+
+{% if snapshot.history %}
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead class="table-light">
+            <tr>
+                <th>발급일</th>
+                <th>만료일</th>
+                <th>상태</th>
+                <th>사용일</th>
+                <th>면제과목</th>
+                <th>source</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in snapshot.history %}
+            <tr>
+                <td>{{ item.ticket.issued_on }}</td>
+                <td>{{ item.ticket.expires_on }}</td>
+                <td>{{ item.effective_status }}</td>
+                <td>{{ item.usage.used_on if item.usage else '-' }}</td>
+                <td>{{ item.subject.name if item.subject else '-' }}</td>
+                <td>
+                    {% for source in item.sources %}
+                    <div>추천독서 {{ loop.index }}권 · {{ source.title }}</div>
+                    {% else %}
+                    -
+                    {% endfor %}
+                </td>
+                <td>
+                    {% if item.can_revoke %}
+                    <form method="post" action="{{ url_for('exemption.revoke_ticket', child_id=child.id, ticket_id=item.ticket.id) }}">
+                        <button class="btn btn-sm btn-outline-danger" type="submit">발급 취소</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="text-muted">면제권 이력이 없습니다.</p>
+{% endif %}
+{% endblock %}

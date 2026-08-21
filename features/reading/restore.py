@@ -57,6 +57,7 @@ def restore_readings_from_backup_data(backup_data):
         reading.status = item.get('status') or 'in_progress'
         reading.program_type = item.get('program_type') or 'general'
         reading.policy_version = item.get('policy_version') or 'general_v2'
+        reading.reward_mode = item.get('reward_mode')
         reading.created_by_user_id = item.get('created_by_user_id')
         reading.actor_type = item.get('actor_type') or 'teacher'
         created_at = _parse_dt(item.get('created_at'))

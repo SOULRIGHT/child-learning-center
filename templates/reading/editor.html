@@ -51,11 +51,13 @@
                 </div>
                 <button type="submit" class="btn btn-primary w-100 btn-lg-touch">오늘 기록 저장</button>
             </form>
-            {% if not is_viewer_mode %}
             {% set reading = current_reading %}
+            {% if is_viewer_mode %}
+            {% set next_url = url_for('reading.viewer_editor', view_token=view_token) %}
+            {% else %}
             {% set next_url = url_for('reading.teacher_editor', child_id=child.id, date=activity_date_iso) %}
-            {% include 'reading/_reward_panel.html' %}
             {% endif %}
+            {% include 'reading/_reward_panel.html' %}
         </div>
     </div>
 

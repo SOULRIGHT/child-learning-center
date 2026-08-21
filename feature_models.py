@@ -92,6 +92,12 @@ EVENT_RECOMMENDED_START = 'recommended_start'
 EVENT_RECOMMENDED_COMPLETE = 'recommended_complete'
 ACTOR_CHILD = 'child'
 ACTOR_TEACHER = 'teacher'
+REWARD_MODE_POINTS = 'points'
+REWARD_MODE_EXEMPTION = 'exemption'
+TICKET_STATUS_ACTIVE = 'active'
+TICKET_STATUS_USED = 'used'
+TICKET_STATUS_EXPIRED = 'expired'
+TICKET_STATUS_REVOKED = 'revoked'
 
 
 class ChildReading(db.Model):
@@ -118,6 +124,7 @@ class ChildReading(db.Model):
     status = db.Column(db.String(32), nullable=False, default=STATUS_IN_PROGRESS, index=True)
     program_type = db.Column(db.String(32), nullable=False, default=PROGRAM_TYPE_GENERAL)
     policy_version = db.Column(db.String(32), nullable=False, default=POLICY_VERSION_GENERAL_V2)
+    reward_mode = db.Column(db.String(16), nullable=True)
 
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     actor_type = db.Column(db.String(16), nullable=False)
@@ -228,7 +235,7 @@ class ManualPointPreset(db.Model):
 
 
 class LearningSubject(db.Model):
-    """학습진도/향후 면제권용 과목 마스터. DailyPoints 과목 컬럼과 별개다."""
+    """학습진도 과목 마스터. DailyPoints 과목 컬럼 및 면제권 과목 목록과 별개다."""
     __tablename__ = 'learning_subject'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -278,4 +285,101 @@ class LearningProgressEntry(db.Model):
         return (
             f'<LearningProgressEntry {self.id} child={self.child_id} '
             f'{self.recorded_on} p{self.page}>'
+        )
+
+
+class ExemptionTicket(db.Model):
+    """학습 면제권 장부. 종이 면제권의 발급/보유/만료/취소를 기록한다."""
+    __tablename__ = 'exemption_ticket'
+    __table_args__ = (
+        Index(
+            'uq_exemption_ticket_one_active',
+            'child_id',
+            unique=True,
+            sqlite_where=text("status = 'active'"),
+            postgresql_where=text("status = 'active'"),
+        ),
+        Index('ix_exemption_ticket_child_status', 'child_id', 'status'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    child_id = db.Column(db.Integer, db.ForeignKey('child.id'), nullable=False, index=True)
+    issued_on = db.Column(db.Date, nullable=False, index=True)
+    expires_on = db.Column(db.Date, nullable=False)
+    status = db.Column(db.String(16), nullable=False, default=TICKET_STATUS_ACTIVE, index=True)
+    policy_version = db.Column(db.String(32), nullable=False)
+    issued_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    revoked_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+    sources = db.relationship('ExemptionTicketSource', back_populates='ticket')
+    usage = db.relationship('ExemptionUsage', back_populates='ticket', uselist=False)
+
+    def __repr__(self):
+        return f'<ExemptionTicket {self.id} child={self.child_id} {self.status}>'
+
+
+class ExemptionTicketSource(db.Model):
+    """면제권 발급에 소비된 추천독서 완독. revoked ticket source는 조회에서 미소비로 본다."""
+    __tablename__ = 'exemption_ticket_source'
+    __table_args__ = (
+        UniqueConstraint(
+            'exemption_ticket_id',
+            'child_reading_id',
+            name='uq_exemption_source_ticket_reading',
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    exemption_ticket_id = db.Column(
+        db.Integer,
+        db.ForeignKey('exemption_ticket.id'),
+        nullable=False,
+        index=True,
+    )
+    child_reading_id = db.Column(
+        db.Integer,
+        db.ForeignKey('child_reading.id'),
+        nullable=False,
+        index=True,
+    )
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    ticket = db.relationship('ExemptionTicket', back_populates='sources')
+    child_reading = db.relationship('ChildReading')
+
+    def __repr__(self):
+        return (
+            f'<ExemptionTicketSource {self.id} ticket={self.exemption_ticket_id} '
+            f'reading={self.child_reading_id}>'
+        )
+
+
+class ExemptionUsage(db.Model):
+    """면제권 사용 장부. 한 ticket은 한 과목·한 날짜만 면제한다."""
+    __tablename__ = 'exemption_usage'
+    __table_args__ = (
+        UniqueConstraint('exemption_ticket_id', name='uq_exemption_usage_ticket'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    exemption_ticket_id = db.Column(
+        db.Integer,
+        db.ForeignKey('exemption_ticket.id'),
+        nullable=False,
+        unique=True,
+    )
+    subject_key = db.Column(db.String(64), nullable=False, index=True)
+    subject_name = db.Column(db.String(80), nullable=False)
+    used_on = db.Column(db.Date, nullable=False, index=True)
+    recorded_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    ticket = db.relationship('ExemptionTicket', back_populates='usage')
+
+    def __repr__(self):
+        return (
+            f'<ExemptionUsage {self.id} ticket={self.exemption_ticket_id} '
+            f'{self.subject_key} {self.used_on}>'
         )
