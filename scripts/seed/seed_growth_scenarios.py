@@ -567,7 +567,7 @@ def print_seed_manifest(result):
     print('이 데이터는 개발/검증용 scenario 이다. 실제 운영 분포가 아니다.')
     for key, spec in SCENARIO_CATALOG.items():
         child = result['children'][key]
-        print(f"  {key} {child['name']} (id={child['id']}, {child['grade']}학년) — {spec['label']}")
+        print(f"  {key} {child['name']} (id={child['id']}, {child['grade']}학년) - {spec['label']}")
 
 
 def main(argv=None):
