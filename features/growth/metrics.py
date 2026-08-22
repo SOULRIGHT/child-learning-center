@@ -13,6 +13,11 @@ cumulative_as_of
     None은 해당 시점 누적을 현재 잔존 원장으로 확정할 수 없는 경우.
     child_cumulative_points는 live cache일 뿐이며
     comparison/insight/historical snapshot/AI evidence에 쓰지 않는다.
+
+paired_experience_rating
+    한 ChildReading에 difficulty와 fun이 모두 있는 completed 표본.
+    개별 difficulty_rating / fun_rating 평균과 다를 수 있다.
+    cross insight는 이 paired family(experience_rating_pair)만 쓴다.
 """
 from __future__ import annotations
 
@@ -146,6 +151,10 @@ def _reading_coverage(readings, days, as_of):
             reading.completed_on for reading in completed
             if reading.fun_rating is not None
         ),
+        'experience_rating_pair': _min_date(
+            reading.completed_on for reading in completed
+            if reading.difficulty_rating is not None and reading.fun_rating is not None
+        ),
     }
 
 
@@ -193,6 +202,10 @@ def _reading_slice(readings, days, days_by_reading, window, as_of):
 
     difficulty = _rating_stats(reading.difficulty_rating for reading in completed)
     fun = _rating_stats(reading.fun_rating for reading in completed)
+    paired = [
+        reading for reading in completed
+        if reading.difficulty_rating is not None and reading.fun_rating is not None
+    ]
     return {
         'reading_days': len(reading_dates),
         'started_count': started_count,
@@ -210,6 +223,15 @@ def _reading_slice(readings, days, days_by_reading, window, as_of):
         },
         'difficulty_rating': difficulty,
         'fun_rating': fun,
+        'paired_experience_rating': {
+            'sample_count': len(paired),
+            'difficulty_average': _mean_or_none(
+                [int(reading.difficulty_rating) for reading in paired]
+            ),
+            'fun_average': _mean_or_none(
+                [int(reading.fun_rating) for reading in paired]
+            ),
+        },
     }
 
 
@@ -362,3 +384,12 @@ def points_metrics(child_id, as_of=None, window_days=30):
     # live cache only. not Growth evidence.
     payload['child_cumulative_points'] = int(child.cumulative_points or 0) if child is not None else 0
     return payload
+
+
+def metrics_bundle(child_id, as_of=None, window_days=30):
+    """reading/progress/points 스냅샷을 한 묶음으로 모은다."""
+    return {
+        'reading': reading_metrics(child_id, as_of=as_of, window_days=window_days),
+        'progress': progress_metrics(child_id, as_of=as_of, window_days=window_days),
+        'points': points_metrics(child_id, as_of=as_of, window_days=window_days),
+    }

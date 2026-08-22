@@ -311,6 +311,8 @@ class GrowthMetricsTests(unittest.TestCase):
         self.assertIsNone(empty['difficulty_rating']['average'])
         self.assertEqual(empty['difficulty_rating']['sample_count'], 0)
         self.assertIsNone(empty['fun_rating']['average'])
+        self.assertEqual(empty['paired_experience_rating']['sample_count'], 0)
+        self.assertIsNone(empty['paired_experience_rating']['difficulty_average'])
 
         one = self._reading(
             self._book('평가1'),
@@ -326,6 +328,9 @@ class GrowthMetricsTests(unittest.TestCase):
         self.assertEqual(n1['difficulty_rating']['sample_count'], 1)
         self.assertEqual(n1['difficulty_rating']['average'], 5)
         self.assertEqual(n1['fun_rating']['average'], 3)
+        self.assertEqual(n1['paired_experience_rating']['sample_count'], 1)
+        self.assertEqual(n1['paired_experience_rating']['difficulty_average'], 5)
+        self.assertEqual(n1['paired_experience_rating']['fun_average'], 3)
 
         two = self._reading(
             self._book('평가2'),
@@ -342,6 +347,8 @@ class GrowthMetricsTests(unittest.TestCase):
         self.assertEqual(n2['difficulty_rating']['average'], 4)
         self.assertEqual(n2['fun_rating']['sample_count'], 1)
         self.assertEqual(n2['fun_rating']['average'], 3)
+        self.assertEqual(n2['paired_experience_rating']['sample_count'], 1)
+        self.assertEqual(n2['paired_experience_rating']['difficulty_average'], 5)
 
     def test_reading_comparable_false_when_ledger_starts_after_previous(self):
         book = self._book('최근시작')
@@ -571,12 +578,17 @@ class GrowthMetricsTests(unittest.TestCase):
         self.assertTrue(result['comparable']['completed'])
         self.assertEqual(result['available_from']['difficulty_rating'], date(2026, 8, 4))
         self.assertEqual(result['available_from']['fun_rating'], date(2026, 8, 8))
+        self.assertEqual(result['available_from']['experience_rating_pair'], date(2026, 8, 8))
         self.assertFalse(result['comparable']['difficulty_rating'])
         self.assertFalse(result['comparable']['fun_rating'])
+        self.assertFalse(result['comparable']['experience_rating_pair'])
         self.assertEqual(result['current']['difficulty_rating']['sample_count'], 2)
         self.assertEqual(result['current']['difficulty_rating']['average'], 3)
         self.assertEqual(result['current']['fun_rating']['sample_count'], 1)
         self.assertEqual(result['current']['fun_rating']['average'], 5)
+        self.assertEqual(result['current']['paired_experience_rating']['sample_count'], 1)
+        self.assertEqual(result['current']['paired_experience_rating']['difficulty_average'], 2)
+        self.assertEqual(result['current']['paired_experience_rating']['fun_average'], 5)
 
 
 if __name__ == '__main__':
