@@ -4108,6 +4108,35 @@ def settings_data():
                 flash('기본 시드 데이터가 성공적으로 실행되었습니다.', 'success')
             except Exception as e:
                 flash(f'시드 데이터 실행 중 오류가 발생했습니다: {e}', 'error')
+
+        elif action == 'growth_seed':
+            from features.dates import is_production_runtime, kst_today, parse_activity_date_text
+            from scripts.seed.seed_growth_scenarios import (
+                GrowthSeedDenied,
+                NAME_PREFIX,
+                growth_seed_web_denial_reason,
+                run_explicit_growth_seed,
+            )
+            reason = growth_seed_web_denial_reason()
+            if is_production_runtime() or reason:
+                denied = GrowthSeedDenied(reason or 'production')
+                return denied.public_message, 403
+            try:
+                anchor = parse_activity_date_text(request.form.get('growth_seed_anchor')) or kst_today()
+                regular_count = Child.query.filter(~Child.name.startswith(NAME_PREFIX)).count()
+                result = run_explicit_growth_seed(anchor_date=anchor, replace_existing=True)
+                seeded = len(result.get('children') or {})
+                flash(
+                    f'Growth 테스트 데이터 {seeded}명을 생성했습니다. '
+                    f'기존 일반 아동 {regular_count}명은 유지했습니다.',
+                    'success',
+                )
+                return redirect(url_for('settings_data'))
+            except GrowthSeedDenied as denied:
+                return denied.public_message, 403
+            except Exception:
+                flash('Growth 테스트 데이터 생성 중 오류가 발생했습니다.', 'error')
+                return redirect(url_for('settings_data'))
         
         elif action == 'reset_data':
             if current_user.role != '개발자':
@@ -4173,13 +4202,16 @@ def settings_data():
     points_count = DailyPoints.query.count()
     db_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
     is_postgresql_env = db_url.startswith('postgresql')
-    
+    from scripts.seed.seed_growth_scenarios import CANONICAL_ANCHOR, growth_seed_web_available
+
     return render_template('settings/data.html', 
                          children_count=children_count,
                          users_count=users_count,
                          records_count=records_count,
                          points_count=points_count,
-                         is_postgresql_env=is_postgresql_env)
+                         is_postgresql_env=is_postgresql_env,
+                         growth_seed_available=growth_seed_web_available(),
+                         growth_seed_default_anchor=CANONICAL_ANCHOR.isoformat())
 
 @app.route('/settings/ui')
 @login_required
