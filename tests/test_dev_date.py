@@ -157,13 +157,17 @@ class DevDateAndSubjectRegistryTests(unittest.TestCase):
         self.assertEqual(denied.status_code, 404)
 
     def test_postgres_url_blocks_even_with_flag(self):
+        previous_url = os.environ.get('DATABASE_URL')
         os.environ['CLC_DEV_DATE_CONTROL'] = '1'
         os.environ['DATABASE_URL'] = 'postgresql://example.invalid/db'
         try:
             self.assertTrue(is_production_runtime())
             self.assertFalse(is_dev_date_control_enabled())
         finally:
-            os.environ['DATABASE_URL'] = ''
+            if previous_url is None:
+                os.environ.pop('DATABASE_URL', None)
+            else:
+                os.environ['DATABASE_URL'] = previous_url
 
     def test_kst_today_without_override_is_actual(self):
         self.assertEqual(kst_today(), actual_kst_today())

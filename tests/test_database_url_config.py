@@ -86,23 +86,25 @@ class DatabaseUrlSchemeTests(unittest.TestCase):
         )
 
     def test_import_with_explicit_sqlite_database_url(self):
-        """별도 프로세스에서 DATABASE_URL=sqlite:///child_center.db 로 import 해도 SQLite 엔진이 뜬다."""
-        script = r'''
+        """별도 프로세스에서 명시적 SQLite DATABASE_URL import가 Postgres 옵션 없이 성공한다."""
+        tmp = Path(tempfile.mkdtemp(prefix='clc_sqlite_import_')) / 'scheme.db'
+        sqlite_url = 'sqlite:///' + tmp.resolve().as_posix()
+        script = rf'''
 import os
 os.environ["CLC_TESTING"] = "1"
-os.environ["DATABASE_URL"] = "sqlite:///child_center.db"
+os.environ["DATABASE_URL"] = {sqlite_url!r}
 os.environ["FIREBASE_CREDENTIALS_JSON"] = ""
 os.environ["SECRET_KEY"] = "clc-db-scheme-test"
 
 from sqlalchemy import create_engine, text
 from app import IS_POSTGRESQL, app
 
-assert app.config["SQLALCHEMY_DATABASE_URI"] == "sqlite:///child_center.db", app.config["SQLALCHEMY_DATABASE_URI"]
+assert app.config["SQLALCHEMY_DATABASE_URI"] == {sqlite_url!r}, app.config["SQLALCHEMY_DATABASE_URI"]
 assert app.config.get("SESSION_COOKIE_SECURE") is False
 assert IS_POSTGRESQL is False
-opts = app.config.get("SQLALCHEMY_ENGINE_OPTIONS") or {}
-assert "keepalives" not in (opts.get("connect_args") or {})
-assert "connect_timeout" not in (opts.get("connect_args") or {})
+opts = app.config.get("SQLALCHEMY_ENGINE_OPTIONS") or {{}}
+assert "keepalives" not in (opts.get("connect_args") or {{}})
+assert "connect_timeout" not in (opts.get("connect_args") or {{}})
 
 engine = create_engine("sqlite:///:memory:", **opts)
 with engine.connect() as conn:
@@ -112,9 +114,10 @@ print("SQLITE_IMPORT_OK")
 '''
         env = os.environ.copy()
         env['CLC_TESTING'] = '1'
-        env['DATABASE_URL'] = 'sqlite:///child_center.db'
+        env['DATABASE_URL'] = sqlite_url
         env['FIREBASE_CREDENTIALS_JSON'] = ''
         env.pop('SQLALCHEMY_DATABASE_URI', None)
+        env.pop('CLC_ALLOW_GROWTH_SEED', None)
 
         result = subprocess.run(
             [sys.executable, '-c', script],

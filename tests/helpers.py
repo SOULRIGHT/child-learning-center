@@ -26,6 +26,38 @@ _TEST_DB_PATH = None
 _IMPORT_SIDE_EFFECTS = None
 
 
+def local_development_sqlite_path() -> Path:
+    return (PROJECT_ROOT / 'instance' / 'child_center.db').resolve()
+
+
+def test_sqlite_path():
+    return None if _TEST_DB_PATH is None else _TEST_DB_PATH.resolve()
+
+
+def resolved_engine_sqlite_path(db) -> Path | None:
+    raw = getattr(getattr(db, 'engine', None), 'url', None)
+    database = getattr(raw, 'database', None) if raw is not None else None
+    if not database:
+        return None
+    return Path(database).resolve()
+
+
+def assert_test_engine_isolated(db) -> Path:
+    """테스트 엔진이 instance/child_center.db 가 아닌지 강제한다."""
+    path = resolved_engine_sqlite_path(db)
+    local = local_development_sqlite_path()
+    if path is None:
+        raise RuntimeError('테스트 엔진 SQLite path를 확인할 수 없습니다.')
+    if path == local:
+        raise RuntimeError(f'테스트 엔진이 local development DB를 가리킵니다: {path}')
+    if 'instance' in path.parts and path.name == 'child_center.db' and path.parent.name == 'instance':
+        raise RuntimeError(f'테스트 엔진이 instance/child_center.db 계열입니다: {path}')
+    intended = test_sqlite_path()
+    if intended is not None and path != intended:
+        raise RuntimeError(f'테스트 엔진이 의도한 temp DB가 아닙니다: {path} vs {intended}')
+    return path
+
+
 def _refuse_remote_database(url: str) -> None:
     lowered = (url or '').lower()
     if 'postgres' in lowered or 'supabase' in lowered or 'render.com' in lowered:
@@ -52,16 +84,21 @@ def _snapshot_local_db_files():
     return snapshot
 
 
-def configure_test_environment() -> None:
-    """app.py import 전에 호출. dotenv가 운영 URL을 덮어쓰지 않도록 빈 값을 먼저 고정한다."""
+def configure_test_environment(database_url: str) -> None:
+    """app.py import 전에 호출. DATABASE_URL을 temp SQLite로 먼저 고정한다.
+
+    빈 문자열로 두면 app.py 가 sqlite:///child_center.db 로 fallback 하고
+    Flask-SQLAlchemy 가 instance/child_center.db 에 엔진을 붙일 수 있다.
+    CLC_TESTING=1 은 import side-effect 방지일 뿐 DB path isolation 이 아니다.
+    """
     os.environ['CLC_TESTING'] = '1'
     os.environ['PYTHONIOENCODING'] = 'utf-8'
-    # 이미 있는 값도 빈 문자열로 고정 → load_dotenv()가 기존 키를 덮지 않음
-    os.environ['DATABASE_URL'] = ''
+    os.environ['DATABASE_URL'] = database_url
     os.environ['FIREBASE_CREDENTIALS_JSON'] = ''
     os.environ['SECRET_KEY'] = 'clc-step0-test-secret'
     os.environ['GENERAL_READING_V2_START_DATE'] = '2026-08-01'
     os.environ['VIEWER_CHILD_WRITE_TTL_MINUTES'] = '15'
+    os.environ.pop('CLC_ALLOW_GROWTH_SEED', None)
 
 
 def sqlite_uri_for(path: Path) -> str:
@@ -78,19 +115,23 @@ def bootstrap_test_app():
     global _BOOTSTRAPPED, _TEST_DB_PATH, _IMPORT_SIDE_EFFECTS
     if _BOOTSTRAPPED:
         from app import app, db
+        with app.app_context():
+            assert_test_engine_isolated(db)
         return app, db
-
-    configure_test_environment()
 
     test_dir = Path(tempfile.mkdtemp(prefix='clc_step0_'))
     _TEST_DB_PATH = test_dir / 'step0.db'
     test_uri = sqlite_uri_for(_TEST_DB_PATH)
     _refuse_remote_database(test_uri)
+    if local_development_sqlite_path().as_posix() in test_uri.replace('\\', '/'):
+        raise RuntimeError('테스트 URI가 local development DB와 겹칩니다.')
+
+    configure_test_environment(test_uri)
 
     db_before = _snapshot_local_db_files()
     threads_before = {t.ident for t in threading.enumerate()}
 
-    from app import app, db  # noqa: WPS433 — env 고정 후에만 import
+    from app import app, db  # noqa: WPS433 — temp DATABASE_URL 고정 후에만 import
     import app as app_module  # noqa: WPS433
 
     db_after = _snapshot_local_db_files()
@@ -104,8 +145,9 @@ def bootstrap_test_app():
     _refuse_remote_database(configured)
 
     side_effects = []
-    if os.environ.get('DATABASE_URL'):
-        side_effects.append(f"DATABASE_URL이 비어 있지 않음: {os.environ.get('DATABASE_URL')!r}")
+    env_url = os.environ.get('DATABASE_URL') or ''
+    if env_url != test_uri:
+        side_effects.append(f'DATABASE_URL이 test URI가 아님: {env_url!r}')
     if firebase_initialized:
         side_effects.append('Firebase Admin SDK가 import 중 초기화됨')
     if new_threads:
@@ -133,17 +175,12 @@ def bootstrap_test_app():
         db.session.remove()
         db.engine.dispose()
         db.create_all()
+        assert_test_engine_isolated(db)
 
-    final_uri = app.config['SQLALCHEMY_DATABASE_URI']
+    final_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
     _refuse_remote_database(final_uri)
-    if 'child_center.db' in final_uri:
-        raise RuntimeError('테스트가 프로젝트 child_center.db 를 사용하려 합니다. 중단합니다.')
     if Path(final_uri.replace('sqlite:///', '')).resolve() != _TEST_DB_PATH.resolve():
-        # sqlite URI 와 실제 파일 경로가 어긋나면 중단
-        engine_url = str(db.engine.url)
-        _refuse_remote_database(engine_url)
-        if 'child_center.db' in engine_url:
-            raise RuntimeError(f'엔진이 child_center.db 를 가리킵니다: {engine_url}')
+        raise RuntimeError(f'테스트 config URI가 temp DB가 아닙니다: {final_uri}')
 
     _BOOTSTRAPPED = True
     return app, db
