@@ -126,10 +126,16 @@ class CanonicalReportRegressionTests(unittest.TestCase):
         with app.test_request_context('/'):
             return build_child_report_context(child)
 
-    def test_growth_routes_are_not_registered_yet(self):
-        """Step 0 시점에는 growth blueprint가 없어야 한다. Step 3에서 갱신한다."""
+    def test_teacher_growth_exists_without_viewer_growth(self):
+        """Step 3: 교사용 Growth만 등록한다. viewer Growth와 NFC 목적지는 바꾸지 않는다."""
         endpoints = {rule.endpoint for rule in app.url_map.iter_rules()}
-        self.assertFalse(any((endpoint or '').startswith('growth.') for endpoint in endpoints))
+        self.assertIn('growth.teacher', endpoints)
+        self.assertNotIn('growth.viewer', endpoints)
+        rules = [
+            rule.rule for rule in app.url_map.iter_rules()
+            if rule.endpoint == 'growth.teacher'
+        ]
+        self.assertIn('/children/<int:child_id>/growth', rules)
         self.assertNotIn('growth.viewer', VIEWER_ALLOWED_ENDPOINTS)
         self.assertNotIn('growth.teacher', VIEWER_ALLOWED_ENDPOINTS)
 

@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}{{ child.name }}의 성장 리포트{% endblock %}
+{% block page_title %}{{ child.name }}의 성장 리포트{% endblock %}
+
+{% block extra_css %}
+<style>
+  .growth-insight-card { border-left-width: 4px; }
+  .growth-insight-increase { border-left-color: #198754; }
+  .growth-insight-decrease { border-left-color: #6c757d; }
+  .growth-insight-other { border-left-color: #0d6efd; }
+  .growth-muted-label { font-size: 0.85rem; color: #6c757d; }
+  .growth-section dt { font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <div>
+        <h3 class="mb-1">{{ child.name }}의 성장 리포트</h3>
+        <p class="text-muted mb-1">최근 30일과 이전 30일의 기록을 비교합니다.</p>
+        <p class="growth-muted-label mb-0">
+            기준일 {{ as_of }}
+            · 이전 {{ previous_window.start }} ~ {{ previous_window.end }}
+            · 최근 {{ current_window.start }} ~ {{ current_window.end }}
+        </p>
+        {% if dev_as_of_overridden %}
+        <p class="small text-info mb-0 mt-1">개발 기준일: {{ as_of }}</p>
+        {% endif %}
+    </div>
+    <a href="{{ url_for('child_detail', child_id=child.id) }}" class="btn btn-outline-secondary">아동 상세</a>
+</div>
+
+<section class="mb-4">
+    <h5 class="mb-3">발견된 변화</h5>
+    {% if insights %}
+        <div class="row g-3">
+            {% for item in insights %}
+            <div class="col-12 col-lg-4">
+                <div class="card h-100 growth-insight-card {% if item.direction == 'increase' %}growth-insight-increase{% elif item.direction == 'decrease' %}growth-insight-decrease{% else %}growth-insight-other{% endif %}">
+                    <div class="card-body">
+                        <div class="growth-muted-label mb-1">{{ item.category_label }}</div>
+                        <p class="fw-semibold mb-2">{{ item.headline }}</p>
+                        {% if item.comparison_line %}
+                        <p class="mb-1">{{ item.comparison_line }}</p>
+                        {% endif %}
+                        {% if item.delta_line %}
+                        <p class="mb-2">{{ item.delta_line }}</p>
+                        {% endif %}
+                        <details>
+                            <summary>분석 근거 보기</summary>
+                            <dl class="row small mt-2 mb-0">
+                                {% for label, value in item.evidence_rows %}
+                                <dt class="col-5">{{ label }}</dt>
+                                <dd class="col-7">{{ value }}</dd>
+                                {% endfor %}
+                            </dl>
+                        </details>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% elif empty_reason == 'insufficient' %}
+        <div class="alert alert-light border mb-0">아직 비교할 수 있는 기록이 충분하지 않습니다.</div>
+    {% else %}
+        <div class="alert alert-light border mb-0">현재 데이터에서는 뚜렷한 변화가 발견되지 않았습니다.</div>
+    {% endif %}
+</section>
+
+<section class="mb-4">
+    <h5 class="mb-3">독서</h5>
+    <div class="card">
+        <div class="card-body">
+            <dl class="row mb-0 growth-section">
+                <dt class="col-sm-4">독서 기록일</dt>
+                <dd class="col-sm-8">이전 {{ reading.reading_days_previous }}일 → 최근 {{ reading.reading_days_current }}일</dd>
+                <dt class="col-sm-4">완독</dt>
+                <dd class="col-sm-8">이전 {{ reading.completed_count_previous }}권 → 최근 {{ reading.completed_count_current }}권</dd>
+                <dt class="col-sm-4">프로그램별 완독</dt>
+                <dd class="col-sm-8">
+                    {% for program in reading.programs %}
+                    <div>{{ program.label }}: 이전 {{ program.previous }}권 → 최근 {{ program.current }}권</div>
+                    {% endfor %}
+                </dd>
+                <dt class="col-sm-4">체감 난이도</dt>
+                <dd class="col-sm-8">{{ reading.difficulty.text }}</dd>
+                <dt class="col-sm-4">재미</dt>
+                <dd class="col-sm-8">{{ reading.fun.text }}</dd>
+            </dl>
+        </div>
+    </div>
+</section>
+
+<section class="mb-4">
+    <h5 class="mb-3">학습 진도</h5>
+    <div class="card">
+        <div class="card-body">
+            <dl class="row mb-3 growth-section">
+                <dt class="col-sm-4">학습 진도 기록 수</dt>
+                <dd class="col-sm-8">이전 {{ progress.entry_count_previous }}건 → 최근 {{ progress.entry_count_current }}건</dd>
+                <dt class="col-sm-4">과목별 기록 수</dt>
+                <dd class="col-sm-8">
+                    {% for subject in progress.by_subject %}
+                    <div>{{ subject.label }}: 이전 {{ subject.previous }}건 → 최근 {{ subject.current }}건</div>
+                    {% endfor %}
+                </dd>
+            </dl>
+            <h6 class="mb-2">최근 기록</h6>
+            <div class="row g-3">
+                {% for snap in progress.latest_snapshots %}
+                <div class="col-12 col-md-4">
+                    <div class="border rounded p-3 h-100">
+                        <div class="fw-semibold">{{ snap.label }}</div>
+                        {% if snap.textbook_title %}
+                        <div>{{ snap.textbook_title }}</div>
+                        <div>{{ snap.page }}p</div>
+                        <div class="growth-muted-label">{{ snap.recorded_on }} 기록</div>
+                        {% else %}
+                        <div class="text-muted">기록 없음</div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="mb-4">
+    <h5 class="mb-3">포인트</h5>
+    <div class="card">
+        <div class="card-body">
+            <dl class="row mb-0 growth-section">
+                <dt class="col-sm-4">기간 포인트</dt>
+                <dd class="col-sm-8">이전 {{ points.period_points_previous }}점 → 최근 {{ points.period_points_current }}점</dd>
+                <dt class="col-sm-4">포인트 기록일</dt>
+                <dd class="col-sm-8">이전 {{ points.activity_days_previous }}일 → 최근 {{ points.activity_days_current }}일</dd>
+                <dt class="col-sm-4">최근 기간 수동 포인트</dt>
+                <dd class="col-sm-8">{{ points.manual_points_sum_current }}점</dd>
+                <dt class="col-sm-4">기준일 누적</dt>
+                <dd class="col-sm-8">
+                    {% if points.cumulative_unavailable %}
+                    과거 누적값 확인 불가
+                    {% else %}
+                    {{ points.cumulative_as_of }}점
+                    {% endif %}
+                </dd>
+            </dl>
+        </div>
+    </div>
+</section>
+
+{% if not is_viewer_mode %}
+<section class="mb-2">
+    <h5 class="mb-3">원본 기록</h5>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-primary" href="{{ url_for('points_input', child_id=child.id) }}">포인트 입력</a>
+        <a class="btn btn-outline-primary" href="{{ url_for('child_point_analysis', child_id=child.id) }}">포인트 상세</a>
+        <a class="btn btn-outline-primary" href="{{ url_for('settings_print_child_report', child_id=child.id) }}">출력용 개인 리포트</a>
+        <a class="btn btn-outline-success" href="{{ url_for('reading.teacher_history', child_id=child.id) }}">독서 기록</a>
+        <a class="btn btn-outline-success" href="{{ url_for('reading.teacher_editor', child_id=child.id) }}">독서 입력</a>
+        <a class="btn btn-outline-primary" href="{{ url_for('progress.history', child_id=child.id) }}">학습 진도 기록</a>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

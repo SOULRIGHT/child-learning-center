@@ -6176,6 +6176,7 @@ from features.presets.routes import presets_bp  # noqa: E402
 from features.progress.routes import progress_bp  # noqa: E402
 from features.exemption.routes import exemption_bp  # noqa: E402
 from features.devdate.routes import devdate_bp  # noqa: E402
+from features.growth.routes import growth_bp  # noqa: E402
 
 app.register_blueprint(books_bp)
 app.register_blueprint(reading_bp)
@@ -6183,6 +6184,7 @@ app.register_blueprint(presets_bp)
 app.register_blueprint(progress_bp)
 app.register_blueprint(exemption_bp)
 app.register_blueprint(devdate_bp)
+app.register_blueprint(growth_bp)
 
 if __name__ == '__main__':
     if os.environ.get('CLC_TESTING') == '1':
