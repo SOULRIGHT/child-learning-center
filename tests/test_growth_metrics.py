@@ -288,6 +288,41 @@ class GrowthMetricsTests(unittest.TestCase):
         self.assertEqual(result['previous']['completed_count'], 1)
         self.assertEqual(result['previous']['completed_by_program'][PROGRAM_TYPE_RECOMMENDED], 1)
 
+    def test_completed_on_after_as_of_is_excluded_from_counts_and_ratings(self):
+        visible = self._reading(
+            self._book('as_of완독'),
+            started_on=date(2026, 8, 1),
+            completed_on=AS_OF,
+            status=STATUS_COMPLETED,
+            program_type=PROGRAM_TYPE_GENERAL,
+            difficulty_rating=4,
+            fun_rating=5,
+        )
+        self._day(visible, date(2026, 8, 1))
+        hidden = self._reading(
+            self._book('미래완독'),
+            started_on=date(2026, 8, 10),
+            completed_on=date(2026, 8, 25),
+            status=STATUS_COMPLETED,
+            program_type=PROGRAM_TYPE_RECOMMENDED,
+            difficulty_rating=1,
+            fun_rating=1,
+        )
+        self._day(hidden, date(2026, 8, 10))
+        db.session.commit()
+
+        result = reading_metrics(self.child.id, as_of=AS_OF, window_days=30)
+        current = result['current']
+        self.assertEqual(current['completed_count'], 1)
+        self.assertEqual(current['completed_by_program'][PROGRAM_TYPE_GENERAL], 1)
+        self.assertEqual(current['completed_by_program'][PROGRAM_TYPE_RECOMMENDED], 0)
+        self.assertEqual(current['difficulty_rating']['sample_count'], 1)
+        self.assertEqual(current['difficulty_rating']['average'], 4)
+        self.assertEqual(current['fun_rating']['sample_count'], 1)
+        self.assertEqual(current['fun_rating']['average'], 5)
+        self.assertEqual(current['paired_experience_rating']['sample_count'], 1)
+        self.assertEqual(current['paired_experience_rating']['difficulty_average'], 4)
+
     def test_days_and_inclusive_span_per_completed_book(self):
         reading = self._reading(
             self._book('소요'),
