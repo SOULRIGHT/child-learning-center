@@ -157,6 +157,80 @@ class GrowthServiceTests(unittest.TestCase):
         self.assertEqual(view['insights'][0]['comparison_line'], '이전 6일 → 최근 11일')
         self.assertEqual(view['empty_reason'], None)
         self.assertNotIn('bundle', view['insights'][0])
+        reading_kpi = next(item for item in view['kpis'] if item['key'] == 'reading_days')
+        self.assertTrue(reading_kpi['comparable'])
+        self.assertTrue(reading_kpi['comparison_available'])
+        self.assertEqual(reading_kpi['current'], 11)
+        self.assertEqual(reading_kpi['previous'], 6)
+        self.assertEqual(reading_kpi['delta'], 5)
+        self.assertEqual(reading_kpi['comparison_display'], '6일 → 11일')
+        self.assertEqual(view['charts']['activity']['current'][0], 11)
+        self.assertEqual(view['charts']['activity']['previous'][0], 6)
+        self.assertEqual(view['insights'][0]['evidence']['current'], 11)
+        self.assertEqual(view['insights'][0]['evidence']['previous'], 6)
+        self.assertEqual(view['insights'][0]['evidence']['delta'], 5)
+
+    def test_incomparable_kpi_keeps_current_without_previous_delta_or_tone(self):
+        self._reading_days([CURRENT_START])
+        view = build_growth_view_model(self.child, as_of=AS_OF)
+        reading_kpi = next(item for item in view['kpis'] if item['key'] == 'reading_days')
+
+        self.assertEqual(reading_kpi['current'], 1)
+        self.assertEqual(reading_kpi['current_display'], '1일')
+        self.assertFalse(reading_kpi['comparable'])
+        self.assertFalse(reading_kpi['comparison_available'])
+        self.assertIsNone(reading_kpi['previous'])
+        self.assertIsNone(reading_kpi['delta'])
+        self.assertIsNone(reading_kpi['delta_display'])
+        self.assertIsNone(reading_kpi['tone'])
+        self.assertIsNone(view['charts']['activity'])
+        self.assertEqual(view['charts']['activity_bars'], [])
+        self.assertIsNone(view['charts']['points'])
+
+    def test_comparable_true_zero_is_flat_not_unknown(self):
+        self._points(PREV_START, 0)
+        view = build_growth_view_model(self.child, as_of=AS_OF)
+        points_kpi = next(item for item in view['kpis'] if item['key'] == 'period_points')
+
+        self.assertTrue(points_kpi['comparable'])
+        self.assertTrue(points_kpi['comparison_available'])
+        self.assertEqual(points_kpi['current'], 0)
+        self.assertEqual(points_kpi['previous'], 0)
+        self.assertEqual(points_kpi['delta'], 0)
+        self.assertEqual(points_kpi['tone'], 'flat')
+        self.assertEqual(points_kpi['comparison_display'], '0점 → 0점')
+        self.assertEqual(points_kpi['change_display'], '변화 없음')
+        self.assertEqual(view['charts']['points']['values'], [0, 0])
+
+    def test_activity_chart_only_includes_comparable_metric_families(self):
+        self._reading_days([PREV_START, CURRENT_START])
+        self._progress('korean', PREV_START, 10, '국어')
+        self._progress('korean', CURRENT_START, 20, '국어')
+        view = build_growth_view_model(self.child, as_of=AS_OF)
+
+        self.assertEqual(
+            view['charts']['activity']['labels'],
+            ['독서 기록일', '학습 진도 기록'],
+        )
+        self.assertEqual(view['charts']['activity']['previous'], [1, 1])
+        self.assertEqual(view['charts']['activity']['current'], [1, 1])
+        self.assertNotIn('완독', view['charts']['activity']['labels'])
+
+    def test_incomparable_points_keep_current_and_do_not_create_chart(self):
+        self._points(CURRENT_START, 1200, korean=1200)
+        view = build_growth_view_model(self.child, as_of=AS_OF)
+        points_kpi = next(item for item in view['kpis'] if item['key'] == 'period_points')
+
+        self.assertEqual(points_kpi['current'], 1200)
+        self.assertEqual(points_kpi['current_display'], '1,200점')
+        self.assertFalse(points_kpi['comparable'])
+        self.assertIsNone(points_kpi['previous'])
+        self.assertIsNone(points_kpi['delta'])
+        self.assertIsNone(points_kpi['tone'])
+        self.assertEqual(view['points']['period_points_current_display'], '1,200점')
+        self.assertIsNone(view['points']['period_points_previous_display'])
+        self.assertIsNone(view['points']['period_points_delta_display'])
+        self.assertIsNone(view['charts']['points'])
 
     def test_top_candidates_limit_is_three(self):
         self.assertEqual(INSIGHT_LIMIT, 3)
@@ -243,3 +317,4 @@ class GrowthServiceTests(unittest.TestCase):
         paired = next(item for item in view['insights'] if item['id'] == HIGHER_PERCEIVED_DIFFICULTY_WITH_STABLE_FUN)
         self.assertIn('어렵게', paired['headline'])
         self.assertTrue(any('난이도' in row[0] for row in paired['evidence_rows']))
+        self.assertEqual(paired['evidence']['kind'], 'paired')

@@ -1,7 +1,9 @@
 """Growth Step 3: teacher route authorization and HTML. viewer Growth 없음."""
 from __future__ import annotations
 
+import json
 import os
+import re
 import unittest
 from datetime import date, timedelta
 from unittest import mock
@@ -10,13 +12,15 @@ from tests.helpers import bootstrap_test_app
 
 app, db = bootstrap_test_app()
 
-from app import VIEWER_ALLOWED_ENDPOINTS, VIEWER_ROLE_NAME, Child, User  # noqa: E402
+from app import VIEWER_ALLOWED_ENDPOINTS, VIEWER_ROLE_NAME, Child, DailyPoints, User  # noqa: E402
 from feature_models import (  # noqa: E402
     ACTOR_TEACHER,
     POLICY_VERSION_GENERAL_V2,
     STATUS_COMPLETED,
     Book,
     ChildReading,
+    LearningProgressEntry,
+    LearningSubject,
     ReadingDay,
 )
 from features.dates import DEV_DATE_CONTROL_ENV
@@ -25,6 +29,7 @@ from features.growth.copy import (
     READING_ACTIVITY_INCREASE,
     fallback_copy,
 )
+from features.growth.service import build_growth_view_model
 from features.progress.service import ensure_default_subjects  # noqa: E402
 
 
@@ -66,6 +71,7 @@ class GrowthRouteTests(unittest.TestCase):
         self.empty = Child(name='시드-신규희소', grade=1, viewer_slug='s13s13s13s13s13s13s13s13')
         db.session.add_all([self.teacher, self.manager, self.viewer, self.child, self.empty])
         db.session.commit()
+        self.subjects = {row.key: row for row in LearningSubject.query.all()}
         self.client = app.test_client()
         os.environ.pop(DEV_DATE_CONTROL_ENV, None)
         os.environ.pop('FLASK_ENV', None)
@@ -143,6 +149,36 @@ class GrowthRouteTests(unittest.TestCase):
         ))
         db.session.commit()
 
+    def _progress(self, child, subject_key, recorded_on, page, title):
+        db.session.add(LearningProgressEntry(
+            child_id=child.id,
+            learning_subject_id=self.subjects[subject_key].id,
+            recorded_on=recorded_on,
+            textbook_title=title,
+            page=page,
+            created_by_user_id=self.teacher.id,
+        ))
+        db.session.commit()
+
+    def _points(self, child, recorded_on, total):
+        db.session.add(DailyPoints(
+            child_id=child.id,
+            date=recorded_on,
+            korean_points=total,
+            math_points=0,
+            ssen_points=0,
+            reading_points=0,
+            piano_points=0,
+            english_points=0,
+            advanced_math_points=0,
+            writing_points=0,
+            manual_points=0,
+            manual_history='[]',
+            total_points=total,
+            created_by=self.teacher.id,
+        ))
+        db.session.commit()
+
     def _growth(self, child_id, **params):
         return self.client.get(f'/children/{child_id}/growth', query_string=params)
 
@@ -199,6 +235,8 @@ class GrowthRouteTests(unittest.TestCase):
         self.assertIn('아직 비교할 수 있는 기록이 충분하지 않습니다.', body)
         self.assertNotIn('card h-100 growth-insight-card', body)
         self.assertIn('과거 누적값 확인 불가', body)
+        self.assertIn('평가 기록 없음', body)
+        self.assertNotIn('0 / 5', body)
 
     def test_existing_links_are_present(self):
         self._login(self.teacher)
@@ -269,8 +307,89 @@ class GrowthRouteTests(unittest.TestCase):
         self._login(self.teacher)
         os.environ[DEV_DATE_CONTROL_ENV] = '1'
         body = self._growth(self.empty.id, as_of=AS_OF.isoformat()).get_data(as_text=True)
-        self.assertIn('현재 데이터에서는 뚜렷한 변화가 발견되지 않았습니다.', body)
+        self.assertIn('최근 기록에서는 기준을 넘는 뚜렷한 변화가 발견되지 않았습니다.', body)
         self.assertNotIn('card h-100 growth-insight-card', body)
+
+    def test_dashboard_header_windows_and_kpis(self):
+        self._reading_increase(self.child)
+        self._login(self.teacher)
+        os.environ[DEV_DATE_CONTROL_ENV] = '1'
+        body = self._growth(self.child.id, as_of=AS_OF.isoformat()).get_data(as_text=True)
+        self.assertIn('성장 리포트', body)
+        self.assertIn('2026-11-16 ~ 2026-12-15', body)
+        self.assertIn('2026-10-17 ~ 2026-11-15', body)
+        self.assertIn('최근 독서 기록일', body)
+        self.assertIn('11일', body)
+        self.assertIn('↑', body)
+        self.assertNotIn('AI가 발견한', body)
+
+    def test_progress_snapshot_cards_render(self):
+        self._progress(self.child, 'korean', date(2026, 10, 1), 51, '우등생 국어 3-2')
+        self._login(self.teacher)
+        os.environ[DEV_DATE_CONTROL_ENV] = '1'
+        body = self._growth(self.child.id, as_of=AS_OF.isoformat()).get_data(as_text=True)
+        self.assertIn('우등생 국어 3-2', body)
+        self.assertIn('51p', body)
+        self.assertIn('10/1 기록', body)
+        self.assertIn('2026-10-01', body)
+
+    def test_chart_dataset_matches_view_model(self):
+        self._reading_increase(self.child)
+        self._login(self.teacher)
+        os.environ[DEV_DATE_CONTROL_ENV] = '1'
+        body = self._growth(self.child.id, as_of=AS_OF.isoformat()).get_data(as_text=True)
+        match = re.search(r'<script id="growth-chart-data"[^>]*>(.*?)</script>', body, re.S)
+        self.assertIsNotNone(match)
+        payload = json.loads(match.group(1))
+        view = build_growth_view_model(self.child, as_of=AS_OF)
+        self.assertEqual(payload['activity']['current'], view['charts']['activity']['current'])
+        self.assertEqual(payload['activity']['previous'], view['charts']['activity']['previous'])
+        self.assertEqual(payload['activity']['labels'], ['독서 기록일'])
+        self.assertIsNone(payload['points'])
+        self.assertNotIn('id="growthPointsChart"', body)
+        self.assertNotIn("'bundle'", body)
+        self.assertNotIn('InsightCandidate', body)
+        self.assertLessEqual(body.count('growth-insight-card {'), 1)
+        self.assertEqual(body.count('card h-100 growth-insight-card'), 1)
+
+    def test_incomparable_progress_keeps_current_without_fake_zero_comparison(self):
+        self._progress(self.child, 'korean', CURRENT_START, 12, '최근 국어')
+        self._login(self.teacher)
+        os.environ[DEV_DATE_CONTROL_ENV] = '1'
+        body = self._growth(self.child.id, as_of=AS_OF.isoformat()).get_data(as_text=True)
+
+        self.assertIn('학습 진도 기록 최근 1건', body)
+        self.assertNotIn('학습 진도 기록 이전 0건 → 최근 1건', body)
+        self.assertIn('비교 자료 부족', body)
+
+    def test_incomparable_points_show_current_without_comparison_chart(self):
+        self._points(self.child, CURRENT_START, 1200)
+        self._login(self.teacher)
+        os.environ[DEV_DATE_CONTROL_ENV] = '1'
+        body = self._growth(self.child.id, as_of=AS_OF.isoformat()).get_data(as_text=True)
+        match = re.search(r'<script id="growth-chart-data"[^>]*>(.*?)</script>', body, re.S)
+        self.assertIsNotNone(match)
+        payload = json.loads(match.group(1))
+
+        self.assertIn('1,200점', body)
+        self.assertIn('비교 자료 부족', body)
+        self.assertNotIn('0점 → 1,200점', body)
+        self.assertIsNone(payload['points'])
+        self.assertNotIn('id="growthPointsChart"', body)
+
+    def test_comparable_zero_points_render_as_no_change(self):
+        self._points(self.child, PREV_START, 0)
+        self._login(self.teacher)
+        os.environ[DEV_DATE_CONTROL_ENV] = '1'
+        body = self._growth(self.child.id, as_of=AS_OF.isoformat()).get_data(as_text=True)
+        match = re.search(r'<script id="growth-chart-data"[^>]*>(.*?)</script>', body, re.S)
+        self.assertIsNotNone(match)
+        payload = json.loads(match.group(1))
+
+        self.assertIn('0점 → 0점', body)
+        self.assertIn('변화 없음', body)
+        self.assertEqual(payload['points']['values'], [0, 0])
+        self.assertIn('id="growthPointsChart"', body)
 
     def test_viewer_allowlist_does_not_include_growth_teacher(self):
         self.assertNotIn('growth.teacher', VIEWER_ALLOWED_ENDPOINTS)
