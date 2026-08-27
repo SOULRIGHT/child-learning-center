@@ -108,11 +108,35 @@ Planning storage (`LearningWorkbookPlan`, `CenterStudyCalendar`, `ChildStudyWeek
 deterministic planner (`features/planning/planner.py`)는
 `LearningProgressEntry` snapshot + matching `LearningWorkbookPlan`
 + effective weekdays를 읽어 아동/과목 상태를 계산한다.
-**이 결과는 아직 Growth metric / evidence에 연결되지 않는다.**
-page advance / peer median / `observed_study_days`는 planner 입력이 아니다.
+**Growth `learning` metric family**는 planner canonical 결과를 재사용한다.
+page advance / peer median / observed study days는 planner 입력이 아니며
+planner 숫자를 다시 계산하지 않는다.
 
 exclusion 미입력(`exclusion_ranges_json` NULL)은 v1 20% estimated fallback이다.
 명시적 `[]`(제외 0개)와 구분한다. planner는 `workload_kind`로 이 구분을 보존한다.
+
+### Learning Growth metrics (deterministic facts)
+
+`progress_entry_count` / `latest_snapshot_by_subject` 의미는 그대로다.
+아래는 별도 `bundle['learning']` family다. 이번 Step에서 insight candidate는 만들지 않는다.
+
+- **page advance**: window 종료 시점 최신 same-book snapshot − `recorded_on < window.start` 인 최신 same-book baseline.
+  window 내부 첫 기록을 baseline으로 쓰지 않는다. future row 제외.
+- **freshness**: `MAX_PROGRESS_SNAPSHOT_AGE_DAYS = 21`.
+  baseline은 `window.start` 기준, endpoint는 `window.end` 기준, age > 21이면 stale.
+  stale/no-baseline/cross-book은 숫자 0이 아니라 unavailable (`comparable=false`).
+- **cross-book subtraction 금지**. `normalize_textbook_title` 정확 일치만.
+- **current vs previous trend**: 양쪽 page advance가 available이고 endpoint 교재가 같을 때만 delta.
+  교재가 바뀌면 current advance는 남을 수 있으나 trend `comparable=false`.
+- **raw negative delta는 보존**. 능력 저하 해석은 하지 않는다.
+- **peer**: self 제외, `Child.grade` + subject + target의 **현재 latest snapshot 교재**가 동일,
+  `include_in_stats=True`, peer/target latest snapshot age ≤ 21 (`as_of` 기준).
+  peer의 최신 subject snapshot이 다른 교재면, 과거 same-book 기록이 있어도 제외.
+- **peer_n / median**: target은 n에 넣지 않음. n=0 → median None. 작은 n도 숨기지 않음.
+  짝수 n의 .5 median은 core에서 그대로 둔다.
+- **observed study days**: canonical `point_activity_days` 재사용 (DailyPoints 날짜 proxy).
+  Attendance source가 아니다. pages/day 비율은 만들지 않는다.
+- **plan**: Step C `build_child_learning_plan_statuses` 결과를 복사. 재계산 없음.
 
 ---
 
