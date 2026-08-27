@@ -7,6 +7,8 @@ from features.planning.exclusions import PlanningError
 
 DEFAULT_STUDY_WEEKDAYS = (0, 1, 2, 3, 4)
 CALENDAR_SINGLETON_KEY = 'default'
+WEEKDAY_LABELS = ('월', '화', '수', '목', '금', '토', '일')
+WEEKDAY_CHOICES = tuple(enumerate(WEEKDAY_LABELS))
 
 
 def canonicalize_weekdays(raw):
@@ -28,6 +30,14 @@ def canonicalize_weekdays(raw):
         result.append(item)
     result.sort()
     return result
+
+
+def format_weekdays(weekdays):
+    """UI 표시용. 빈 목록은 '없음'이다."""
+    days = canonicalize_weekdays(weekdays)
+    if not days:
+        return '없음'
+    return ' / '.join(WEEKDAY_LABELS[day] for day in days)
 
 
 def effective_study_weekdays(center_weekdays, child_override=None):

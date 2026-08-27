@@ -1,0 +1,37 @@
+<div class="card mb-4">
+    <div class="card-header">학습 예정 요일</div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">출석 기록이 아니라, 이 아동의 명목 예정 학습요일입니다. 공휴일은 반영하지 않습니다.</p>
+        <form method="post" action="{{ url_for('planning.save_child_study_weekdays_route', child_id=child.id) }}">
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="weekday_mode" id="weekday-mode-center" value="center"
+                           {% if not study_weekdays.has_override %}checked{% endif %}>
+                    <label class="form-check-label" for="weekday-mode-center">
+                        센터 기본 사용
+                        <span class="text-muted">{{ study_weekdays.center_weekdays_label }}</span>
+                    </label>
+                </div>
+                <div class="form-text ms-4">센터 기본 사용을 저장하면 이 아동만의 요일 설정이 삭제됩니다.</div>
+            </div>
+            <div class="mb-3">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio" name="weekday_mode" id="weekday-mode-custom" value="custom"
+                           {% if study_weekdays.has_override %}checked{% endif %}>
+                    <label class="form-check-label" for="weekday-mode-custom">아동별 설정</label>
+                </div>
+                <div class="ms-4">
+                    {% set weekday_choices = study_weekdays.weekday_choices %}
+                    {% set selected_weekdays = study_weekdays.custom_selected_weekdays %}
+                    {% set field_name = 'study_weekdays' %}
+                    {% set id_prefix = 'child-wd' %}
+                    {% include 'settings/_weekday_checkboxes.html' %}
+                    <div class="form-text mt-2">
+                        요일을 하나도 선택하지 않으면 이 아동의 예정 학습일은 없는 것으로 계산됩니다.
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-outline-primary" type="submit">학습요일 저장</button>
+        </form>
+    </div>
+</div>

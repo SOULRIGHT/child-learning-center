@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}센터 기본 학습요일{% endblock %}
+{% block page_title %}센터 기본 학습요일{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-1">센터 기본 학습요일</h4>
+        <p class="text-muted mb-0">별도 요일이 지정되지 않은 아동의 예정 학습요일입니다. 출석 기록이나 공휴일은 반영하지 않습니다.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('planning.manage_workbook_plans') }}" class="btn btn-outline-primary">교재 계획 관리</a>
+        <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary">설정으로</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="post" action="{{ url_for('planning.manage_study_calendar') }}">
+            <p class="mb-2">현재 기본값: <strong>{{ selected_label }}</strong></p>
+            {% set field_name = 'study_weekdays' %}
+            {% set id_prefix = 'center-wd' %}
+            {% include 'settings/_weekday_checkboxes.html' %}
+            <p class="form-text mt-2 mb-3">하루 이상 선택해야 합니다.</p>
+            <button class="btn btn-primary" type="submit">저장</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

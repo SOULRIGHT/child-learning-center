@@ -1,0 +1,57 @@
+<div class="row g-3">
+    <div class="col-md-2">
+        <label class="form-label" for="{{ form_id }}-grade">학년</label>
+        <select class="form-select" id="{{ form_id }}-grade" name="grade" required>
+            <option value="">선택</option>
+            {% for grade_num in grades %}
+            <option value="{{ grade_num }}" {% if plan and plan.grade == grade_num %}selected{% endif %}>{{ grade_num }}학년</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-2">
+        <label class="form-label" for="{{ form_id }}-subject">과목</label>
+        <select class="form-select" id="{{ form_id }}-subject" name="learning_subject_id" required>
+            <option value="">선택</option>
+            {% for subject in subjects %}
+            <option value="{{ subject.id }}" {% if plan and plan.learning_subject_id == subject.id %}selected{% endif %}>{{ subject.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-8">
+        <label class="form-label" for="{{ form_id }}-title">교재명</label>
+        <input class="form-control" id="{{ form_id }}-title" name="textbook_title" required maxlength="120"
+               value="{{ plan.textbook_title if plan else '' }}" placeholder="예: 우등생 수학 3-2">
+    </div>
+    <div class="col-md-3">
+        <label class="form-label" for="{{ form_id }}-start-page">시작 페이지</label>
+        <input class="form-control" id="{{ form_id }}-start-page" name="start_page" type="number" min="1" max="2000" required
+               value="{{ plan.start_page if plan else '' }}" placeholder="10">
+    </div>
+    <div class="col-md-3">
+        <label class="form-label" for="{{ form_id }}-end-page">마지막 페이지</label>
+        <input class="form-control" id="{{ form_id }}-end-page" name="end_page" type="number" min="1" max="2000" required
+               value="{{ plan.end_page if plan else '' }}" placeholder="184">
+    </div>
+    <div class="col-md-3">
+        <label class="form-label" for="{{ form_id }}-start-date">학습 시작일</label>
+        <input class="form-control" id="{{ form_id }}-start-date" name="start_date" type="date" required
+               value="{{ plan.start_date.isoformat() if plan else '' }}">
+    </div>
+    <div class="col-md-3">
+        <label class="form-label" for="{{ form_id }}-target-date">목표 완료일</label>
+        <input class="form-control" id="{{ form_id }}-target-date" name="target_completion_date" type="date" required
+               value="{{ plan.target_completion_date.isoformat() if plan else '' }}">
+    </div>
+    <div class="col-12">
+        <label class="form-label" for="{{ form_id }}-exclusions">제외 페이지</label>
+        <input class="form-control" id="{{ form_id }}-exclusions" name="exclusion_ranges_text"
+               value="{{ plan.exclusion_ranges_text if plan and plan.exclusion_ranges_text else '' }}"
+               placeholder="35-42, 67, 103-110">
+        <div class="form-text">
+            풀지 않는 페이지가 있다면 35-42, 67, 103-110 형식으로 입력하세요.
+        </div>
+        <div class="form-text">
+            비워두면 실제 학습량은 전체 페이지의 20%가 제외된 것으로 추정합니다.
+        </div>
+    </div>
+</div>

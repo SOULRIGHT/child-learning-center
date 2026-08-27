@@ -96,6 +96,8 @@
     </div>
 </div>
 
+{% include 'children/_study_weekdays.html' %}
+
 {% if exemption_status %}
 {% set compact = false %}
 {% set next_url = url_for('child_detail', child_id=child.id) %}

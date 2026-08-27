@@ -624,6 +624,8 @@ def restrict_general_user_from_settings():
         'settings_print_children', 'settings_print_child_report',
         'presets.manage_presets', 'presets.create_preset_route', 'presets.update_preset_route',
         'progress.manage_subjects', 'progress.create_subject_route', 'progress.update_subject_route',
+        'planning.manage_study_calendar', 'planning.manage_workbook_plans',
+        'planning.edit_workbook_plan',
     }
 
     if endpoint in settings_endpoints:
@@ -1681,6 +1683,7 @@ def child_detail(child_id):
     
     from features.progress.service import current_progress_for_child, list_progress_input_subjects, kst_today
     from features.exemption.service import child_exemption_snapshot
+    from features.planning.service import child_study_weekdays_view
 
     return render_template('children/detail.html', 
                          child=child,
@@ -1697,6 +1700,7 @@ def child_detail(child_id):
                          active_subjects=list_progress_input_subjects(),
                          kst_today=kst_today(),
                          exemption_status=child_exemption_snapshot(child_id),
+                         study_weekdays=child_study_weekdays_view(child_id),
                          is_viewer_mode=False)
 
 @app.route('/children/<int:child_id>/points/export/csv')
@@ -6180,6 +6184,7 @@ from features.progress.routes import progress_bp  # noqa: E402
 from features.exemption.routes import exemption_bp  # noqa: E402
 from features.devdate.routes import devdate_bp  # noqa: E402
 from features.growth.routes import growth_bp  # noqa: E402
+from features.planning.routes import planning_bp  # noqa: E402
 
 app.register_blueprint(books_bp)
 app.register_blueprint(reading_bp)
@@ -6188,6 +6193,7 @@ app.register_blueprint(progress_bp)
 app.register_blueprint(exemption_bp)
 app.register_blueprint(devdate_bp)
 app.register_blueprint(growth_bp)
+app.register_blueprint(planning_bp)
 
 if __name__ == '__main__':
     if os.environ.get('CLC_TESTING') == '1':
