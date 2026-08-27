@@ -102,6 +102,12 @@ page delta, 학습량, “공부를 시작했다” 같은 추론은 현재 Grow
 동일 `(child_id, learning_subject_id, recorded_on)`은 DB unique다.
 같은 날 저장은 overwrite다. 포인트식 `MAX(id)` 중복 규칙은 progress에 적용하지 않는다.
 
+Planning storage (`LearningWorkbookPlan`, `CenterStudyCalendar`, `ChildStudyWeekdays`)는
+학습 계획 foundation이다. **아직 Growth metric source가 아니다.**
+page advance / peer median / rolling planner 연결은 구현되어 있지 않다.
+exclusion 미입력(`exclusion_ranges_json` NULL)은 v1 20% estimated fallback이다.
+명시적 `[]`(제외 0개)와 구분한다.
+
 ---
 
 ## 4. Points source-of-truth

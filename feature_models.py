@@ -6,7 +6,7 @@ import unicodedata
 
 from datetime import datetime
 
-from sqlalchemy import Index, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, Index, UniqueConstraint, text
 
 from extensions import db
 
@@ -293,6 +293,87 @@ class LearningProgressEntry(db.Model):
             f'<LearningProgressEntry {self.id} child={self.child_id} '
             f'{self.recorded_on} p{self.page}>'
         )
+
+
+class LearningWorkbookPlan(db.Model):
+    """학년+과목+교재 공유 학습 계획. 진도 스냅샷(LearningProgressEntry)과 섞지 않는다."""
+    __tablename__ = 'learning_workbook_plan'
+    __table_args__ = (
+        UniqueConstraint(
+            'grade',
+            'learning_subject_id',
+            'textbook_title',
+            'start_date',
+            name='uq_workbook_plan_grade_subject_title_start',
+        ),
+        CheckConstraint('start_page <= end_page', name='ck_workbook_plan_page_order'),
+        CheckConstraint('start_page >= 1', name='ck_workbook_plan_start_page'),
+        CheckConstraint(
+            'target_completion_date >= start_date',
+            name='ck_workbook_plan_date_order',
+        ),
+        Index('ix_workbook_plan_grade_subject', 'grade', 'learning_subject_id'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    grade = db.Column(db.Integer, nullable=False, index=True)
+    learning_subject_id = db.Column(
+        db.Integer,
+        db.ForeignKey('learning_subject.id'),
+        nullable=False,
+        index=True,
+    )
+    textbook_title = db.Column(db.String(120), nullable=False)
+    start_page = db.Column(db.Integer, nullable=False)
+    end_page = db.Column(db.Integer, nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
+    target_completion_date = db.Column(db.Date, nullable=False)
+    exclusion_ranges_text = db.Column(db.Text, nullable=True)
+    exclusion_ranges_json = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    subject = db.relationship('LearningSubject')
+
+    def __repr__(self):
+        return (
+            f'<LearningWorkbookPlan {self.id} g{self.grade} '
+            f'{self.textbook_title} {self.start_date}>'
+        )
+
+
+class CenterStudyCalendar(db.Model):
+    """센터 기본 예정 학습요일. single-center singleton이다."""
+    __tablename__ = 'center_study_calendar'
+
+    id = db.Column(db.Integer, primary_key=True)
+    singleton_key = db.Column(db.String(16), nullable=False, unique=True, default='default')
+    study_weekdays = db.Column(db.JSON, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<CenterStudyCalendar {self.singleton_key} {self.study_weekdays}>'
+
+
+class ChildStudyWeekdays(db.Model):
+    """아동별 예정 학습요일 override. row가 없으면 센터 기본값을 쓴다."""
+    __tablename__ = 'child_study_weekdays'
+
+    id = db.Column(db.Integer, primary_key=True)
+    child_id = db.Column(
+        db.Integer,
+        db.ForeignKey('child.id'),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    study_weekdays = db.Column(db.JSON, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<ChildStudyWeekdays child={self.child_id} {self.study_weekdays}>'
 
 
 class ExemptionTicket(db.Model):
