@@ -25,6 +25,7 @@ from features.planning.weekdays import (  # noqa: E402
     DEFAULT_STUDY_WEEKDAYS,
     canonicalize_weekdays,
     count_planned_study_days,
+    count_planned_study_days_inclusive,
     effective_study_weekdays,
 )
 from features.planning.workload import (  # noqa: E402
@@ -261,6 +262,29 @@ class WeekdayHelperTests(unittest.TestCase):
     def test_weekend_included_when_configured(self):
         days = count_planned_study_days(FRIDAY, date(2026, 8, 30), [5, 6])
         self.assertEqual(days, 2)
+
+    def test_inclusive_span_includes_start_weekday(self):
+        self.assertEqual(
+            count_planned_study_days_inclusive(MONDAY, FRIDAY, DEFAULT_STUDY_WEEKDAYS),
+            5,
+        )
+        self.assertEqual(
+            count_planned_study_days(MONDAY, FRIDAY, DEFAULT_STUDY_WEEKDAYS),
+            4,
+        )
+
+    def test_inclusive_span_includes_target(self):
+        self.assertEqual(
+            count_planned_study_days_inclusive(MONDAY, MONDAY, [0]),
+            1,
+        )
+        self.assertEqual(count_planned_study_days(MONDAY, MONDAY, [0]), 0)
+
+    def test_inclusive_target_before_start_is_zero(self):
+        self.assertEqual(
+            count_planned_study_days_inclusive(FRIDAY, MONDAY, DEFAULT_STUDY_WEEKDAYS),
+            0,
+        )
 
     def test_target_equal_as_of_is_zero(self):
         self.assertEqual(count_planned_study_days(FRIDAY, FRIDAY, DEFAULT_STUDY_WEEKDAYS), 0)

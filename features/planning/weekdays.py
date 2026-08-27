@@ -61,3 +61,23 @@ def count_planned_study_days(as_of, target_completion_date, weekdays):
             count += 1
         cursor += timedelta(days=1)
     return count
+
+
+def count_planned_study_days_inclusive(start_date, target_completion_date, weekdays):
+    """[start_date, target] inclusive 명목 예정 학습일 수. target < start 이면 0.
+
+    기존 count_planned_study_days 의 (as_of, target] 의미는 바꾸지 않는다.
+    plan 시작 전 구간을 셀 때만 사용한다.
+    """
+    allowed = set(canonicalize_weekdays(weekdays))
+    if target_completion_date is None or start_date is None:
+        raise PlanningError('날짜가 올바르지 않습니다.', code='invalid_date')
+    if target_completion_date < start_date:
+        return 0
+    count = 0
+    cursor = start_date
+    while cursor <= target_completion_date:
+        if cursor.weekday() in allowed:
+            count += 1
+        cursor += timedelta(days=1)
+    return count

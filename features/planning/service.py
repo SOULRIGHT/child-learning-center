@@ -1,4 +1,4 @@
-"""학습 계획 관리. Growth metric / planner / LLM 은 연결하지 않는다."""
+"""학습 계획 관리. Growth metric / UI / LLM 은 연결하지 않는다."""
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -84,9 +84,22 @@ def get_child_override_weekdays(child_id):
     return canonicalize_weekdays(row.study_weekdays)
 
 
+WEEKDAY_SOURCE_CENTER_DEFAULT = 'center_default'
+WEEKDAY_SOURCE_CHILD_OVERRIDE = 'child_override'
+
+
+def resolve_child_study_weekdays(child_id):
+    """canonical weekday resolution. planner/UI가 같이 쓴다. DB write 없음."""
+    override = get_child_override_weekdays(child_id)
+    if override is None:
+        return list(get_center_weekdays()), WEEKDAY_SOURCE_CENTER_DEFAULT
+    return list(override), WEEKDAY_SOURCE_CHILD_OVERRIDE
+
+
 def effective_child_study_weekdays(child_id):
     """override row가 있으면 override, 없으면 센터 기본. UI와 향후 planner가 같이 쓴다."""
-    return effective_study_weekdays(get_center_weekdays(), get_child_override_weekdays(child_id))
+    days, _source = resolve_child_study_weekdays(child_id)
+    return days
 
 
 def child_study_weekdays_view(child_id):
@@ -391,3 +404,15 @@ def _commit_workbook_plan():
             '학습 계획을 저장하지 못했습니다. 입력값을 확인해주세요.',
             code='save_failed',
         ) from exc
+
+
+def build_child_subject_plan_status(child, learning_subject, as_of=None):
+    """canonical rolling planner. DB write 없음. Growth 연결 없음."""
+    from features.planning.planner import build_child_subject_plan_status as impl
+    return impl(child, learning_subject, as_of=as_of)
+
+
+def build_child_learning_plan_statuses(child, as_of=None):
+    """활성 과목 aggregator. Growth 연결 없음."""
+    from features.planning.planner import build_child_learning_plan_statuses as impl
+    return impl(child, as_of=as_of)

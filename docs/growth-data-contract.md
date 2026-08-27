@@ -103,10 +103,16 @@ page delta, 학습량, “공부를 시작했다” 같은 추론은 현재 Grow
 같은 날 저장은 overwrite다. 포인트식 `MAX(id)` 중복 규칙은 progress에 적용하지 않는다.
 
 Planning storage (`LearningWorkbookPlan`, `CenterStudyCalendar`, `ChildStudyWeekdays`)는
-학습 계획 foundation이다. **아직 Growth metric source가 아니다.**
-page advance / peer median / rolling planner 연결은 구현되어 있지 않다.
+학습 계획 foundation이다.
+
+deterministic planner (`features/planning/planner.py`)는
+`LearningProgressEntry` snapshot + matching `LearningWorkbookPlan`
++ effective weekdays를 읽어 아동/과목 상태를 계산한다.
+**이 결과는 아직 Growth metric / evidence에 연결되지 않는다.**
+page advance / peer median / `observed_study_days`는 planner 입력이 아니다.
+
 exclusion 미입력(`exclusion_ranges_json` NULL)은 v1 20% estimated fallback이다.
-명시적 `[]`(제외 0개)와 구분한다.
+명시적 `[]`(제외 0개)와 구분한다. planner는 `workload_kind`로 이 구분을 보존한다.
 
 ---
 
