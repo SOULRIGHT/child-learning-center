@@ -329,9 +329,10 @@ class GrowthRouteTests(unittest.TestCase):
         os.environ[DEV_DATE_CONTROL_ENV] = '1'
         body = self._growth(self.child.id, as_of=AS_OF.isoformat()).get_data(as_text=True)
         self.assertIn('우등생 국어 3-2', body)
-        self.assertIn('51p', body)
-        self.assertIn('10/1 기록', body)
+        self.assertIn('현재 51p', body)
+        self.assertIn('최근 기록 10/1', body)
         self.assertIn('2026-10-01', body)
+        self.assertIn('진도 기록 없음', body)
 
     def test_chart_dataset_matches_view_model(self):
         self._reading_increase(self.child)

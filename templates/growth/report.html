@@ -90,6 +90,22 @@
     height: 100%;
     background: #f8fafc;
   }
+  .growth-learn-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #6b7280;
+  }
+  .growth-learn-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #111827;
+  }
+  .growth-learn-block {
+    margin-top: 0.85rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid #e5e7eb;
+  }
+  .growth-learn-secondary { font-size: 0.9rem; color: #374151; }
   .growth-muted { font-size: 0.85rem; color: #6b7280; }
   .growth-empty {
     border-radius: 16px;
@@ -343,7 +359,7 @@
         </div>
     </section>
 
-    <section class="mb-4">
+    <section class="mb-4" data-growth-learning>
         <h5 class="mb-3">학습 진도</h5>
         <div class="card growth-panel growth-panel-progress mb-3">
             <div class="card-body">
@@ -353,20 +369,102 @@
                 <div class="fw-semibold">학습 진도 기록 최근 {{ progress.entry_count_current }}건</div>
                 <div class="growth-muted">비교 자료 부족</div>
                 {% endif %}
+                {% if learning and learning.observed_study_days %}
+                <div class="mt-3" data-observed-study-days>
+                    <div class="growth-learn-label">{{ learning.observed_study_days.label }}</div>
+                    {% if learning.observed_study_days.summary %}
+                    <div>{{ learning.observed_study_days.summary }}</div>
+                    {% endif %}
+                    <div class="growth-muted">{{ learning.observed_study_days.hint }}</div>
+                </div>
+                {% endif %}
             </div>
         </div>
         <div class="row g-3">
-            {% for snap in progress.latest_snapshots %}
-            <div class="col-12 col-md-4">
-                <div class="growth-snap">
-                    <div class="fw-semibold mb-1">{{ snap.label }}</div>
-                    {% if snap.textbook_title %}
-                    <div>{{ snap.textbook_title }}</div>
-                    <div>{{ snap.page }}p</div>
-                    <div class="growth-muted">{{ snap.recorded_on.month }}/{{ snap.recorded_on.day }} 기록</div>
-                    <div class="visually-hidden">{{ snap.recorded_on }}</div>
+            {% for card in learning.subjects %}
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="growth-snap" data-learning-subject="{{ card.key }}">
+                    <div class="fw-semibold mb-1">{{ card.label }}</div>
+                    {% if card.has_snapshot %}
+                    {% if card.textbook_title %}
+                    <div>{{ card.textbook_title }}</div>
+                    {% endif %}
+                    <div class="growth-learn-value">{{ card.page_display }}</div>
+                    <div class="growth-muted">{{ card.recorded_on_label }}</div>
+                    {% if card.recorded_on %}
+                    <div class="visually-hidden">{{ card.recorded_on }}</div>
+                    {% endif %}
+
+                    <div class="growth-learn-block">
+                        <div class="growth-learn-label">최근 30일</div>
+                        {% if card.page_advance.current_available %}
+                        <div class="growth-learn-value">{{ card.page_advance.current_display }}</div>
+                        {% if card.page_advance.trend_comparable %}
+                        <div class="growth-learn-secondary mt-1">{{ card.page_advance.previous_display }}</div>
+                        <div class="growth-learn-secondary">기간 대비 {{ card.page_advance.delta_display }}</div>
+                        {% else %}
+                        <div class="growth-muted mt-1">{{ card.page_advance.trend_unavailable_label }}</div>
+                        {% endif %}
+                        {% else %}
+                        <div class="growth-muted">{{ card.page_advance.unavailable_label }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="growth-learn-block">
+                        <div class="growth-learn-label">학습 계획</div>
+                        {% if card.plan.headline %}
+                        <div>{{ card.plan.headline }}</div>
+                        {% endif %}
+                        {% if card.plan.show_target %}
+                        <div class="growth-learn-secondary">목표 {{ card.plan.target_display }}</div>
+                        {% endif %}
+                        {% if card.plan.show_remaining %}
+                        <div>남은 {{ card.plan.remaining_display }}</div>
+                        {% if card.plan.remaining_note %}
+                        <div class="growth-muted">{{ card.plan.remaining_note }}</div>
+                        {% endif %}
+                        {% endif %}
+                        {% if card.plan.show_days or card.plan.show_required %}
+                        <div class="growth-learn-secondary">
+                            {% if card.plan.show_days %}{{ card.plan.days_display }}{% endif %}
+                            {% if card.plan.show_days and card.plan.show_required %} · {% endif %}
+                            {% if card.plan.show_required %}{{ card.plan.required_display }}{% endif %}
+                        </div>
+                        {% if card.plan.required_note %}
+                        <div class="growth-muted">{{ card.plan.required_note }}</div>
+                        {% endif %}
+                        {% endif %}
+                        {% if card.plan.show_admin_link and not is_viewer_mode %}
+                        <a class="small" href="{{ url_for('planning.manage_workbook_plans') }}">교재 계획 관리</a>
+                        {% endif %}
+                    </div>
+
+                    <div class="growth-learn-block">
+                        <div class="growth-learn-label">동학년 동일 교재</div>
+                        {% if card.peer.available %}
+                        <div class="growth-learn-secondary">중앙값 {{ card.peer.median_display }}</div>
+                        <div class="growth-muted">현재 {{ card.peer.current_page_display }} · {{ card.peer.n_display }}</div>
+                        {% if card.peer.gap_display %}
+                        <div class="growth-learn-secondary">{{ card.peer.gap_display }}</div>
+                        {% endif %}
+                        {% else %}
+                        <div class="growth-muted">{{ card.peer.unavailable_label }}</div>
+                        {% endif %}
+                    </div>
+
+                    {% if card.evidence_rows %}
+                    <details class="mt-3">
+                        <summary>분석 근거 보기</summary>
+                        <dl class="row small mt-2 mb-0">
+                            {% for label, value in card.evidence_rows %}
+                            <dt class="col-5">{{ label }}</dt>
+                            <dd class="col-7">{{ value }}</dd>
+                            {% endfor %}
+                        </dl>
+                    </details>
+                    {% endif %}
                     {% else %}
-                    <div class="text-muted">기록 없음</div>
+                    <div class="text-muted">{{ card.empty_label }}</div>
                     {% endif %}
                 </div>
             </div>

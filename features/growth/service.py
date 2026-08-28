@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from features.growth.copy import fallback_copy
 from features.growth.insights import generate_insight_candidates, top_candidates
+from features.growth.learning_view import build_learning_section
 from features.growth.metrics import metrics_bundle
 from features.growth.windows import resolve_as_of
 from feature_models import PROGRAM_TYPE_CHALLENGE, PROGRAM_TYPE_GENERAL, PROGRAM_TYPE_RECOMMENDED
@@ -572,9 +573,11 @@ def build_growth_view_model(child, *, as_of=None, is_viewer_mode=False):
     reading = bundle.get('reading') or {}
     progress = bundle.get('progress') or {}
     points = bundle.get('points') or {}
+    learning = bundle.get('learning') or {}
     reading_view = _reading_section(reading)
     progress_view = _progress_section(progress)
     points_view = _points_section(points)
+    learning_view = build_learning_section(learning)
     return {
         'child': child,
         'is_viewer_mode': bool(is_viewer_mode),
@@ -587,6 +590,7 @@ def build_growth_view_model(child, *, as_of=None, is_viewer_mode=False):
         'reading': reading_view,
         'progress': progress_view,
         'points': points_view,
+        'learning': learning_view,
         'kpis': _kpi_strip(reading_view, progress_view, points_view),
         'charts': _charts(reading_view, progress_view, points_view),
         'bundle': bundle,
