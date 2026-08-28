@@ -33,12 +33,31 @@ def current_window(as_of=None, window_days=DEFAULT_WINDOW_DAYS):
     return inclusive_window(resolve_as_of(as_of), window_days)
 
 
-def previous_window(as_of=None, window_days=DEFAULT_WINDOW_DAYS):
-    """current 바로 앞의 같은 길이 inclusive 창."""
+def nth_previous_window(as_of=None, window_days=DEFAULT_WINDOW_DAYS, n=1):
+    """current 앞에서 n번째 비중첩 inclusive 창. n=1이 바로 앞 구간."""
+    if int(n) < 1:
+        raise ValueError('n은 1 이상이어야 합니다.')
     as_of = resolve_as_of(as_of)
     days = int(window_days)
-    previous_end = as_of - timedelta(days=days)
+    previous_end = as_of - timedelta(days=days * int(n))
     return inclusive_window(previous_end, days)
+
+
+def previous_window(as_of=None, window_days=DEFAULT_WINDOW_DAYS):
+    """current 바로 앞의 같은 길이 inclusive 창."""
+    return nth_previous_window(as_of, window_days, n=1)
+
+
+def recent_fixed_windows(as_of=None, window_days=DEFAULT_WINDOW_DAYS, count=3):
+    """current + 직전 (count-1)개 비중첩 창. [0]이 가장 최근."""
+    if int(count) < 1:
+        raise ValueError('count는 1 이상이어야 합니다.')
+    as_of = resolve_as_of(as_of)
+    days = int(window_days)
+    windows = [current_window(as_of, days)]
+    for index in range(1, int(count)):
+        windows.append(nth_previous_window(as_of, days, n=index))
+    return windows
 
 
 def date_in_window(value, window):

@@ -138,6 +138,22 @@ exclusion 미입력(`exclusion_ranges_json` NULL)은 v1 20% estimated fallback�
   Attendance source가 아니다. pages/day 비율은 만들지 않는다.
 - **plan**: Step C `build_child_learning_plan_statuses` 결과를 복사. 재계산 없음.
 
+### Recent-window best (deterministic facts)
+
+lifetime personal best가 아니다. 최근 고정 30일 × 3개 비중첩 구간(90일)만 본다.
+rolling 탐색/cherry-pick 금지.
+
+- 창: current, previous_1, previous_2. `previous_n.end + 1일 == 다음 창 start`.
+- 세 구간이 모두 comparable해야만 판정. 한 구간이라도 부족하면 `insufficient_history`.
+  가능한 과거만 골라 비교하지 않는다. fake 0 금지.
+- `is_recent_window_best`는 current가 `max(previous_1, previous_2)`를 **엄격히 초과**할 때만 true.
+  동률은 false. 동률 historical window는 더 최근 구간(previous_1).
+- `margin = current - historical_best`. 의미 있는 성장 threshold는 이 layer에 없다.
+- v1 metric: reading days, completed_count, canonical period_points, 과목별 page advance.
+- learning은 세 window의 endpoint `normalize_textbook_title`이 같고 각 window page advance가
+  available이어야 한다. 교재가 바뀌면 `book_changed`. freshness 21일은 Step D 재사용.
+- Step F는 fact only. insight 승격은 별도 layer.
+
 ---
 
 ## 4. Points source-of-truth
@@ -259,6 +275,8 @@ production 기본 `as_of`: `kst_today()` → `actual_kst_today()`
 - current = `as_of` 포함 최근 `window_days`일. start = `as_of - (window_days - 1)`.
   기본 30일.
 - previous = 그 직전 같은 길이. `previous.end == current.start - 1 day`.
+- recent-window best의 previous_2 = previous 직전 같은 길이.
+  `previous_2.end == previous.start - 1 day`. 세 창은 겹치지 않는다.
 - 시작일과 종료일 **모두 inclusive**.
 
 `on_or_before(value, as_of)`: `value is not None and value <= as_of`.

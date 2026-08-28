@@ -387,18 +387,29 @@ def points_metrics(child_id, as_of=None, window_days=30):
 
 
 def metrics_bundle(child_id, as_of=None, window_days=30):
-    """reading/progress/points/learning 스냅샷을 한 묶음으로 모은다."""
+    """reading/progress/points/learning/recent_window_bests 스냅샷을 한 묶음으로 모은다."""
     from features.growth.learning_metrics import learning_metrics
+    from features.growth.recent_window_bests import recent_window_bests
     as_of = resolve_as_of(as_of)
+    reading = reading_metrics(child_id, as_of=as_of, window_days=window_days)
     points = points_metrics(child_id, as_of=as_of, window_days=window_days)
+    learning = learning_metrics(
+        child_id,
+        as_of=as_of,
+        window_days=window_days,
+        points_payload=points,
+    )
     return {
-        'reading': reading_metrics(child_id, as_of=as_of, window_days=window_days),
+        'reading': reading,
         'progress': progress_metrics(child_id, as_of=as_of, window_days=window_days),
         'points': points,
-        'learning': learning_metrics(
+        'learning': learning,
+        'recent_window_bests': recent_window_bests(
             child_id,
             as_of=as_of,
             window_days=window_days,
+            reading_payload=reading,
             points_payload=points,
+            learning_payload=learning,
         ),
     }

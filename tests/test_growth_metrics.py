@@ -31,8 +31,10 @@ from features.growth.windows import (  # noqa: E402
     coverage_comparable,
     current_window,
     date_in_window,
+    nth_previous_window,
     on_or_before,
     previous_window,
+    recent_fixed_windows,
     resolve_as_of,
 )
 from features.progress.service import ensure_default_subjects  # noqa: E402
@@ -58,6 +60,14 @@ class GrowthWindowsTests(unittest.TestCase):
         self.assertEqual((current['end'] - current['start']).days + 1, 30)
         self.assertEqual((previous['end'] - previous['start']).days + 1, 30)
         self.assertEqual(previous['end'], current['start'] - timedelta(days=1))
+        previous_2 = nth_previous_window(AS_OF, 30, n=2)
+        self.assertEqual(previous_2['start'], date(2026, 5, 25))
+        self.assertEqual(previous_2['end'], date(2026, 6, 23))
+        self.assertEqual(previous_2['end'], previous['start'] - timedelta(days=1))
+        windows = recent_fixed_windows(AS_OF, 30, count=3)
+        self.assertEqual(windows[0], current)
+        self.assertEqual(windows[1], previous)
+        self.assertEqual(windows[2], previous_2)
 
     def test_window_days_is_not_hardcoded_to_30(self):
         current = current_window(AS_OF, 7)

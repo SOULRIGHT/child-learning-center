@@ -150,6 +150,11 @@ def _latest_snapshot_payload(entry, as_of):
     }
 
 
+def page_advance_for_window(entries, window, as_of):
+    """한 fixed window의 canonical page advance. Step D 규칙을 복제하지 않는다."""
+    return _page_advance(entries, window, as_of)
+
+
 def _page_advance(entries, window, as_of):
     endpoint_bound = window['end'] if window['end'] <= as_of else as_of
     endpoint = _latest_on_or_before(entries, endpoint_bound)
