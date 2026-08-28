@@ -9,15 +9,21 @@ from dataclasses import dataclass
 
 from features.growth.copy import (
     HIGHER_PERCEIVED_DIFFICULTY_WITH_STABLE_FUN,
+    LEARNING_PAGE_ADVANCE_RECENT_WINDOW_BEST,
     POINTS_PERIOD_INCREASE,
+    POINTS_PERIOD_RECENT_WINDOW_BEST,
     PROGRESS_ENTRIES_DECREASE,
     PROGRESS_ENTRIES_INCREASE,
     READING_ACTIVITY_DECREASE,
     READING_ACTIVITY_INCREASE,
     READING_COMPLETIONS_DECREASE,
     READING_COMPLETIONS_INCREASE,
+    READING_COMPLETIONS_RECENT_WINDOW_BEST,
+    READING_DAYS_RECENT_WINDOW_BEST,
     fallback_copy,
+    headline_for,
 )
+from features.subjects import PROGRESS_SUBJECT_KEYS, subject_name
 
 # 절대 변화. 한 칸(+1일)은 후보로 쓰지 않는다.
 READING_DAYS_DELTA_MIN = 2
@@ -28,6 +34,19 @@ POINTS_PERIOD_DELTA_MIN = 100
 DIFFICULTY_UP_MIN = 0.5
 FUN_DROP_MAX = -0.3
 RATING_SAMPLE_MIN = 3
+
+# recent-window best → insight. 센터 v1 conservative product policy.
+# Step F is_recent_window_best 만으로는 후보를 만들지 않는다.
+RECENT_BEST_READING_DAYS_MIN_MARGIN = 2
+RECENT_BEST_COMPLETIONS_MIN_MARGIN = 2
+RECENT_BEST_POINTS_MIN_MARGIN = 300
+RECENT_BEST_LEARNING_PAGES_MIN_MARGIN = 5
+
+_RECENT_WINDOW_SUPERSEDES = {
+    READING_DAYS_RECENT_WINDOW_BEST: READING_ACTIVITY_INCREASE,
+    READING_COMPLETIONS_RECENT_WINDOW_BEST: READING_COMPLETIONS_INCREASE,
+    POINTS_PERIOD_RECENT_WINDOW_BEST: POINTS_PERIOD_INCREASE,
+}
 
 
 @dataclass(frozen=True)
@@ -334,6 +353,194 @@ def _rating_cross(reading):
     )]
 
 
+def _window_ref(window):
+    if not window:
+        return None
+    start = window.get('start')
+    end = window.get('end')
+    if start is None or end is None:
+        return None
+    return {'start': start, 'end': end}
+
+
+def _recent_window_passes(fact, *, min_margin, require_positive_current=False):
+    if not fact or fact.get('is_recent_window_best') is not True:
+        return False
+    if fact.get('status') != 'ok':
+        return False
+    margin = _number(fact.get('margin'))
+    if margin is None or margin < min_margin:
+        return False
+    current = _number((fact.get('current') or {}).get('value'))
+    if current is None:
+        return False
+    if require_positive_current and current <= 0:
+        return False
+    return True
+
+
+def _recent_window_evidence(payload, fact, *, source, metric_key, extra=None):
+    current = fact.get('current') or {}
+    evidence = {
+        'kind': 'recent_window_best',
+        'source': source,
+        'metric_key': metric_key,
+        'window_days': payload.get('window_days') or 30,
+        'window_count': payload.get('window_count') or 3,
+        'lookback_days': payload.get('lookback_days') or 90,
+        'comparison_window_count': payload.get('window_count') or 3,
+        'current': _number(current.get('value')),
+        'historical_best': _number(fact.get('historical_best')),
+        'margin': _number(fact.get('margin')),
+        'current_window': _window_ref(current) or _window_ref(payload.get('current_window')),
+        'historical_best_window': _window_ref(fact.get('historical_best_window')),
+        'previous_1_window': _window_ref(payload.get('previous_1_window')),
+        'previous_2_window': _window_ref(payload.get('previous_2_window')),
+        'comparable': True,
+    }
+    if extra:
+        evidence.update(extra)
+    return evidence
+
+
+def _recent_window_scalar(payload, fact, *, candidate_id, category, source, metric_key, min_margin, importance):
+    if not _recent_window_passes(fact, min_margin=min_margin):
+        return []
+    return [_candidate(
+        candidate_id,
+        category,
+        'increase',
+        importance,
+        _recent_window_evidence(payload, fact, source=source, metric_key=metric_key),
+        metric_key,
+    )]
+
+
+def _learning_subject_items(learning):
+    remaining = dict(learning or {})
+    ordered = []
+    for key in PROGRESS_SUBJECT_KEYS:
+        if key in remaining:
+            ordered.append((key, remaining.pop(key)))
+    ordered.extend(remaining.items())
+    return ordered
+
+
+def _learning_subject_evidence(key, fact):
+    current = fact.get('current') or {}
+    return {
+        'subject_key': key,
+        'subject_label': subject_name(key) or key,
+        'textbook_title': current.get('textbook_title'),
+        'current_advance': _number(current.get('value')),
+        'historical_best': _number(fact.get('historical_best')),
+        'margin': _number(fact.get('margin')),
+        'current_window': _window_ref(current),
+        'historical_best_window': _window_ref(fact.get('historical_best_window')),
+    }
+
+
+def _recent_window_learning(payload):
+    learning = payload.get('learning') or {}
+    subjects = []
+    for key, fact in _learning_subject_items(learning):
+        if not _recent_window_passes(
+            fact,
+            min_margin=RECENT_BEST_LEARNING_PAGES_MIN_MARGIN,
+            require_positive_current=True,
+        ):
+            continue
+        subjects.append(_learning_subject_evidence(key, fact))
+    if not subjects:
+        return []
+    max_margin = max(row['margin'] for row in subjects if row.get('margin') is not None)
+    evidence = {
+        'kind': 'recent_window_best',
+        'source': 'learning_progress_entry.recorded_on',
+        'metric_key': 'page_advance',
+        'window_days': payload.get('window_days') or 30,
+        'window_count': payload.get('window_count') or 3,
+        'lookback_days': payload.get('lookback_days') or 90,
+        'comparison_window_count': payload.get('window_count') or 3,
+        'current': None,
+        'historical_best': None,
+        'margin': None,
+        'current_window': _window_ref(payload.get('current_window')),
+        'historical_best_window': None,
+        'previous_1_window': _window_ref(payload.get('previous_1_window')),
+        'previous_2_window': _window_ref(payload.get('previous_2_window')),
+        'comparable': True,
+        'subjects': subjects,
+    }
+    return [_candidate(
+        LEARNING_PAGE_ADVANCE_RECENT_WINDOW_BEST,
+        'learning_page_advance',
+        'increase',
+        _priority(45, max_margin, large_at=10),
+        evidence,
+        'page_advance',
+    )]
+
+
+def _recent_window_candidates(payload):
+    if not payload:
+        return []
+    candidates = []
+    candidates.extend(_recent_window_scalar(
+        payload,
+        payload.get('reading_days') or {},
+        candidate_id=READING_DAYS_RECENT_WINDOW_BEST,
+        category='reading_activity',
+        source='reading_day.date',
+        metric_key='reading_days',
+        min_margin=RECENT_BEST_READING_DAYS_MIN_MARGIN,
+        importance=_priority(50, _number((payload.get('reading_days') or {}).get('margin')) or 0, large_at=6),
+    ))
+    candidates.extend(_recent_window_scalar(
+        payload,
+        payload.get('reading_completions') or {},
+        candidate_id=READING_COMPLETIONS_RECENT_WINDOW_BEST,
+        category='reading_completions',
+        source='child_reading.completed_on',
+        metric_key='completed_count',
+        min_margin=RECENT_BEST_COMPLETIONS_MIN_MARGIN,
+        importance=_priority(
+            46,
+            (_number((payload.get('reading_completions') or {}).get('margin')) or 0) * 4,
+            large_at=12,
+        ),
+    ))
+    candidates.extend(_recent_window_scalar(
+        payload,
+        payload.get('points') or {},
+        candidate_id=POINTS_PERIOD_RECENT_WINDOW_BEST,
+        category='points_period',
+        source='daily_points.date',
+        metric_key='period_points',
+        min_margin=RECENT_BEST_POINTS_MIN_MARGIN,
+        importance=_priority(
+            44,
+            (_number((payload.get('points') or {}).get('margin')) or 0) / 50,
+            large_at=8,
+        ),
+    ))
+    candidates.extend(_recent_window_learning(payload))
+    return candidates
+
+
+def _apply_recent_window_supersession(candidates):
+    """같은 metric의 short-term increase는 recent-window가 통과하면 제거한다."""
+    present = {item.id for item in candidates}
+    drop = {
+        short_id
+        for recent_id, short_id in _RECENT_WINDOW_SUPERSEDES.items()
+        if recent_id in present
+    }
+    if not drop:
+        return candidates
+    return [item for item in candidates if item.id not in drop]
+
+
 def generate_insight_candidates(metrics_bundle):
     """metrics_bundle → 후보 리스트. importance desc, id asc."""
     bundle = metrics_bundle or {}
@@ -343,6 +550,8 @@ def generate_insight_candidates(metrics_bundle):
     candidates.extend(_progress_entries(_payload(bundle, 'progress')))
     candidates.extend(_points_period(_payload(bundle, 'points')))
     candidates.extend(_rating_cross(_payload(bundle, 'reading')))
+    candidates.extend(_recent_window_candidates(_payload(bundle, 'recent_window_bests')))
+    candidates = _apply_recent_window_supersession(candidates)
     return sorted(candidates, key=lambda item: (-item.importance, item.id))
 
 
@@ -361,4 +570,4 @@ def top_candidates(candidates, limit=3):
 
 
 def candidate_copy(candidate):
-    return fallback_copy(candidate.id)
+    return {'headline': headline_for(candidate), 'detail': fallback_copy(candidate.id).get('detail') or ''}

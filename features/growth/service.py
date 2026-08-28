@@ -1,7 +1,7 @@
 """Growth 화면용 view model. 새 분석 규칙을 만들지 않고 Step 1/2 결과를 조립한다."""
 from __future__ import annotations
 
-from features.growth.copy import fallback_copy
+from features.growth.copy import headline_for
 from features.growth.insights import generate_insight_candidates, top_candidates
 from features.growth.learning_view import build_learning_section
 from features.growth.metrics import metrics_bundle
@@ -15,6 +15,7 @@ CATEGORY_LABELS = {
     'reading_activity': '독서 활동',
     'reading_completions': '완독',
     'progress_entries': '학습 진도',
+    'learning_page_advance': '교재 진도',
     'points_period': '포인트',
     'reading_experience': '독서 경험',
 }
@@ -24,6 +25,7 @@ METRIC_LABELS = {
     'completed_count': ('완독', '권'),
     'progress_entry_count': ('학습 진도 기록', '건'),
     'period_points': ('기간 포인트', '점'),
+    'page_advance': ('진도 증가', '쪽'),
     'paired_experience_rating': ('체감 난이도·재미', ''),
 }
 
@@ -130,7 +132,7 @@ def _count_insight_payload(candidate):
         'category': candidate.category,
         'category_label': CATEGORY_LABELS.get(candidate.category, candidate.category),
         'direction': candidate.direction,
-        'headline': fallback_copy(candidate.id).get('headline') or '',
+        'headline': headline_for(candidate) or '',
         'comparison_line': (
             f'이전 {_with_unit(previous, unit)} → 최근 {_with_unit(current, unit)}'
             if current is not None and previous is not None
@@ -159,7 +161,7 @@ def _paired_insight_payload(candidate):
         'category': candidate.category,
         'category_label': CATEGORY_LABELS.get(candidate.category, candidate.category),
         'direction': candidate.direction,
-        'headline': fallback_copy(candidate.id).get('headline') or '',
+        'headline': headline_for(candidate) or '',
         'comparison_line': (
             f"난이도 {_format_number(previous.get('difficulty_average'))} → "
             f"{_format_number(current.get('difficulty_average'))} / "
@@ -187,6 +189,8 @@ def _paired_insight_payload(candidate):
 
 def _evidence_rows(candidate, metric_label, unit, extra=()):
     evidence = candidate.evidence or {}
+    if evidence.get('kind') == 'recent_window_best':
+        return _recent_window_evidence_rows(candidate, metric_label, unit)
     rows = [
         ('분석 기간', None),
         ('이전', _window_text(evidence.get('previous_window'))),
@@ -269,9 +273,107 @@ def _paired_evidence_view(candidate):
     }
 
 
+def _recent_window_evidence_rows(candidate, metric_label, unit):
+    evidence = candidate.evidence or {}
+    rows = [
+        ('비교 범위', '최근 3개 30일 구간'),
+        ('최근 구간', _window_text(evidence.get('current_window'))),
+    ]
+    subjects = evidence.get('subjects') or []
+    if subjects:
+        for row in subjects:
+            label = row.get('subject_label') or row.get('subject_key')
+            rows.append((
+                label,
+                (
+                    f"{_signed(row.get('current_advance'), '쪽')} / "
+                    f"과거 최고 {_signed(row.get('historical_best'), '쪽')} / "
+                    f"{_signed(row.get('margin'), '쪽')}"
+                ),
+            ))
+    else:
+        rows.extend((
+            (f'최근 {metric_label}', _with_unit(evidence.get('current'), unit)),
+            ('과거 최고 구간', _window_text(evidence.get('historical_best_window'))),
+            ('과거 최고', _with_unit(evidence.get('historical_best'), unit)),
+            ('차이', _signed(evidence.get('margin'), unit)),
+        ))
+    source = SOURCE_LABELS.get(evidence.get('source'))
+    if source:
+        rows.append(('자료', source))
+    return [(label, value) for label, value in rows if value]
+
+
+def _recent_window_evidence_view(candidate, metric_label, unit):
+    evidence = candidate.evidence or {}
+    return {
+        'kind': 'recent_window_best',
+        'metric_label': metric_label,
+        'source_label': SOURCE_LABELS.get(evidence.get('source')),
+        'current_window': _window_text(evidence.get('current_window')),
+        'historical_best_window': _window_text(evidence.get('historical_best_window')),
+        'current': evidence.get('current'),
+        'historical_best': evidence.get('historical_best'),
+        'margin': evidence.get('margin'),
+        'current_display': _with_unit(evidence.get('current'), unit),
+        'historical_best_display': _with_unit(evidence.get('historical_best'), unit),
+        'margin_display': _signed(evidence.get('margin'), unit),
+        'subjects': evidence.get('subjects') or [],
+        'window_count': evidence.get('window_count') or 3,
+        'unit': unit,
+    }
+
+
+def _recent_window_insight_payload(candidate):
+    evidence = candidate.evidence or {}
+    label, unit = METRIC_LABELS.get(candidate.metric_key, (candidate.metric_key, ''))
+    current = evidence.get('current')
+    historical = evidence.get('historical_best')
+    margin = evidence.get('margin')
+    subjects = evidence.get('subjects') or []
+    if subjects:
+        comparison_short = ' · '.join(
+            f"{row.get('subject_label')} {_signed(row.get('current_advance'), '쪽')}"
+            for row in subjects
+            if row.get('subject_label')
+        )
+        comparison_line = comparison_short
+        delta_line = ' · '.join(
+            f"{row.get('subject_label')} {_signed(row.get('margin'), '쪽')}"
+            for row in subjects
+            if row.get('subject_label')
+        )
+    else:
+        comparison_line = (
+            f'과거 최고 {_with_unit(historical, unit)} → 최근 {_with_unit(current, unit)}'
+            if current is not None and historical is not None
+            else ''
+        )
+        comparison_short = (
+            f'{_with_unit(historical, unit)} → {_with_unit(current, unit)}'
+            if current is not None and historical is not None
+            else ''
+        )
+        delta_line = _signed(margin, unit) or ''
+    return {
+        'id': candidate.id,
+        'category': candidate.category,
+        'category_label': CATEGORY_LABELS.get(candidate.category, candidate.category),
+        'direction': candidate.direction,
+        'headline': headline_for(candidate) or '',
+        'comparison_line': comparison_line,
+        'comparison_short': comparison_short,
+        'delta_line': delta_line,
+        'evidence_rows': _recent_window_evidence_rows(candidate, label, unit),
+        'evidence': _recent_window_evidence_view(candidate, label, unit),
+    }
+
+
 def _insight_payload(candidate):
     if candidate.metric_key == 'paired_experience_rating':
         return _paired_insight_payload(candidate)
+    if (candidate.evidence or {}).get('kind') == 'recent_window_best':
+        return _recent_window_insight_payload(candidate)
     return _count_insight_payload(candidate)
 
 

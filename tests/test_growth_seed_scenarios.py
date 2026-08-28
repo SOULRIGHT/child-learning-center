@@ -169,7 +169,8 @@ class GrowthSeedContractTests(unittest.TestCase):
 
     def test_s1_reading_increase(self):
         ids = self._ids('S1')
-        self.assertIn('READING_ACTIVITY_INCREASE', ids)
+        self.assertIn('READING_DAYS_RECENT_WINDOW_BEST', ids)
+        self.assertNotIn('READING_ACTIVITY_INCREASE', ids)
         self.assertNotIn('READING_ACTIVITY_DECREASE', ids)
 
     def test_s3_no_reading_activity_insight(self):

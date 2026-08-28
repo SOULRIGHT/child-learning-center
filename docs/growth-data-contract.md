@@ -154,6 +154,20 @@ rolling 탐색/cherry-pick 금지.
   available이어야 한다. 교재가 바뀌면 `book_changed`. freshness 21일은 Step D 재사용.
 - Step F는 fact only. insight 승격은 별도 layer.
 
+### Recent-window insight (significance)
+
+recent-window fact가 insight 후보가 되려면 significance gate를 통과해야 한다.
+`is_recent_window_best`만으로는 만들지 않는다.
+
+- reading days: margin ≥ 2
+- completions: margin ≥ 2
+- points: margin ≥ 300
+- learning page advance: margin ≥ 5 **and** current > 0
+- 통과한 학습 과목은 하나의 aggregate candidate. canonical subject 순서.
+- 같은 metric의 short-term increase와 중복하지 않는다. recent-window가 우선.
+- progress_entry_count insight와 page-advance insight는 다른 metric이다.
+- 문장은 최근 3개 30일 비교구간 범위를 명시한다. lifetime best 표현 금지.
+
 ---
 
 ## 4. Points source-of-truth
