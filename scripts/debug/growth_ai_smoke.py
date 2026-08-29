@@ -1,7 +1,8 @@
 """Developer-only Growth AI smoke. production DB/route에 연결하지 않는다.
 
-OPENAI_API_KEY가 환경에 있을 때만 1회 호출한다.
-.env를 읽지 않는다. instance DB를 읽지 않는다.
+OPENAI_API_KEY가 있으면 1회 호출한다.
+project root `.env`를 override=False로 load한다 (이미 있는 OS env 우선).
+instance DB를 읽지 않는다. API key 값을 출력하지 않는다.
 """
 from __future__ import annotations
 
@@ -13,6 +14,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+
+def load_local_env(env_path=None):
+    from dotenv import load_dotenv
+    path = Path(env_path) if env_path is not None else ROOT / '.env'
+    load_dotenv(path, override=False)
 
 
 SYNTHETIC_PACKET = {
@@ -95,6 +102,7 @@ SYNTHETIC_PACKET = {
 
 
 def main():
+    load_local_env()
     if not os.environ.get('OPENAI_API_KEY'):
         print('not run: OPENAI_API_KEY is not set')
         return 0

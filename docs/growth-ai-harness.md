@@ -24,3 +24,5 @@ env:
 manual smoke (synthetic packet only, instance DB 미사용):
 
 `venv\Scripts\python.exe scripts\debug\growth_ai_smoke.py`
+
+local smoke는 project root `.env`를 `load_dotenv(..., override=False)`로 읽는다. 이미 있는 OS/Render env가 우선이다. provider 자체는 dotenv를 읽지 않는다.
