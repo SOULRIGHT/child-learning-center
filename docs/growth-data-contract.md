@@ -4,8 +4,9 @@
 여기에 적힌 규칙은 구현 의도가 아니라 `features/growth/`와
 `app.py`의 `fetch_child_daily_point_records()`에서 확인된 semantics다.
 
-sanitized LLM payload, anonymizer, Subject 일반화, DailyPoints unique 제약은
-**구현되어 있지 않다.** 없는 것을 있는 것처럼 쓰지 않는다.
+teacher evidence packet (`growth_teacher_evidence_v1`)은 구현되어 있다.
+anonymizer, Subject 일반화, DailyPoints unique 제약은 **구현되어 있지 않다.**
+없는 것을 있는 것처럼 쓰지 않는다.
 
 ---
 
@@ -366,56 +367,61 @@ operational ledgers
 
 ---
 
-## 10. Future LLM boundary
+## 10. Teacher evidence packet / Future LLM boundary
 
-**LLM은 아직 구현되지 않았다.** sanitized payload schema도 없다.
+**LLM / prompt / validator / Content Safety는 아직 구현되지 않았다.**
 
-향후 계약 방향만 적는다. 아래 화살표의 마지막 두 단계는 미구현이다.
+teacher whitelist packet은 구현되어 있다.
 
 ```
 DB / raw ORM
-    → deterministic metrics
-    → InsightCandidate / evidence
-    → sanitized structured payload     # 미구현
-    → future LLM                       # 미구현
+    → deterministic metrics_bundle
+    → InsightCandidate / top_candidates
+    → build_teacher_evidence_packet()   # growth_teacher_evidence_v1, audience=teacher
+    → future LLM                        # 미구현
 ```
 
-LLM이 직접 다음을 탐색하는 구조는 사용하지 않는다.
+packet은 bundle/ORM dump가 아니라 READ-ONLY projection이다.
+builder는 metrics를 다시 계산하지 않고 DB를 읽지 않는다.
+기존 teacher Growth HTML 경로에 연결하지 않는다.
 
-- ORM query / SQL
-- `ChildReading` / `ReadingDay` / `LearningProgressEntry` raw
-- `DailyPoints` raw
-- `PointsHistory`
-- live cache (`Child.cumulative_points`)
-- arbitrary notes / `review_text` / `manual_history`
+- schema_version: `growth_teacher_evidence_v1`
+- audience: `teacher` only. viewer packet 없음
+- 허용: grade, subject key/label, textbook_title, windows, selected insight evidence,
+  reading days/completions, period points, cumulative_as_of,
+  learning snapshot/page advance/peer/plan/observed study days,
+  selected recent-window facts
+- 금지: child name, viewer_slug, ORM, DB PK (`plan_id` 포함), reviews/notes,
+  URLs, `child_cumulative_points`, raw bundle, chart, headline paraphraser copy
+- unavailable ≠ 0. estimated vs exact 보존. semantic evidence_id
+  (`reading.activity_days.current`, `learning.math.peer.median` …)
+- JSON 직렬화 가능 (ISO date string)
 
-넘겨도 되는 후보(이미 deterministic인 것)는 metrics 숫자, window,
-`comparable`, evidence source, fallback copy id다.
-**구체 payload schema는 이 문서에서 확정하지 않는다.**
+LLM이 직접 ORM/SQL/원장/cache/notes를 탐색하는 구조는 사용하지 않는다.
 
 ---
 
 ## 11. Privacy boundary
 
-**future contract requirement.** anonymizer / sanitizer는 구현되어 있지 않다.
+teacher packet sanitizer는 `build_teacher_evidence_packet()`이다.
+외부 anonymizer / viewer packet은 없다.
 
-향후 외부 LLM 기본 입력에서 제외할 대상으로, 현재 코드에 존재하는 필드:
+teacher packet **금지**:
 
 - `Child.name`
 - `Child.viewer_slug` / viewer token
 - `User` identity (`username`, `name`, `email`, `firebase_uid`, `id`)
-- 내부 PK / FK (`child_id`, `book_id`, `child_reading_id` 등)
-- 센터 식별 값 (`CENTER_NAME` env. 센터 전용 DB id 컬럼은 없음)
+- 내부 PK / FK (`child_id`, `book_id`, `child_reading_id`, `plan_id` 등)
+- 센터 식별 값 (`CENTER_NAME` env)
 - `ChildNote.note`
 - `ReadingDay.review_text`
 - `DailyPoints.manual_history`의 `reason` / `created_by`
 - `PointsHistory.change_reason`
 - raw URL (viewer report URL, `/nfc/<child_id>` 등)
 
-Book title, 교재명, `Child.grade` 등은 식별 가능성 판단이 끝나지 않았다.
-이 문서에서 허용/금지를 확정하지 않는다.
+teacher packet **허용** (v1): `Child.grade`, 과목 라벨, 정규화 교재명.
 
-교사 Growth HTML이 `child` 객체를 쓰는 것은 UI이며, 외부 LLM 경계와 별개다.
+교사 Growth HTML이 `child` 객체를 쓰는 것은 UI이며, packet 경계와 별개다.
 
 ---
 
