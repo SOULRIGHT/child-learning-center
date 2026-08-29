@@ -37,3 +37,6 @@ PyJWT==2.10.1
 # Deployment (Render.com)
 gunicorn==21.2.0
 psycopg2-binary==2.9.9
+
+# Growth AI generator (OpenAI Responses API). Orchestration libraries 없음.
+openai==3.6.0

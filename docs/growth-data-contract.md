@@ -21,7 +21,7 @@ anonymizer, Subject 일반화, DailyPoints unique 제약은 **구현되어 있�
 - 기존 데이터를 새 테이블로 이관
 - multi-tenancy 설계
 - Subject 일반화
-- LLM / prompt / vector DB 구현
+- LLM / prompt / vector DB 구현 (해석 generator는 `features/growth/ai/`, 이 계약의 운영 데이터 SOT가 아님)
 - Growth Story / rank / 새 metric / threshold 변경
 - 운영 DB cleanup
 - Step 4 dashboard UI
@@ -367,23 +367,34 @@ operational ledgers
 
 ---
 
-## 10. Teacher evidence packet / Future LLM boundary
-
-**LLM / prompt / validator / Content Safety는 아직 구현되지 않았다.**
+## 10. Teacher evidence packet / interpretation generator
 
 teacher whitelist packet은 구현되어 있다.
+interpretation generator v1도 구현되어 있다.
+**production Growth HTML/route는 아직 generator를 호출하지 않는다.**
+validator / Google Model Armor / retry UI는 미구현이다.
 
 ```
 DB / raw ORM
     → deterministic metrics_bundle
     → InsightCandidate / top_candidates
-    → build_teacher_evidence_packet()   # growth_teacher_evidence_v1, audience=teacher
-    → future LLM                        # 미구현
+    → build_teacher_evidence_packet()          # growth_teacher_evidence_v1
+    → OpenAIGrowthInterpretationProvider       # 미연결, 독립 provider
+    → growth_teacher_interpretation_v1
 ```
 
 packet은 bundle/ORM dump가 아니라 READ-ONLY projection이다.
 builder는 metrics를 다시 계산하지 않고 DB를 읽지 않는다.
-기존 teacher Growth HTML 경로에 연결하지 않는다.
+LLM 입력은 `growth_teacher_evidence_v1` JSON만 허용한다.
+
+generator v1:
+
+- provider: OpenAI Responses API, `store=false`, tools/search 없음
+- model: `gpt-5.6-luna` (production winner 미확정)
+- reasoning.effort: `low` baseline
+- prompt: `growth_teacher_prompt_v1`
+- output: `growth_teacher_interpretation_v1` Structured Outputs
+- B6에서 Gemini 2.5 Flash-Lite challenger와 domain eval로 최종 모델 선정 예정
 
 - schema_version: `growth_teacher_evidence_v1`
 - audience: `teacher` only. viewer packet 없음
