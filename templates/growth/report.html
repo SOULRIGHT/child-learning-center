@@ -120,23 +120,164 @@
     box-shadow: var(--card-shadow);
     border-left: 4px solid #7c3aed;
   }
-  .growth-ai-mascot {
-    width: 52px;
-    height: 52px;
-    flex: 0 0 52px;
-    animation: growth-ai-breathe 1.8s ease-in-out infinite;
+  .growth-ai-mascot-slot {
+    position: relative;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+  }
+  .growth-ai-mascot-slot.is-header {
+    width: 56px;
+    height: 56px;
+  }
+  .growth-ai-mascot-slot.is-loading {
+    width: 88px;
+    height: 88px;
+    margin-bottom: 0.75rem;
+  }
+  .growth-ai-mascot-asset,
+  .growth-ai-mascot-placeholder,
+  .growth-ai-mascot-scene {
+    width: 100%;
+    height: 100%;
+  }
+  .growth-ai-mascot-placeholder { position: relative; }
+  .growth-ai-mascot-scene {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+  .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene[data-ai-mascot-scene="0"],
+  #growth-ai-card[data-ai-focus-step="0"] .growth-ai-mascot-scene[data-ai-mascot-scene="0"],
+  #growth-ai-card[data-ai-focus-step="1"] .growth-ai-mascot-scene[data-ai-mascot-scene="1"],
+  #growth-ai-card[data-ai-focus-step="2"] .growth-ai-mascot-scene[data-ai-mascot-scene="2"],
+  #growth-ai-card[data-ai-focus-step="3"] .growth-ai-mascot-scene[data-ai-mascot-scene="3"] {
+    opacity: 1;
+  }
+  #growth-ai-card[data-ai-state="loading"] .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene {
+    opacity: 0;
+  }
+  #growth-ai-card[data-ai-state="loading"] .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene.is-focus,
+  #growth-ai-card[data-ai-state="loading"][data-ai-focus-step="0"] .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene[data-ai-mascot-scene="0"],
+  #growth-ai-card[data-ai-state="loading"][data-ai-focus-step="1"] .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene[data-ai-mascot-scene="1"],
+  #growth-ai-card[data-ai-state="loading"][data-ai-focus-step="2"] .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene[data-ai-mascot-scene="2"],
+  #growth-ai-card[data-ai-state="loading"][data-ai-focus-step="3"] .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene[data-ai-mascot-scene="3"] {
+    opacity: 1;
+  }
+  .growth-ai-process {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0 0.75rem;
+  }
+  .growth-ai-process li {
+    position: relative;
+    padding: 0.35rem 0 0.35rem 1.1rem;
+    color: #6b7280;
+    font-size: 0.92rem;
+  }
+  .growth-ai-process li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.7rem;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: #c4b5fd;
+  }
+  .growth-ai-process li.is-focus {
+    color: #4c1d95;
+    font-weight: 600;
+  }
+  .growth-ai-process li.is-focus::before {
+    background: #7c3aed;
+    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.12);
+  }
+  .growth-ai-status-panel {
+    padding-top: 0.25rem;
   }
   .growth-ai-hint { font-size: 0.85rem; color: #6b7280; }
   .growth-ai-steps { font-size: 0.9rem; color: #4b5563; }
   .growth-ai-obs { margin: 0; padding-left: 1.1rem; }
   .growth-ai-hidden { display: none !important; }
   .growth-ai-feedback-btns { display: flex; gap: 0.5rem; }
+  .growth-ai-evidence-group {
+    border-top: 1px solid #eee;
+    padding: 0.65rem 0;
+  }
+  .growth-ai-evidence-group > summary,
+  .growth-ai-evidence-items > summary,
+  [data-ai-role="evidence-wrap"] > summary {
+    cursor: pointer;
+  }
+  .growth-ai-compact,
+  .growth-ai-evidence-list {
+    display: grid;
+    grid-template-columns: minmax(7rem, 42%) 1fr;
+    gap: 0.3rem 0.8rem;
+    margin: 0.6rem 0 0.35rem;
+  }
+  .growth-ai-compact dt,
+  .growth-ai-evidence-list dt {
+    color: #6b7280;
+    font-weight: 500;
+  }
+  .growth-ai-compact dd,
+  .growth-ai-evidence-list dd { margin: 0; }
   @keyframes growth-ai-breathe {
     0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-4px); }
+    50% { transform: translateY(-3px); }
+  }
+  @keyframes growth-ai-card-shift {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(3px, -4px); }
+  }
+  @keyframes growth-ai-dots {
+    0%, 80%, 100% { opacity: 0.25; }
+    40% { opacity: 1; }
+  }
+  @keyframes growth-ai-scan {
+    0%, 100% { transform: translate(-2px, 2px); }
+    50% { transform: translate(3px, -3px); }
+  }
+  @keyframes growth-ai-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.04); }
+  }
+  #growth-ai-card[data-ai-state="loading"] .growth-ai-mascot-slot.is-loading,
+  #growth-ai-card[data-ai-state="loading"] .growth-ai-mascot-asset {
+    animation: growth-ai-breathe 3.5s ease-in-out infinite;
+  }
+  #growth-ai-card[data-ai-focus-step="0"] .growth-ai-motion-card {
+    animation: growth-ai-card-shift 3.5s ease-in-out infinite;
+  }
+  #growth-ai-card[data-ai-focus-step="1"] .growth-ai-motion-dot.d1 { animation: growth-ai-dots 1.4s infinite; }
+  #growth-ai-card[data-ai-focus-step="1"] .growth-ai-motion-dot.d2 { animation: growth-ai-dots 1.4s 0.2s infinite; }
+  #growth-ai-card[data-ai-focus-step="1"] .growth-ai-motion-dot.d3 { animation: growth-ai-dots 1.4s 0.4s infinite; }
+  #growth-ai-card[data-ai-focus-step="2"] .growth-ai-motion-glass {
+    animation: growth-ai-scan 3.5s ease-in-out infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  #growth-ai-card[data-ai-focus-step="3"] .growth-ai-motion-shield {
+    animation: growth-ai-pulse 3.5s ease-in-out infinite;
+    transform-box: fill-box;
+    transform-origin: center;
   }
   @media (prefers-reduced-motion: reduce) {
-    .growth-ai-mascot { animation: none; }
+    .growth-ai-mascot-slot,
+    .growth-ai-mascot-asset,
+    .growth-ai-motion-card,
+    .growth-ai-motion-dot,
+    .growth-ai-motion-glass,
+    .growth-ai-motion-shield,
+    .growth-ai-process li.is-focus::before {
+      animation: none !important;
+    }
+    .growth-ai-mascot-scene { transition: none; }
+    .growth-ai-process li { color: #4b5563; font-weight: 500; }
+    .growth-ai-process li::before { background: #a78bfa; box-shadow: none; }
   }
   @media (max-width: 767.98px) {
     .growth-header .btn { width: 100%; }

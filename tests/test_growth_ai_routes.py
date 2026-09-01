@@ -7,7 +7,7 @@ import unittest
 from datetime import date
 from unittest.mock import patch
 
-from tests.helpers import bootstrap_test_app
+from tests.helpers import PROJECT_ROOT, bootstrap_test_app
 
 app, db = bootstrap_test_app()
 
@@ -133,7 +133,26 @@ class GrowthAIRouteTests(unittest.TestCase):
         self.assertIn('발견된 변화', body)
         self.assertIn('AI 성장 해석 만들기', body)
         self.assertIn('data-ai-action="generate"', body)
-        self.assertIn('growth-ai-mascot', body)
+        self.assertIn('growth-ai-mascot-slot', body)
+        self.assertIn('성장 데이터 정리', body)
+        self.assertIn('AI가 기록의 흐름 해석', body)
+        self.assertIn('사실이 맞는지 확인', body)
+        self.assertIn('안전하게 보여드릴 수 있는지 확인', body)
+        self.assertIn('data-ai-mascot-scene', body)
+        self.assertIn('prefers-reduced-motion', body)
+        self.assertNotIn('현재 AWS', body)
+        self.assertNotIn('fake percentage', body)
+        loading = body.split('data-ai-panel="loading"', 1)[1].split('data-ai-panel="success"', 1)[0]
+        self.assertNotIn('%', loading)
+        self.assertNotIn('✓', loading)
+        self.assertNotIn('완료', loading)
+        self.assertNotIn('AI 성장 해석이 준비됐어요!', loading)
+        self.assertIn('growth-ai-hidden', body.split('data-ai-role="ready"', 1)[0][-80:] + body.split('data-ai-role="ready"', 1)[1][:80])
+        js = (PROJECT_ROOT / 'static' / 'js' / 'growth-ai.js').read_text(encoding='utf-8')
+        self.assertIn('const CYCLE_MS = 3500', js)
+        self.assertIn('prefers-reduced-motion', js)
+        self.assertNotIn('percent', js.lower())
+        self.assertNotIn('AWS', js)
         self.assertNotIn('reading.activity_days.current', body)
         self.assertNotIn('learning.math.peer.median', body)
 
@@ -164,9 +183,14 @@ class GrowthAIRouteTests(unittest.TestCase):
         self.assertIn('관찰한 점', body)
         self.assertIn('함께 살펴볼 점', body)
         self.assertIn('분석 근거', body)
+        self.assertIn('분석 근거 보기', body)
+        self.assertIn('개별 근거 모두 보기', body)
         self.assertNotIn('reading.activity_days.current', body)
         self.assertNotIn('learning.math.plan.remaining_workload', body)
+        self.assertNotIn('AI가 실제로 참조한', body)
+        self.assertNotIn('AI 사고에 사용된', body)
         self.assertIn('data-ai-state="success"', body)
+        self.assertIn('growth-ai-hidden', body.split('data-ai-role="ready"', 1)[0][-120:])
 
     def test_stale_state_renders(self):
         db.session.add(GrowthAIGeneration(

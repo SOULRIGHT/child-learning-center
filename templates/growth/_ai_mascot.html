@@ -1,0 +1,40 @@
+{# 최종 캐릭터는 static/img/growth-ai-mascot.{webp,png} 또는 static/img/growth-ai/mascot.{webp,png} 로 교체. #}
+{% set mascot = ai_mascot if ai_mascot is defined else {'kind': none, 'url': none} %}
+{% set mascot_variant = mascot_variant|default('header') %}
+<div class="growth-ai-mascot-slot is-{{ mascot_variant }}" data-ai-role="mascot-slot" data-ai-mascot-variant="{{ mascot_variant }}" aria-hidden="true">
+    {% if mascot.kind == 'image' and mascot.url %}
+    <img class="growth-ai-mascot-asset" src="{{ mascot.url }}" alt="">
+    {% elif mascot.kind == 'video' and mascot.url %}
+    <video class="growth-ai-mascot-asset" src="{{ mascot.url }}" autoplay muted loop playsinline></video>
+    {% else %}
+    <div class="growth-ai-mascot-placeholder">
+        <svg class="growth-ai-mascot-scene" data-ai-mascot-scene="0" viewBox="0 0 72 72">
+            <rect x="8" y="18" width="28" height="36" rx="4" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+            <rect x="14" y="26" width="16" height="3" rx="1.5" fill="#c4b5fd"/>
+            <rect x="14" y="34" width="12" height="3" rx="1.5" fill="#ddd6fe"/>
+            <rect x="28" y="12" width="28" height="36" rx="4" fill="#fff" stroke="#a78bfa" stroke-width="1.5" class="growth-ai-motion-card"/>
+            <rect x="34" y="20" width="16" height="3" rx="1.5" fill="#8b5cf6"/>
+            <rect x="34" y="28" width="14" height="3" rx="1.5" fill="#c4b5fd"/>
+            <rect x="34" y="36" width="10" height="3" rx="1.5" fill="#ddd6fe"/>
+        </svg>
+        <svg class="growth-ai-mascot-scene" data-ai-mascot-scene="1" viewBox="0 0 72 72">
+            <rect x="10" y="22" width="42" height="28" rx="4" fill="#1f2937"/>
+            <rect x="14" y="26" width="34" height="20" rx="2" fill="#eef2ff"/>
+            <rect x="18" y="50" width="26" height="4" rx="1" fill="#4b5563"/>
+            <circle class="growth-ai-motion-dot d1" cx="24" cy="36" r="2.2" fill="#7c3aed"/>
+            <circle class="growth-ai-motion-dot d2" cx="32" cy="36" r="2.2" fill="#7c3aed"/>
+            <circle class="growth-ai-motion-dot d3" cx="40" cy="36" r="2.2" fill="#7c3aed"/>
+        </svg>
+        <svg class="growth-ai-mascot-scene" data-ai-mascot-scene="2" viewBox="0 0 72 72">
+            <circle class="growth-ai-motion-glass" cx="32" cy="30" r="14" fill="none" stroke="#7c3aed" stroke-width="3"/>
+            <line class="growth-ai-motion-glass" x1="42" y1="40" x2="56" y2="56" stroke="#6d28d9" stroke-width="4" stroke-linecap="round"/>
+            <rect x="18" y="22" width="18" height="4" rx="2" fill="#c4b5fd"/>
+            <rect x="22" y="30" width="12" height="4" rx="2" fill="#ddd6fe"/>
+        </svg>
+        <svg class="growth-ai-mascot-scene" data-ai-mascot-scene="3" viewBox="0 0 72 72">
+            <path class="growth-ai-motion-shield" d="M36 10l22 8v16c0 14-9 24-22 28C23 58 14 48 14 34V18z" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+            <path d="M26 34l8 8 14-16" fill="none" stroke="#16a34a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </div>
+    {% endif %}
+</div>

@@ -40,7 +40,7 @@ from features.growth.ai.openai_provider import (
     MODEL_ENV,
     OpenAIGrowthInterpretationProvider,
 )
-from features.growth.ai.presenter import present_cited_evidence
+from features.growth.ai.presenter import present_cited_evidence_bundle
 from features.growth.ai.prompt import GROWTH_TEACHER_PROMPT_VERSION
 from features.growth.ai.provider import (
     GenerationResult,
@@ -90,6 +90,7 @@ class TeacherAIResult:
     generation_id: int | None = None
     interpretation: dict | None = None
     evidence: list | None = None
+    evidence_groups: dict | None = None
     quota_remaining: int | None = None
     cached: bool = False
     failure_code: str | None = None
@@ -206,6 +207,7 @@ def generate_teacher_growth_interpretation(
             generation_id=cached.id,
             interpretation=view['interpretation'],
             evidence=view['evidence'],
+            evidence_groups=view.get('evidence_groups'),
             cached=True,
             quota_remaining=_quota_remaining(user_id),
         )
@@ -307,6 +309,7 @@ def generate_teacher_growth_interpretation(
         generation_id=row.id,
         interpretation=view['interpretation'],
         evidence=view['evidence'],
+        evidence_groups=view.get('evidence_groups'),
         cached=False,
         quota_remaining=_quota_remaining(user_id),
     )
@@ -359,6 +362,8 @@ def public_result_payload(result: TeacherAIResult):
         payload['interpretation'] = result.interpretation
     if result.evidence is not None:
         payload['evidence'] = result.evidence
+    if result.evidence_groups is not None:
+        payload['evidence_groups'] = result.evidence_groups
     if result.quota_remaining is not None:
         payload['quota_remaining'] = result.quota_remaining
     if result.cached:
@@ -449,13 +454,15 @@ def _run_pipeline(packet, generator, safety, deadline, row):
 
 def _success_view(row, packet, *, cached, enabled):
     parsed = row.parsed_output if isinstance(row.parsed_output, dict) else {}
+    evidence = present_cited_evidence_bundle(packet, parsed)
     return {
         'state': 'success',
         'enabled': enabled,
         'cached': cached,
         'generation_id': row.id,
         'interpretation': _ui_interpretation(parsed),
-        'evidence': present_cited_evidence(packet, parsed),
+        'evidence': evidence['items'],
+        'evidence_groups': evidence,
         'timeout_ms': FRONTEND_TIMEOUT_MS,
         'message': None,
     }

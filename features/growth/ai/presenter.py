@@ -23,8 +23,27 @@ _PERIOD = {
 
 
 def present_cited_evidence(packet, parsed_output):
-    cited = _cited_ids(parsed_output)
+    return present_cited_evidence_bundle(packet, parsed_output)['items']
+
+
+def present_cited_evidence_bundle(packet, parsed_output):
+    """cited evidence를 모두 유지한 채 UI용 group/compact만 만든다."""
     catalog = _catalog(packet)
+    rows = _cited_rows(packet, parsed_output, catalog)
+    groups = _group_rows(rows, catalog)
+    return {
+        'total': len(rows),
+        'items': [_public_item(row) for row in rows],
+        'groups': groups,
+        'chips': ' · '.join(
+            f"{group['short_label']} {group['count']}" for group in groups
+        ),
+    }
+
+
+def _cited_rows(packet, parsed_output, catalog=None):
+    cited = _cited_ids(parsed_output)
+    catalog = catalog if catalog is not None else _catalog(packet)
     rows = []
     seen = set()
     for evidence_id in cited:
@@ -36,8 +55,17 @@ def present_cited_evidence(packet, parsed_output):
         if key in seen:
             continue
         seen.add(key)
+        row['evidence_id'] = evidence_id
         rows.append(row)
     return rows
+
+
+def _public_item(row):
+    return {
+        'label': row.get('label'),
+        'value': row.get('value'),
+        'note': row.get('note'),
+    }
 
 
 def _cited_ids(parsed_output):
@@ -270,3 +298,204 @@ def _is_plan_numeric(evidence_id):
 
 def _join(*parts):
     return ' '.join(part for part in parts if part)
+
+
+_GROUP_ORDER = (
+    'reading',
+    'korean',
+    'math',
+    'ssen',
+    'learning_activity',
+    'other',
+)
+
+_KNOWN_SUBJECT_GROUPS = {
+    'korean': ('korean', '국어 학습', '국어'),
+    'math': ('math', '수학 학습', '수학'),
+    'ssen': ('ssen', '쎈 학습', '쎈'),
+}
+
+
+def _group_spec(evidence_id, ctx):
+    if evidence_id.startswith('reading.'):
+        return 'reading', '독서 활동', '독서'
+    if (
+        evidence_id.startswith('learning.observed_study_days')
+        or evidence_id.startswith('learning.progress_entry_count')
+    ):
+        return 'learning_activity', '학습 활동', '학습 활동'
+    subject_key = ctx.get('subject_key') or _subject_key_from_id(evidence_id)
+    known = _KNOWN_SUBJECT_GROUPS.get(subject_key)
+    if known:
+        return known
+    if subject_key:
+        name = ctx.get('subject_label') or subject_name(subject_key) or '학습'
+        return subject_key, f'{name} 학습', name
+    return 'other', '기타', '기타'
+
+
+def _subject_key_from_id(evidence_id):
+    if not evidence_id.startswith('learning.'):
+        return None
+    parts = evidence_id.split('.')
+    if len(parts) < 3:
+        return None
+    key = parts[1]
+    if key in ('progress_entry_count', 'observed_study_days'):
+        return None
+    return key
+
+
+def _group_rows(rows, catalog):
+    buckets = {}
+    extras = []
+    for row in rows:
+        key, label, short = _group_spec(row['evidence_id'], (catalog.get(row['evidence_id']) or {}).get('_ctx') or {})
+        if key not in _GROUP_ORDER and key not in buckets:
+            extras.append(key)
+        bucket = buckets.setdefault(key, {
+            'key': key,
+            'label': label,
+            'short_label': short,
+            'items': [],
+        })
+        bucket['items'].append(_public_item(row))
+        bucket.setdefault('_ids', []).append(row['evidence_id'])
+    order = []
+    for key in _GROUP_ORDER:
+        if key == 'learning_activity':
+            for extra in extras:
+                if extra not in order and extra in buckets:
+                    order.append(extra)
+        if key in buckets:
+            order.append(key)
+    for key in extras:
+        if key not in order:
+            order.append(key)
+    groups = []
+    for key in order:
+        bucket = buckets[key]
+        ids = bucket.pop('_ids')
+        items = bucket['items']
+        groups.append({
+            'key': bucket['key'],
+            'label': bucket['label'],
+            'short_label': bucket['short_label'],
+            'count': len(items),
+            'compact': _compact_for(key, ids, catalog),
+            'note': _group_note(key, ids),
+            'items': items,
+        })
+    return groups
+
+
+def _group_note(group_key, ids):
+    if group_key == 'learning_activity' and any('observed_study_days' in eid for eid in ids):
+        return '포인트가 기록된 학습 활동일 기준이며 출석일이 아닙니다.'
+    return None
+
+
+def _compact_for(group_key, ids, catalog):
+    if group_key == 'reading':
+        return _compact_reading(ids, catalog)
+    if group_key == 'learning_activity':
+        return _compact_learning_activity(ids, catalog)
+    if group_key in _KNOWN_SUBJECT_GROUPS or (
+        group_key not in ('other', 'reading', 'learning_activity')
+        and any(eid.startswith('learning.') for eid in ids)
+    ):
+        return _compact_subject(ids, catalog)
+    if group_key == 'other':
+        return _compact_other(ids, catalog)
+    return []
+
+
+def _simple_value(evidence_id, catalog):
+    fact = catalog.get(evidence_id)
+    if fact is None:
+        return None
+    if fact.get('available') is not True:
+        return '자료 없음'
+    unit = _unit_for(evidence_id)
+    if unit:
+        return _with_unit(fact.get('value'), unit)
+    return _value_text(evidence_id, fact, fact.get('_ctx') or {}, catalog)
+
+
+def _compact_pair(label, parts):
+    bits = [f'{name} {value}' for name, value in parts if value]
+    if not bits:
+        return None
+    return {'label': label, 'value': ' · '.join(bits)}
+
+
+def _id_in(ids, exact):
+    return exact if exact in ids else None
+
+
+def _id_has(ids, token):
+    for evidence_id in ids:
+        if token in evidence_id:
+            return evidence_id
+    return None
+
+
+def _compact_reading(ids, catalog):
+    rows = []
+    current = _compact_pair('최근 30일', (
+        ('활동', _simple_value('reading.activity_days.current', catalog) if _id_in(ids, 'reading.activity_days.current') else None),
+        ('완독', _simple_value('reading.completions.current', catalog) if _id_in(ids, 'reading.completions.current') else None),
+    ))
+    previous = _compact_pair('이전 30일', (
+        ('활동', _simple_value('reading.activity_days.previous', catalog) if _id_in(ids, 'reading.activity_days.previous') else None),
+        ('완독', _simple_value('reading.completions.previous', catalog) if _id_in(ids, 'reading.completions.previous') else None),
+    ))
+    if current:
+        rows.append(current)
+    if previous:
+        rows.append(previous)
+    return rows
+
+
+def _compact_learning_activity(ids, catalog):
+    rows = []
+    current = _id_in(ids, 'learning.observed_study_days.current')
+    previous = _id_in(ids, 'learning.observed_study_days.previous')
+    if current:
+        rows.append({'label': '최근', 'value': _simple_value(current, catalog)})
+    if previous:
+        rows.append({'label': '이전', 'value': _simple_value(previous, catalog)})
+    progress = _id_in(ids, 'learning.progress_entry_count.current')
+    if progress:
+        rows.append({'label': '최근 진도 기록', 'value': _simple_value(progress, catalog)})
+    return rows
+
+
+def _compact_subject(ids, catalog):
+    rows = []
+    mapping = (
+        ('현재', '.snapshot.current_page'),
+        ('동일 학년·동일 교재 중앙값', '.peer.median'),
+        ('비교 인원', '.peer.n'),
+        ('최근 진도 변화', '.page_advance.delta'),
+    )
+    for label, token in mapping:
+        evidence_id = _id_has(ids, token)
+        if not evidence_id:
+            if token == '.page_advance.delta':
+                evidence_id = _id_has(ids, '.page_advance.current')
+            else:
+                continue
+        rows.append({'label': label, 'value': _simple_value(evidence_id, catalog)})
+    return rows
+
+
+def _compact_other(ids, catalog):
+    rows = []
+    current = _id_in(ids, 'points.period.current')
+    previous = _id_in(ids, 'points.period.previous')
+    if current:
+        rows.append({'label': '최근', 'value': _simple_value(current, catalog)})
+    if previous:
+        rows.append({'label': '이전', 'value': _simple_value(previous, catalog)})
+    return rows

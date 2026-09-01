@@ -1,14 +1,13 @@
 {% set ai_state = ai.state if ai else 'idle' %}
-<section class="mb-4" id="growth-ai-card" data-ai-state="{{ ai_state }}">
+{% set evidence_groups = ai.evidence_groups if ai and ai.evidence_groups else none %}
+{% set evidence_items = ai.evidence if ai and ai.evidence else [] %}
+{% set evidence_total = evidence_groups.total if evidence_groups else (evidence_items|length) %}
+<section class="mb-4" id="growth-ai-card" data-ai-state="{{ ai_state }}" data-ai-focus-step="0">
     <div class="card growth-ai-card">
         <div class="card-body">
             <div class="d-flex align-items-start gap-3 mb-3">
-                <svg class="growth-ai-mascot" viewBox="0 0 64 64" aria-hidden="true">
-                    <rect x="10" y="16" width="36" height="36" rx="8" fill="#ede9fe"/>
-                    <path d="M18 24h20M18 32h16M18 40h12" stroke="#7c3aed" stroke-width="3" stroke-linecap="round"/>
-                    <circle cx="46" cy="18" r="8" fill="#fbbf24"/>
-                    <path d="M46 12v4M46 20v4M40 18h4M48 18h4" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-                </svg>
+                {% set mascot_variant = 'header' %}
+                {% include "growth/_ai_mascot.html" %}
                 <div>
                     <h5 class="mb-1">AI 성장 해석</h5>
                     <p class="growth-ai-hint mb-0" data-ai-role="subtitle">교사의 관찰을 돕는 참고자료입니다.</p>
@@ -31,11 +30,21 @@
             </div>
 
             <div data-ai-panel="loading" class="growth-ai-hidden">
-                <p class="fw-semibold mb-1">AI 성장 해석을 준비하고 있어요</p>
-                <p class="mb-2">잠시만 기다려주세요!</p>
-                <p class="growth-ai-hint" style="white-space: pre-line;">성장 데이터를 정리하고
-AI 해석과 검증을 진행하고 있어요.</p>
-                <p class="growth-ai-steps mb-0" data-ai-role="cycle">성장 데이터를 차근차근 정리하고 있어요...</p>
+                <div class="growth-ai-loading">
+                    {% set mascot_variant = 'loading' %}
+                    {% include "growth/_ai_mascot.html" %}
+                    <p class="fw-semibold mb-1">AI 성장 해석을 준비하고 있어요</p>
+                    <p class="mb-2">잠시만 기다려주세요!</p>
+                    <p class="growth-ai-hint" style="white-space: pre-line;">성장 데이터를 정리하고
+AI 해석과 검증을 차례대로 진행하고 있어요.</p>
+                    <ol class="growth-ai-process" data-ai-role="process">
+                        <li data-ai-step="0">성장 데이터 정리</li>
+                        <li data-ai-step="1">AI가 기록의 흐름 해석</li>
+                        <li data-ai-step="2">사실이 맞는지 확인</li>
+                        <li data-ai-step="3">안전하게 보여드릴 수 있는지 확인</li>
+                    </ol>
+                    <p class="growth-ai-steps mb-0" data-ai-role="cycle">성장 데이터를 차근차근 정리하고 있어요...</p>
+                </div>
             </div>
 
             <div data-ai-panel="success" class="{% if ai_state != 'success' %}growth-ai-hidden{% endif %}">
@@ -61,17 +70,51 @@ AI 해석과 검증을 진행하고 있어요.</p>
                         {% endif %}
                     </ul>
                 </div>
-                <details class="mt-3" data-ai-role="evidence-wrap">
-                    <summary data-ai-role="evidence-summary">분석 근거 {% if ai and ai.evidence %}{{ ai.evidence|length }}개{% endif %} · 보기</summary>
-                    <dl class="row small mt-3 mb-0" data-ai-role="evidence">
-                        {% if ai and ai.evidence %}
-                        {% for row in ai.evidence %}
+                <div class="mt-3{% if not evidence_total %} growth-ai-hidden{% endif %}" data-ai-role="evidence-block">
+                    <p class="fw-semibold mb-1" data-ai-role="evidence-title">분석 근거 {% if evidence_total %}{{ evidence_total }}개{% endif %}</p>
+                    <p class="growth-ai-hint mb-2" data-ai-role="evidence-chips">{% if evidence_groups and evidence_groups.chips %}{{ evidence_groups.chips }}{% endif %}</p>
+                    <details data-ai-role="evidence-wrap">
+                        <summary data-ai-role="evidence-summary">분석 근거 보기</summary>
+                        <div class="mt-3" data-ai-role="evidence-groups">
+                            {% if evidence_groups and evidence_groups.groups %}
+                            {% for group in evidence_groups.groups %}
+                            <details class="growth-ai-evidence-group" data-ai-group>
+                                <summary>{{ group.label }} <span class="growth-ai-hint">{{ group.count }}개</span></summary>
+                                {% if group.compact %}
+                                <dl class="growth-ai-compact">
+                                    {% for row in group.compact %}
+                                    <dt>{{ row.label }}</dt>
+                                    <dd>{{ row.value }}</dd>
+                                    {% endfor %}
+                                </dl>
+                                {% endif %}
+                                {% if group.note %}
+                                <p class="growth-ai-hint">{{ group.note }}</p>
+                                {% endif %}
+                                <details class="growth-ai-evidence-items">
+                                    <summary>개별 근거 모두 보기</summary>
+                                    <dl class="growth-ai-evidence-list">
+                                        {% for row in group['items'] %}
+                                        <dt>{{ row.label }}</dt>
+                                        <dd>{{ row.value }}{% if row.note %}<div class="growth-ai-hint">{{ row.note }}</div>{% endif %}</dd>
+                                        {% endfor %}
+                                    </dl>
+                                </details>
+                            </details>
+                            {% endfor %}
+                            {% endif %}
+                        </div>
+                        <button type="button" class="btn btn-outline-secondary btn-sm mt-2" data-ai-action="expand-all-evidence">모든 근거 펼쳐보기</button>
+                    </details>
+                    <dl class="row small mt-3 mb-0 growth-ai-hidden" data-ai-role="evidence" hidden>
+                        {% if evidence_items %}
+                        {% for row in evidence_items %}
                         <dt class="col-5">{{ row.label }}</dt>
                         <dd class="col-7">{{ row.value }}{% if row.note %}<div class="growth-ai-hint">{{ row.note }}</div>{% endif %}</dd>
                         {% endfor %}
                         {% endif %}
                     </dl>
-                </details>
+                </div>
                 <div class="mt-4" data-ai-role="feedback" data-generation-id="{% if ai %}{{ ai.generation_id or '' }}{% endif %}">
                     <p class="mb-2">이 해석이 도움이 되었나요?</p>
                     <div class="growth-ai-feedback-btns">
@@ -93,11 +136,10 @@ AI 해석과 검증을 진행하고 있어요.</p>
                 <button type="button" class="btn btn-primary" data-ai-action="generate" data-ai-label="refresh">새로 분석하기</button>
             </div>
 
-            <div data-ai-panel="error" class="{% if ai_state not in ['error', 'timeout'] %}growth-ai-hidden{% endif %}">
+            <div data-ai-panel="error" class="growth-ai-status-panel {% if ai_state not in ['error', 'timeout'] %}growth-ai-hidden{% endif %}">
                 <p style="white-space: pre-line;" data-ai-role="error-message">{% if ai_state == 'timeout' %}AI 해석 준비 시간이 조금 길어졌어요.
-다시 시도해주세요.{% else %}AI 해석을 준비하지 못했어요.
-잠시 후 다시 시도해주세요.
-문제가 계속되면 관리자에게 문의해주세요.{% endif %}</p>
+다시 시도해주세요.{% else %}이번에는 AI 성장 해석을 준비하지 못했어요.
+잠시 후 다시 시도해주세요.{% endif %}</p>
                 <button type="button" class="btn btn-primary" data-ai-action="generate" data-ai-label="retry">다시 시도</button>
             </div>
 

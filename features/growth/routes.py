@@ -9,6 +9,7 @@ from features.dates import (
     parse_activity_date_text,
 )
 from features.growth.ai.copy import MSG_DISABLED, MSG_ERROR
+from features.growth.ai.mascot import resolve_growth_ai_mascot
 from features.growth.ai.runtime import (
     FEEDBACK_MAX_LEN,
     can_use_teacher_ai,
@@ -55,6 +56,10 @@ def teacher(child_id):
     view = build_growth_view_model(child, as_of=as_of, is_viewer_mode=False)
     bundle = view.get('bundle')
     view['ai'] = _safe_ai_view(child, as_of, bundle)
+    try:
+        view['ai_mascot'] = resolve_growth_ai_mascot()
+    except Exception:
+        view['ai_mascot'] = {'kind': None, 'url': None}
     view.pop('bundle', None)
     view['dev_as_of_overridden'] = dev_overridden
     view['dev_date_control_enabled'] = is_dev_date_control_enabled()

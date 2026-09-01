@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from features.growth.ai.presenter import present_cited_evidence
+from features.growth.ai.presenter import present_cited_evidence, present_cited_evidence_bundle
 
 
 class PresenterTests(unittest.TestCase):
@@ -87,3 +87,138 @@ class PresenterTests(unittest.TestCase):
         self.assertTrue(any('중앙값 35페이지 / 비교 인원 6명' in value for value in values))
         self.assertTrue(any('학습일당 약 4페이지' in value for value in values))
         self.assertTrue(any(row.get('note') and '출석일' in row['note'] for row in rows))
+
+    def test_group_counts_preserve_all_cited_evidence(self):
+        packet, parsed, expected_ids = _twenty_four_packet()
+        bundle = present_cited_evidence_bundle(packet, parsed)
+        self.assertEqual(bundle['total'], 24)
+        self.assertEqual(len(bundle['items']), 24)
+        self.assertEqual(sum(group['count'] for group in bundle['groups']), 24)
+        grouped_items = [item for group in bundle['groups'] for item in group['items']]
+        self.assertEqual(len(grouped_items), 24)
+        blob = json.dumps(bundle, ensure_ascii=False)
+        for evidence_id in expected_ids:
+            self.assertNotIn(evidence_id, blob)
+        by_key = {group['key']: group for group in bundle['groups']}
+        self.assertEqual(by_key['reading']['count'], 4)
+        self.assertEqual(by_key['korean']['count'], 5)
+        self.assertEqual(by_key['math']['count'], 5)
+        self.assertEqual(by_key['ssen']['count'], 5)
+        self.assertEqual(by_key['learning_activity']['count'], 3)
+        self.assertEqual(by_key['other']['count'], 2)
+        self.assertIn('독서 4', bundle['chips'])
+        math_compact = {row['label']: row['value'] for row in by_key['math']['compact']}
+        self.assertEqual(math_compact['현재'], '6페이지')
+        self.assertEqual(math_compact['동일 학년·동일 교재 중앙값'], '18페이지')
+        self.assertEqual(math_compact['비교 인원'], '3명')
+        self.assertEqual(math_compact['최근 진도 변화'], '자료 없음')
+        reading_compact = {row['label']: row['value'] for row in by_key['reading']['compact']}
+        self.assertEqual(reading_compact['최근 30일'], '활동 0일 · 완독 0권')
+        self.assertEqual(reading_compact['이전 30일'], '활동 12일 · 완독 4권')
+        activity = {row['label']: row['value'] for row in by_key['learning_activity']['compact']}
+        self.assertEqual(activity['최근'], '19일')
+        self.assertEqual(activity['이전'], '19일')
+        self.assertIn('출석일', by_key['learning_activity']['note'])
+        for group in bundle['groups']:
+            self.assertEqual(len(group['items']), group['count'])
+
+
+def _fact(evidence_id, value, available=True):
+    payload = {'evidence_id': evidence_id, 'available': available}
+    if available:
+        payload['value'] = value
+    return payload
+
+
+def _subject(key, label, page, median, n):
+    prefix = f'learning.{key}'
+    return {
+        'subject_key': key,
+        'subject_label': label,
+        'snapshot': {
+            'current_page': _fact(f'{prefix}.snapshot.current_page', page),
+        },
+        'peer': {
+            'median': _fact(f'{prefix}.peer.median', median),
+            'n': _fact(f'{prefix}.peer.n', n),
+        },
+        'page_advance': {
+            'delta': _fact(f'{prefix}.page_advance.delta', None, available=False),
+            'current': _fact(f'{prefix}.page_advance.current', 2),
+        },
+        'plan': {
+            'remaining_workload': _fact(f'{prefix}.plan.remaining_workload', 10),
+        },
+    }
+
+
+def _twenty_four_packet():
+    ids = [
+        'reading.activity_days.current',
+        'reading.activity_days.previous',
+        'reading.completions.current',
+        'reading.completions.previous',
+        'learning.korean.snapshot.current_page',
+        'learning.korean.peer.median',
+        'learning.korean.peer.n',
+        'learning.korean.page_advance.delta',
+        'learning.korean.plan.remaining_workload',
+        'learning.math.snapshot.current_page',
+        'learning.math.peer.median',
+        'learning.math.peer.n',
+        'learning.math.page_advance.delta',
+        'learning.math.plan.remaining_workload',
+        'learning.ssen.snapshot.current_page',
+        'learning.ssen.peer.median',
+        'learning.ssen.peer.n',
+        'learning.ssen.page_advance.delta',
+        'learning.ssen.plan.remaining_workload',
+        'learning.observed_study_days.current',
+        'learning.observed_study_days.previous',
+        'learning.progress_entry_count.current',
+        'points.period.current',
+        'points.cumulative_as_of',
+    ]
+    packet = {
+        'scope': {
+            'current_window': {'start': '2026-11-16', 'end': '2026-12-15'},
+            'previous_window': {'start': '2026-10-17', 'end': '2026-11-15'},
+        },
+        'supporting_facts': {
+            'reading': {
+                'activity_days': {
+                    'current': _fact('reading.activity_days.current', 0),
+                    'previous': _fact('reading.activity_days.previous', 12),
+                },
+                'completions': {
+                    'current': _fact('reading.completions.current', 0),
+                    'previous': _fact('reading.completions.previous', 4),
+                },
+            },
+            'points': {
+                'period': {'current': _fact('points.period.current', 100)},
+                'cumulative_as_of': _fact('points.cumulative_as_of', 500),
+            },
+            'learning': {
+                'progress_entry_count': {
+                    'current': _fact('learning.progress_entry_count.current', 2),
+                },
+                'observed_study_days': {
+                    'attendance': False,
+                    'current': _fact('learning.observed_study_days.current', 19),
+                    'previous': _fact('learning.observed_study_days.previous', 19),
+                },
+                'subjects': {
+                    'korean': _subject('korean', '국어', 4, 10, 2),
+                    'math': _subject('math', '수학', 6, 18, 3),
+                    'ssen': _subject('ssen', '쎈', 8, 12, 3),
+                },
+            },
+        },
+    }
+    parsed = {
+        'summary': {'text': '요약', 'evidence_ids': ids},
+        'observations': [],
+        'suggestions': [],
+    }
+    return packet, parsed, ids

@@ -5,7 +5,7 @@
         '해석에 잘못된 사실이 없는지 확인하고 있어요...',
         '안전하게 보여드릴 수 있는 내용인지 확인하고 있어요...'
     ];
-    const CYCLE_MS = 1800;
+    const CYCLE_MS = 3500;
 
     function config() {
         const node = document.getElementById('growth-ai-config');
@@ -37,6 +37,27 @@
         });
     }
 
+    function prefersReducedMotion() {
+        return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    function applyFocus(index) {
+        const card = document.getElementById('growth-ai-card');
+        if (card) card.setAttribute('data-ai-focus-step', String(index));
+        document.querySelectorAll('[data-ai-step]').forEach(function (el) {
+            const step = Number(el.getAttribute('data-ai-step'));
+            el.classList.toggle('is-focus', step === index);
+            el.classList.remove('is-done', 'is-complete');
+            el.removeAttribute('data-complete');
+        });
+        document.querySelectorAll('[data-ai-mascot-scene]').forEach(function (el) {
+            const step = Number(el.getAttribute('data-ai-mascot-scene'));
+            el.classList.toggle('is-focus', step === index);
+        });
+        const node = document.querySelector('[data-ai-role="cycle"]');
+        if (node) node.textContent = CYCLE[index] || CYCLE[0];
+    }
+
     function fillList(selector, items) {
         const node = document.querySelector(selector);
         if (!node) return;
@@ -48,28 +69,85 @@
         });
     }
 
-    function fillEvidence(rows) {
-        const node = document.querySelector('[data-ai-role="evidence"]');
-        const summary = document.querySelector('[data-ai-role="evidence-summary"]');
-        if (!node) return;
+    function appendHint(parent, note) {
+        if (!note) return;
+        const hint = document.createElement('div');
+        hint.className = 'growth-ai-hint';
+        hint.textContent = note;
+        parent.appendChild(hint);
+    }
+
+    function fillDl(node, rows, dtClass, ddClass) {
         node.innerHTML = '';
         (rows || []).forEach(function (row) {
             const dt = document.createElement('dt');
-            dt.className = 'col-5';
+            if (dtClass) dt.className = dtClass;
             dt.textContent = row.label || '';
             const dd = document.createElement('dd');
-            dd.className = 'col-7';
+            if (ddClass) dd.className = ddClass;
             dd.textContent = row.value || '';
-            if (row.note) {
-                const hint = document.createElement('div');
-                hint.className = 'growth-ai-hint';
-                hint.textContent = row.note;
-                dd.appendChild(hint);
-            }
+            appendHint(dd, row.note);
             node.appendChild(dt);
             node.appendChild(dd);
         });
-        if (summary) summary.textContent = '분석 근거 ' + (rows ? rows.length : 0) + '개 · 보기';
+    }
+
+    function fillEvidence(rows, groups) {
+        const fallback = document.querySelector('[data-ai-role="evidence"]');
+        const title = document.querySelector('[data-ai-role="evidence-title"]');
+        const chips = document.querySelector('[data-ai-role="evidence-chips"]');
+        const block = document.querySelector('[data-ai-role="evidence-block"]');
+        const groupRoot = document.querySelector('[data-ai-role="evidence-groups"]');
+        const items = groups && Array.isArray(groups.items) ? groups.items : (rows || []);
+        const total = groups && typeof groups.total === 'number' ? groups.total : items.length;
+        if (title) title.textContent = '분석 근거 ' + total + '개';
+        if (chips) chips.textContent = (groups && groups.chips) || '';
+        if (block) block.classList.toggle('growth-ai-hidden', !total);
+        if (fallback) fillDl(fallback, items, 'col-5', 'col-7');
+        if (!groupRoot) return;
+        groupRoot.innerHTML = '';
+        const groupList = (groups && groups.groups) || [];
+        groupList.forEach(function (group) {
+            const wrap = document.createElement('details');
+            wrap.className = 'growth-ai-evidence-group';
+            wrap.setAttribute('data-ai-group', '');
+            const summary = document.createElement('summary');
+            summary.appendChild(document.createTextNode(group.label + ' '));
+            const count = document.createElement('span');
+            count.className = 'growth-ai-hint';
+            count.textContent = String(group.count || 0) + '개';
+            summary.appendChild(count);
+            wrap.appendChild(summary);
+            if (group.compact && group.compact.length) {
+                const compact = document.createElement('dl');
+                compact.className = 'growth-ai-compact';
+                fillDl(compact, group.compact);
+                wrap.appendChild(compact);
+            }
+            if (group.note) {
+                const note = document.createElement('p');
+                note.className = 'growth-ai-hint';
+                note.textContent = group.note;
+                wrap.appendChild(note);
+            }
+            const inner = document.createElement('details');
+            inner.className = 'growth-ai-evidence-items';
+            const innerSummary = document.createElement('summary');
+            innerSummary.textContent = '개별 근거 모두 보기';
+            inner.appendChild(innerSummary);
+            const list = document.createElement('dl');
+            list.className = 'growth-ai-evidence-list';
+            fillDl(list, group.items || []);
+            inner.appendChild(list);
+            wrap.appendChild(inner);
+            groupRoot.appendChild(wrap);
+        });
+        if (!groupList.length && items.length) {
+            const list = document.createElement('dl');
+            list.className = 'growth-ai-evidence-list';
+            fillDl(list, items);
+            groupRoot.appendChild(list);
+        }
     }
 
     function renderSuccess(payload, freshlyReady) {
@@ -82,7 +160,7 @@
         const sugWrap = document.querySelector('[data-ai-role="suggestions-wrap"]');
         if (obsWrap) obsWrap.classList.toggle('growth-ai-hidden', !(interpretation.observations || []).length);
         if (sugWrap) sugWrap.classList.toggle('growth-ai-hidden', !(interpretation.suggestions || []).length);
-        fillEvidence(payload.evidence || []);
+        fillEvidence(payload.evidence || [], payload.evidence_groups || null);
         const feedback = document.querySelector('[data-ai-role="feedback"]');
         if (feedback && payload.generation_id) {
             feedback.setAttribute('data-generation-id', String(payload.generation_id));
@@ -108,14 +186,12 @@
         }
 
         function startCycle() {
-            const node = document.querySelector('[data-ai-role="cycle"]');
             cycleIndex = 0;
-            if (node) node.textContent = CYCLE[0];
-            const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            if (reduce) return;
+            applyFocus(0);
+            if (prefersReducedMotion()) return;
             cycleTimer = window.setInterval(function () {
                 cycleIndex = (cycleIndex + 1) % CYCLE.length;
-                if (node) node.textContent = CYCLE[cycleIndex];
+                applyFocus(cycleIndex);
             }, CYCLE_MS);
         }
 
@@ -188,6 +264,10 @@
             const action = event.target.getAttribute('data-ai-action');
             if (action === 'generate') {
                 generate();
+            } else if (action === 'expand-all-evidence') {
+                card.querySelectorAll('[data-ai-role="evidence-wrap"], [data-ai-group], .growth-ai-evidence-items').forEach(function (node) {
+                    node.open = true;
+                });
             } else if (action === 'helpful-yes') {
                 sendFeedback(true, null);
                 const done = document.querySelector('[data-ai-role="feedback-done"]');

@@ -15,7 +15,13 @@ MSG_LOADING_HEADER = 'AI 성장 해석을 준비하고 있어요'
 MSG_LOADING_WAIT = '잠시만 기다려주세요!'
 MSG_LOADING_BODY = (
     '성장 데이터를 정리하고\n'
-    'AI 해석과 검증을 진행하고 있어요.'
+    'AI 해석과 검증을 차례대로 진행하고 있어요.'
+)
+MSG_LOADING_STEPS = (
+    '성장 데이터 정리',
+    'AI가 기록의 흐름 해석',
+    '사실이 맞는지 확인',
+    '안전하게 보여드릴 수 있는지 확인',
 )
 MSG_LOADING_CYCLE = (
     '성장 데이터를 차근차근 정리하고 있어요...',
@@ -37,9 +43,8 @@ MSG_QUOTA = (
     '내일 다시 이용해주세요.'
 )
 MSG_ERROR = (
-    'AI 해석을 준비하지 못했어요.\n'
-    '잠시 후 다시 시도해주세요.\n'
-    '문제가 계속되면 관리자에게 문의해주세요.'
+    '이번에는 AI 성장 해석을 준비하지 못했어요.\n'
+    '잠시 후 다시 시도해주세요.'
 )
 MSG_TIMEOUT = (
     'AI 해석 준비 시간이 조금 길어졌어요.\n'
@@ -57,6 +62,10 @@ CARD_TITLE = 'AI 성장 해석'
 OBS_TITLE = '관찰한 점'
 SUG_TITLE = '함께 살펴볼 점'
 EVIDENCE_TITLE = '분석 근거'
+EVIDENCE_VIEW = '분석 근거 보기'
+EVIDENCE_EXPAND_ALL = '모든 근거 펼쳐보기'
+EVIDENCE_ITEMS = '개별 근거 모두 보기'
+EVIDENCE_LINKED = '이 해석에 연결된 근거'
 FEEDBACK_PROMPT = '이 해석이 도움이 되었나요?'
 FEEDBACK_NEGATIVE_PROMPT = '어떤 점이 이상했나요?'
 FEEDBACK_PLACEHOLDER = '사실과 다른 부분, 이해하기 어려운 표현 등을 알려주세요.'
