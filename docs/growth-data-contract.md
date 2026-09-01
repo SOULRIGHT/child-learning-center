@@ -371,8 +371,9 @@ operational ledgers
 
 teacher whitelist packet은 구현되어 있다.
 interpretation generator v1도 구현되어 있다.
-**production Growth HTML/route는 아직 generator를 호출하지 않는다.**
-B3A deterministic factual validator는 구현되어 있다. Google Model Armor / retry UI는 미구현이다.
+**production Growth HTML/route는 아직 generator / validator / safety provider를 호출하지 않는다.**
+B3A deterministic factual validator와 B3B AWS Bedrock Guardrails safety provider는 구현되어 있다.
+Google Model Armor / retry UI는 미구현이다.
 
 ```
 DB / raw ORM
@@ -382,6 +383,8 @@ DB / raw ORM
     → OpenAIGrowthInterpretationProvider       # 미연결, 독립 provider
     → growth_teacher_interpretation_v1
     → validate_teacher_interpretation()        # B3A, production 미연결
+    → SafetyProvider.check_response(text)      # B3B, production 미연결
+                                               # text = 사용자 노출 자연어만
 ```
 
 packet은 bundle/ORM dump가 아니라 READ-ONLY projection이다.
@@ -410,6 +413,13 @@ generator v1:
 - JSON 직렬화 가능 (ISO date string)
 
 LLM이 직접 ORM/SQL/원장/cache/notes를 탐색하는 구조는 사용하지 않는다.
+
+B3B safety는 사용자 노출 자연어만 AWS Bedrock Guardrails로 보낸다.
+Evidence Packet / evidence_ids / prompt / child·center identifiers / DB data는 AWS에 보내지 않는다.
+
+future extension (미구현): Reading Qualitative는 별도 input privacy guardrail을 두고
+`ApplyGuardrail(source="INPUT")`로 raw `review_text` PII를 ANONYMIZE한 뒤에만 LLM으로 전달하는 구조를 검토한다.
+NAME detection은 책 등장인물명도 마스킹할 수 있으므로 synthetic reading-journal eval 후 정책을 확정한다.
 
 ---
 

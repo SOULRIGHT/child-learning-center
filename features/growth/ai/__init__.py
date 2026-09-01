@@ -15,6 +15,14 @@ from features.growth.ai.schema import (
     OUTPUT_SCHEMA_VERSION,
     structured_output_format,
 )
+from features.growth.ai.safety import (
+    SafetyConfigError,
+    SafetyDecision,
+    SafetyError,
+    SafetyProvider,
+    visible_interpretation_text,
+)
+from features.growth.ai.bedrock_safety import AwsBedrockGuardrailSafetyProvider
 from features.growth.ai.validator import (
     ValidationResult,
     Violation,
@@ -23,6 +31,7 @@ from features.growth.ai.validator import (
 )
 
 __all__ = [
+    'AwsBedrockGuardrailSafetyProvider',
     'GenerationResult',
     'GrowthInterpretationAPIError',
     'GrowthInterpretationConfigError',
@@ -34,9 +43,14 @@ __all__ = [
     'INTERPRETATION_JSON_SCHEMA',
     'OUTPUT_SCHEMA_VERSION',
     'OpenAIGrowthInterpretationProvider',
+    'SafetyConfigError',
+    'SafetyDecision',
+    'SafetyError',
+    'SafetyProvider',
     'ValidationResult',
     'Violation',
     'collect_evidence_index',
     'structured_output_format',
     'validate_teacher_interpretation',
+    'visible_interpretation_text',
 ]
