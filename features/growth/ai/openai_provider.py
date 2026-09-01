@@ -34,9 +34,9 @@ class OpenAIGrowthInterpretationProvider(GrowthInterpretationProvider):
     def model(self):
         return self._model or os.environ.get(MODEL_ENV) or DEFAULT_GROWTH_AI_MODEL
 
-    def generate(self, packet) -> GenerationResult:
+    def generate(self, packet, timeout_s=None) -> GenerationResult:
         payload = _serialize_packet(packet)
-        client = self._client or self._build_client()
+        client = self._request_client(timeout_s)
         started = time.perf_counter()
         try:
             response = client.responses.create(
@@ -64,12 +64,23 @@ class OpenAIGrowthInterpretationProvider(GrowthInterpretationProvider):
             latency_ms=latency_ms,
         )
 
-    def _build_client(self):
+    def _request_client(self, timeout_s):
+        if self._client is not None:
+            if timeout_s is not None and hasattr(self._client, 'with_options'):
+                return self._client.with_options(timeout=float(timeout_s), max_retries=0)
+            return self._client
+        return self._build_client(timeout_s=timeout_s)
+
+    def _build_client(self, timeout_s=None):
         api_key = self._api_key or os.environ.get(API_KEY_ENV)
         if not api_key:
             raise GrowthInterpretationConfigError('OPENAI_API_KEY is not set')
         from openai import OpenAI
-        return OpenAI(api_key=api_key)
+        kwargs = {'api_key': api_key}
+        if timeout_s is not None:
+            kwargs['timeout'] = float(timeout_s)
+            kwargs['max_retries'] = 0
+        return OpenAI(**kwargs)
 
 
 def _serialize_packet(packet):

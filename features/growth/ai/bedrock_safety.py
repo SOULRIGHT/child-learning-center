@@ -29,7 +29,7 @@ class AwsBedrockGuardrailSafetyProvider(SafetyProvider):
         self._guardrail_version = guardrail_version
         self._region = region
 
-    def check_response(self, text) -> SafetyDecision:
+    def check_response(self, text, timeout_s=None) -> SafetyDecision:
         payload = _visible_text(text)
         if not payload:
             return SafetyDecision(
@@ -39,7 +39,7 @@ class AwsBedrockGuardrailSafetyProvider(SafetyProvider):
                 reason='empty output is not safety-checked',
             )
         guardrail_id, guardrail_version = self._require_guardrail()
-        client = self._client or self._build_client()
+        client = self._client or self._build_client(timeout_s=timeout_s)
         started = time.perf_counter()
         try:
             response = client.apply_guardrail(
@@ -93,12 +93,21 @@ class AwsBedrockGuardrailSafetyProvider(SafetyProvider):
             raise SafetyConfigError('GROWTH_SAFETY_GUARDRAIL_ID/VERSION is not set')
         return guardrail_id, guardrail_version
 
-    def _build_client(self):
+    def _build_client(self, timeout_s=None):
         region = self._region or os.environ.get('AWS_REGION') or os.environ.get('AWS_DEFAULT_REGION')
         if not region:
             raise SafetyConfigError('AWS_REGION is not set')
         import boto3
-        return boto3.client('bedrock-runtime', region_name=region)
+        kwargs = {'region_name': region}
+        if timeout_s is not None:
+            from botocore.config import Config
+            remaining = max(1.0, float(timeout_s))
+            kwargs['config'] = Config(
+                connect_timeout=min(3.0, remaining),
+                read_timeout=max(1.0, remaining),
+                retries={'max_attempts': 1, 'mode': 'standard'},
+            )
+        return boto3.client('bedrock-runtime', **kwargs)
 
 
 def _visible_text(text):

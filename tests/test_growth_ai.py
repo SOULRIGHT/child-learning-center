@@ -295,8 +295,8 @@ class GrowthAIOpenAIProviderTests(unittest.TestCase):
         self.assertNotIn('features.growth.ai', service_src)
         from features.growth import routes as growth_routes
         routes_src = inspect.getsource(growth_routes)
-        self.assertNotIn('features.growth.ai', routes_src)
         self.assertNotIn('OpenAIGrowthInterpretationProvider', routes_src)
+        self.assertNotIn('apply_guardrail', routes_src)
 
 
 def _load_smoke_module():

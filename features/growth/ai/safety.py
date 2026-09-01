@@ -31,7 +31,7 @@ class SafetyDecision:
 class SafetyProvider:
     """check_response(text) -> SafetyDecision. text는 사용자 노출 자연어만."""
 
-    def check_response(self, text) -> SafetyDecision:
+    def check_response(self, text, timeout_s=None) -> SafetyDecision:
         raise NotImplementedError
 
 

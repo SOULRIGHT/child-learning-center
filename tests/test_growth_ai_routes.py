@@ -1,0 +1,236 @@
+"""Teacher Growth AI routes/UI. 실제 OpenAI/AWS 호출 없음."""
+from __future__ import annotations
+
+import json
+import os
+import unittest
+from datetime import date
+from unittest.mock import patch
+
+from tests.helpers import bootstrap_test_app
+
+app, db = bootstrap_test_app()
+
+from app import VIEWER_ALLOWED_ENDPOINTS, VIEWER_ROLE_NAME, Child, User  # noqa: E402
+from feature_models import GROWTH_AI_STATUS_SUCCESS, GrowthAIFeedback, GrowthAIGeneration  # noqa: E402
+from features.growth.ai.hashing import packet_hash, runtime_signature
+from features.growth.ai.runtime import TeacherAIResult, current_runtime_parts
+from features.growth.ai.schema import OUTPUT_SCHEMA_VERSION
+from tests.test_growth_ai_validator import _packet  # noqa: E402
+
+
+AS_OF = date(2026, 12, 15)
+
+
+def _pass_output():
+    return {
+        'schema_version': OUTPUT_SCHEMA_VERSION,
+        'summary': {
+            'text': '최근 독서 활동일은 5일입니다.',
+            'evidence_ids': ['reading.activity_days.current'],
+        },
+        'observations': [
+            {
+                'text': '최근 독서 활동일은 5일입니다.',
+                'evidence_ids': ['reading.activity_days.current'],
+            }
+        ],
+        'suggestions': [
+            {
+                'text': '학습 계획이 있으면 남은 학습량도 함께 보면 좋겠습니다.',
+                'evidence_ids': ['learning.math.plan.remaining_workload'],
+                'conditional': True,
+            }
+        ],
+    }
+
+
+class GrowthAIRouteTests(unittest.TestCase):
+    def setUp(self):
+        self.ctx = app.app_context()
+        self.ctx.push()
+        db.session.remove()
+        db.drop_all()
+        db.create_all()
+        self.teacher = User(
+            username='ai_route_teacher',
+            name='AI라우트교사',
+            role='돌봄선생님',
+            email='ai-route@example.test',
+            password_hash='',
+        )
+        self.viewer = User(
+            username='ai_route_viewer',
+            name='AI열람',
+            role=VIEWER_ROLE_NAME,
+            email='ai-viewer@example.test',
+            password_hash='',
+        )
+        self.general = User(
+            username='ai_route_general',
+            name='AI일반',
+            role='일반사용자',
+            email='ai-general@example.test',
+            password_hash='',
+        )
+        self.child = Child(name='라우트아동', grade=2, viewer_slug='airoutetchildslugxxx')
+        db.session.add_all([self.teacher, self.viewer, self.general, self.child])
+        db.session.commit()
+        self.client = app.test_client()
+        self.env = patch.dict(os.environ, {
+            'GROWTH_AI_ENABLED': 'true',
+            'GROWTH_SAFETY_GUARDRAIL_VERSION': '1',
+        }, clear=False)
+        self.env.start()
+        self.packet_patch = patch(
+            'features.growth.ai.runtime.build_current_packet',
+            return_value=_packet(),
+        )
+        self.packet_patch.start()
+
+    def tearDown(self):
+        self.packet_patch.stop()
+        self.env.stop()
+        db.session.remove()
+        self.ctx.pop()
+
+    def _login(self, user):
+        with self.client.session_transaction() as sess:
+            sess['_user_id'] = str(user.id)
+            sess['_fresh'] = True
+
+    def _url(self, suffix=''):
+        return f'/children/{self.child.id}/growth{suffix}'
+
+    def test_unauthenticated_generate_rejected(self):
+        response = self.client.post(self._url('/ai/generate'))
+        self.assertIn(response.status_code, (302, 401))
+
+    def test_viewer_generate_rejected(self):
+        self._login(self.viewer)
+        response = self.client.post(self._url('/ai/generate'))
+        self.assertEqual(response.status_code, 302)
+
+    def test_non_teacher_generate_rejected(self):
+        self._login(self.general)
+        response = self.client.post(self._url('/ai/generate'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_missing_child_rejected(self):
+        self._login(self.teacher)
+        response = self.client.post('/children/999999/growth/ai/generate')
+        self.assertEqual(response.status_code, 404)
+
+    def test_get_does_not_auto_generate(self):
+        self._login(self.teacher)
+        with patch(
+            'features.growth.routes.generate_teacher_growth_interpretation'
+        ) as generate:
+            response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 200)
+        generate.assert_not_called()
+        body = response.get_data(as_text=True)
+        self.assertIn('발견된 변화', body)
+        self.assertIn('AI 성장 해석 만들기', body)
+        self.assertIn('data-ai-action="generate"', body)
+        self.assertIn('growth-ai-mascot', body)
+        self.assertNotIn('reading.activity_days.current', body)
+        self.assertNotIn('learning.math.peer.median', body)
+
+    def test_disabled_flag_keeps_growth_page(self):
+        self._login(self.teacher)
+        with patch.dict(os.environ, {'GROWTH_AI_ENABLED': ''}, clear=False):
+            response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertIn('발견된 변화', body)
+        self.assertIn('AI 성장 해석 기능을 현재 사용할 수 없습니다', body)
+
+    def test_cached_result_renders_without_ids(self):
+        packet = _packet()
+        db.session.add(GrowthAIGeneration(
+            child_id=self.child.id,
+            requested_by_user_id=self.teacher.id,
+            packet_hash=packet_hash(packet),
+            runtime_signature=runtime_signature(current_runtime_parts()),
+            as_of=AS_OF,
+            status=GROWTH_AI_STATUS_SUCCESS,
+            parsed_output=_pass_output(),
+        ))
+        db.session.commit()
+        self._login(self.teacher)
+        body = self.client.get(self._url()).get_data(as_text=True)
+        self.assertIn('최근 독서 활동일은 5일입니다.', body)
+        self.assertIn('관찰한 점', body)
+        self.assertIn('함께 살펴볼 점', body)
+        self.assertIn('분석 근거', body)
+        self.assertNotIn('reading.activity_days.current', body)
+        self.assertNotIn('learning.math.plan.remaining_workload', body)
+        self.assertIn('data-ai-state="success"', body)
+
+    def test_stale_state_renders(self):
+        db.session.add(GrowthAIGeneration(
+            child_id=self.child.id,
+            requested_by_user_id=self.teacher.id,
+            packet_hash='0' * 64,
+            runtime_signature=runtime_signature(current_runtime_parts()),
+            as_of=AS_OF,
+            status=GROWTH_AI_STATUS_SUCCESS,
+            parsed_output=_pass_output(),
+        ))
+        db.session.commit()
+        self._login(self.teacher)
+        body = self.client.get(self._url()).get_data(as_text=True)
+        self.assertIn('성장 데이터가 업데이트됐어요', body)
+        self.assertIn('새로 분석하기', body)
+        self.assertNotIn('data-ai-state="success"', body)
+
+    def test_generate_json_success_and_feedback(self):
+        self._login(self.teacher)
+        with patch('features.growth.routes.generate_teacher_growth_interpretation') as generate:
+            generate.return_value = TeacherAIResult(
+                ok=True,
+                state='success',
+                generation_id=99,
+                interpretation={'summary': '요약', 'observations': ['관찰'], 'suggestions': ['제안']},
+                evidence=[{'label': '최근 독서 활동일', 'value': '5일', 'note': None}],
+            )
+            response = self.client.post(self._url('/ai/generate'))
+        payload = response.get_json()
+        self.assertTrue(payload['ok'])
+        self.assertNotIn('reading.activity_days', json.dumps(payload))
+        row = GrowthAIGeneration(
+            child_id=self.child.id,
+            requested_by_user_id=self.teacher.id,
+            packet_hash='1' * 64,
+            runtime_signature='2' * 64,
+            as_of=AS_OF,
+            status=GROWTH_AI_STATUS_SUCCESS,
+            parsed_output=_pass_output(),
+        )
+        db.session.add(row)
+        db.session.commit()
+        feedback = self.client.post(
+            self._url('/ai/feedback'),
+            json={'generation_id': row.id, 'helpful': False, 'comment': '이해하기 어려워요'},
+        )
+        self.assertEqual(feedback.status_code, 200)
+        row = GrowthAIFeedback.query.one()
+        self.assertEqual(row.comment, '이해하기 어려워요')
+        self.assertFalse(row.helpful)
+
+    def test_ai_failure_does_not_break_growth_page(self):
+        self._login(self.teacher)
+        with patch('features.growth.routes.load_teacher_ai_view', side_effect=RuntimeError('boom')):
+            response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertIn('발견된 변화', body)
+        self.assertIn('AI 성장 해석', body)
+
+    def test_viewer_allowlist_excludes_ai_endpoints(self):
+        self.assertNotIn('growth.generate_ai', VIEWER_ALLOWED_ENDPOINTS)
+        self.assertNotIn('growth.feedback_ai', VIEWER_ALLOWED_ENDPOINTS)
+        endpoints = {rule.endpoint for rule in app.url_map.iter_rules()}
+        self.assertIn('growth.generate_ai', endpoints)
+        self.assertIn('growth.feedback_ai', endpoints)

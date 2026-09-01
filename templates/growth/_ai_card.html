@@ -1,0 +1,117 @@
+{% set ai_state = ai.state if ai else 'idle' %}
+<section class="mb-4" id="growth-ai-card" data-ai-state="{{ ai_state }}">
+    <div class="card growth-ai-card">
+        <div class="card-body">
+            <div class="d-flex align-items-start gap-3 mb-3">
+                <svg class="growth-ai-mascot" viewBox="0 0 64 64" aria-hidden="true">
+                    <rect x="10" y="16" width="36" height="36" rx="8" fill="#ede9fe"/>
+                    <path d="M18 24h20M18 32h16M18 40h12" stroke="#7c3aed" stroke-width="3" stroke-linecap="round"/>
+                    <circle cx="46" cy="18" r="8" fill="#fbbf24"/>
+                    <path d="M46 12v4M46 20v4M40 18h4M48 18h4" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <div>
+                    <h5 class="mb-1">AI 성장 해석</h5>
+                    <p class="growth-ai-hint mb-0" data-ai-role="subtitle">교사의 관찰을 돕는 참고자료입니다.</p>
+                </div>
+            </div>
+
+            <div data-ai-panel="disabled" class="{% if ai_state != 'disabled' %}growth-ai-hidden{% endif %}">
+                <p class="mb-0" style="white-space: pre-line;">{{ ai.message if ai and ai.message else 'AI 성장 해석 기능을 현재 사용할 수 없습니다.
+잠시 후 다시 이용하거나 관리자에게 문의해주세요.' }}</p>
+            </div>
+
+            <div data-ai-panel="idle" class="{% if ai_state != 'idle' %}growth-ai-hidden{% endif %}">
+                <p style="white-space: pre-line;">독서·학습·포인트 데이터를 바탕으로
+최근 성장 흐름을 AI가 함께 살펴봐요.
+
+생성된 해석은 사실 확인과 안전성 검사를 거친 뒤 표시됩니다.</p>
+                <p class="growth-ai-hint">AI 해석은 교사의 관찰을 돕는 참고자료입니다.</p>
+                <p class="growth-ai-hint">새로운 AI 해석은 계정당 하루 최대 30회 생성할 수 있어요.</p>
+                <button type="button" class="btn btn-primary" data-ai-action="generate">AI 성장 해석 만들기</button>
+            </div>
+
+            <div data-ai-panel="loading" class="growth-ai-hidden">
+                <p class="fw-semibold mb-1">AI 성장 해석을 준비하고 있어요</p>
+                <p class="mb-2">잠시만 기다려주세요!</p>
+                <p class="growth-ai-hint" style="white-space: pre-line;">성장 데이터를 정리하고
+AI 해석과 검증을 진행하고 있어요.</p>
+                <p class="growth-ai-steps mb-0" data-ai-role="cycle">성장 데이터를 차근차근 정리하고 있어요...</p>
+            </div>
+
+            <div data-ai-panel="success" class="{% if ai_state != 'success' %}growth-ai-hidden{% endif %}">
+                <p class="growth-ai-ready growth-ai-hidden" data-ai-role="ready">AI 성장 해석이 준비됐어요!</p>
+                <p class="mb-3" data-ai-role="summary">{% if ai and ai.interpretation %}{{ ai.interpretation.summary }}{% endif %}</p>
+                <div data-ai-role="observations-wrap" class="{% if not ai or not ai.interpretation or not ai.interpretation.observations %}growth-ai-hidden{% endif %}">
+                    <h6>관찰한 점</h6>
+                    <ul class="growth-ai-obs" data-ai-role="observations">
+                        {% if ai and ai.interpretation %}
+                        {% for item in ai.interpretation.observations %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
+                        {% endif %}
+                    </ul>
+                </div>
+                <div data-ai-role="suggestions-wrap" class="{% if not ai or not ai.interpretation or not ai.interpretation.suggestions %}growth-ai-hidden{% endif %}">
+                    <h6>함께 살펴볼 점</h6>
+                    <ul class="growth-ai-obs" data-ai-role="suggestions">
+                        {% if ai and ai.interpretation %}
+                        {% for item in ai.interpretation.suggestions %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
+                        {% endif %}
+                    </ul>
+                </div>
+                <details class="mt-3" data-ai-role="evidence-wrap">
+                    <summary data-ai-role="evidence-summary">분석 근거 {% if ai and ai.evidence %}{{ ai.evidence|length }}개{% endif %} · 보기</summary>
+                    <dl class="row small mt-3 mb-0" data-ai-role="evidence">
+                        {% if ai and ai.evidence %}
+                        {% for row in ai.evidence %}
+                        <dt class="col-5">{{ row.label }}</dt>
+                        <dd class="col-7">{{ row.value }}{% if row.note %}<div class="growth-ai-hint">{{ row.note }}</div>{% endif %}</dd>
+                        {% endfor %}
+                        {% endif %}
+                    </dl>
+                </details>
+                <div class="mt-4" data-ai-role="feedback" data-generation-id="{% if ai %}{{ ai.generation_id or '' }}{% endif %}">
+                    <p class="mb-2">이 해석이 도움이 되었나요?</p>
+                    <div class="growth-ai-feedback-btns">
+                        <button type="button" class="btn btn-outline-primary btn-sm" data-ai-action="helpful-yes">좋아요</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-ai-action="helpful-no">아쉬워요</button>
+                    </div>
+                    <div class="growth-ai-hidden mt-3" data-ai-role="feedback-form">
+                        <label class="form-label" for="growth-ai-comment">어떤 점이 이상했나요?</label>
+                        <textarea id="growth-ai-comment" class="form-control" rows="3" maxlength="1000" placeholder="사실과 다른 부분, 이해하기 어려운 표현 등을 알려주세요."></textarea>
+                        <button type="button" class="btn btn-primary btn-sm mt-2" data-ai-action="feedback-submit">의견 보내기</button>
+                    </div>
+                    <p class="growth-ai-hint mt-2 growth-ai-hidden" data-ai-role="feedback-done">의견을 남겨 주셔서 감사합니다.</p>
+                </div>
+            </div>
+
+            <div data-ai-panel="stale" class="{% if ai_state != 'stale' %}growth-ai-hidden{% endif %}">
+                <p style="white-space: pre-line;" data-ai-role="stale-message">{{ ai.message if ai and ai.message else '성장 데이터가 업데이트됐어요.
+최신 데이터를 기준으로 AI 해석을 다시 만들 수 있습니다.' }}</p>
+                <button type="button" class="btn btn-primary" data-ai-action="generate" data-ai-label="refresh">새로 분석하기</button>
+            </div>
+
+            <div data-ai-panel="error" class="{% if ai_state not in ['error', 'timeout'] %}growth-ai-hidden{% endif %}">
+                <p style="white-space: pre-line;" data-ai-role="error-message">{% if ai_state == 'timeout' %}AI 해석 준비 시간이 조금 길어졌어요.
+다시 시도해주세요.{% else %}AI 해석을 준비하지 못했어요.
+잠시 후 다시 시도해주세요.
+문제가 계속되면 관리자에게 문의해주세요.{% endif %}</p>
+                <button type="button" class="btn btn-primary" data-ai-action="generate" data-ai-label="retry">다시 시도</button>
+            </div>
+
+            <div data-ai-panel="quota" class="{% if ai_state != 'quota' %}growth-ai-hidden{% endif %}">
+                <p class="mb-0" style="white-space: pre-line;">오늘 AI 성장 해석 생성 횟수를 모두 사용했어요.
+내일 다시 이용해주세요.</p>
+            </div>
+        </div>
+    </div>
+</section>
+<script id="growth-ai-config" type="application/json">{{ {
+    'generateUrl': url_for('growth.generate_ai', child_id=child.id),
+    'feedbackUrl': url_for('growth.feedback_ai', child_id=child.id),
+    'timeoutMs': ai.timeout_ms if ai and ai.timeout_ms else 21000,
+    'state': ai_state,
+    'asOf': as_of.isoformat() if as_of else none
+} | tojson }}</script>

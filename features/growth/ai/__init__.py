@@ -1,4 +1,4 @@
-"""Teacher Growth interpretation generator. production UI/route에 연결하지 않는다."""
+"""Teacher Growth AI runtime. production UI는 generate 버튼으로만 신규 생성을 시작한다."""
 
 from features.growth.ai.openai_provider import OpenAIGrowthInterpretationProvider
 from features.growth.ai.prompt import GROWTH_TEACHER_PROMPT_VERSION, GROWTH_TEACHER_SYSTEM_PROMPT

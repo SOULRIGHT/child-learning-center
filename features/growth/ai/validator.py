@@ -8,6 +8,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+FACTUAL_VALIDATOR_VERSION = 'growth_teacher_factual_validator_v1'
+
 CODE_EMPTY_EVIDENCE_IDS = 'EMPTY_EVIDENCE_IDS'
 CODE_UNKNOWN_EVIDENCE_ID = 'UNKNOWN_EVIDENCE_ID'
 CODE_UNSUPPORTED_NUMERIC_CLAIM = 'UNSUPPORTED_NUMERIC_CLAIM'

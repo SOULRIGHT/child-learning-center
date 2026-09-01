@@ -371,20 +371,19 @@ operational ledgers
 
 teacher whitelist packet은 구현되어 있다.
 interpretation generator v1도 구현되어 있다.
-**production Growth HTML/route는 아직 generator / validator / safety provider를 호출하지 않는다.**
-B3A deterministic factual validator와 B3B AWS Bedrock Guardrails safety provider는 구현되어 있다.
-Google Model Armor / retry UI는 미구현이다.
+**production Growth HTML은 교사 버튼으로만 AI generation을 시작한다. GET은 cache/stale만 읽고 OpenAI/AWS를 호출하지 않는다.**
+B3A deterministic factual validator와 B3B AWS Bedrock Guardrails는 성공 저장 전에 통과해야 한다.
+`GROWTH_AI_ENABLED`가 꺼져 있으면 deterministic Growth만 표시한다.
 
 ```
 DB / raw ORM
     → deterministic metrics_bundle
     → InsightCandidate / top_candidates
     → build_teacher_evidence_packet()          # growth_teacher_evidence_v1
-    → OpenAIGrowthInterpretationProvider       # 미연결, 독립 provider
-    → growth_teacher_interpretation_v1
-    → validate_teacher_interpretation()        # B3A, production 미연결
-    → SafetyProvider.check_response(text)      # B3B, production 미연결
-                                               # text = 사용자 노출 자연어만
+    → generate_teacher_growth_interpretation() # B4, 버튼 시에만
+        → OpenAIGrowthInterpretationProvider
+        → validate_teacher_interpretation()    # B3A
+        → SafetyProvider.check_response(text)  # B3B, 사용자 노출 자연어만
 ```
 
 packet은 bundle/ORM dump가 아니라 READ-ONLY projection이다.

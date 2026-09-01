@@ -6176,6 +6176,8 @@ from feature_models import (  # noqa: E402
     ExemptionTicket,
     ExemptionTicketSource,
     ExemptionUsage,
+    GrowthAIGeneration,
+    GrowthAIFeedback,
 )
 from features.books.routes import books_bp  # noqa: E402
 from features.reading.routes import reading_bp  # noqa: E402

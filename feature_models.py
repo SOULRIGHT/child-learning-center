@@ -471,3 +471,70 @@ class ExemptionUsage(db.Model):
             f'<ExemptionUsage {self.id} ticket={self.exemption_ticket_id} '
             f'{self.subject_key} {self.used_on}>'
         )
+
+
+GROWTH_AI_STATUS_PENDING = 'PENDING'
+GROWTH_AI_STATUS_SUCCESS = 'SUCCESS'
+GROWTH_AI_STATUS_FAILED = 'FAILED'
+
+
+class GrowthAIGeneration(db.Model):
+    """교사 Growth AI 해석 1회 요청. Evidence Packet/prompt/원문 오류는 저장하지 않는다."""
+    __tablename__ = 'growth_ai_generation'
+    __table_args__ = (
+        Index(
+            'ix_growth_ai_gen_child_hash_runtime',
+            'child_id',
+            'packet_hash',
+            'runtime_signature',
+        ),
+        Index('ix_growth_ai_gen_user_created', 'requested_by_user_id', 'created_at'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    child_id = db.Column(db.Integer, db.ForeignKey('child.id'), nullable=False, index=True)
+    requested_by_user_id = db.Column(
+        db.Integer, db.ForeignKey('user.id'), nullable=False, index=True,
+    )
+    packet_hash = db.Column(db.String(64), nullable=False, index=True)
+    runtime_signature = db.Column(db.String(64), nullable=False)
+    as_of = db.Column(db.Date, nullable=False)
+    status = db.Column(db.String(16), nullable=False)
+    parsed_output = db.Column(db.JSON, nullable=True)
+    failure_code = db.Column(db.String(64), nullable=True)
+    generator_provider = db.Column(db.String(32), nullable=True)
+    model = db.Column(db.String(64), nullable=True)
+    prompt_version = db.Column(db.String(64), nullable=True)
+    output_schema_version = db.Column(db.String(64), nullable=True)
+    factual_validator_version = db.Column(db.String(64), nullable=True)
+    safety_provider = db.Column(db.String(64), nullable=True)
+    safety_guardrail_version = db.Column(db.String(64), nullable=True)
+    attempt_count = db.Column(db.Integer, nullable=False, default=1)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self):
+        return f'<GrowthAIGeneration {self.id} {self.status}>'
+
+
+class GrowthAIFeedback(db.Model):
+    """교사 Growth AI 해석 피드백. LLM/AWS로 전달하지 않는다."""
+    __tablename__ = 'growth_ai_feedback'
+    __table_args__ = (
+        UniqueConstraint(
+            'generation_id', 'user_id', name='uq_growth_ai_feedback_generation_user',
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    generation_id = db.Column(
+        db.Integer, db.ForeignKey('growth_ai_generation.id'), nullable=False, index=True,
+    )
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    helpful = db.Column(db.Boolean, nullable=False)
+    comment = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<GrowthAIFeedback {self.id} gen={self.generation_id}>'

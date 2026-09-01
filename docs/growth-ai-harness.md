@@ -31,11 +31,21 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
   - Evidence Packet / evidence_ids / system prompt / child·center identifiers / DB data는 AWS에 보내지 않는다
   - AWS Guardrail console이 Content Filters / Denied Topics / Sensitive Information 정책을 담당한다. Python에서 욕설 목록이나 topic classifier를 복제하지 않는다
   - `action=NONE` → safe, `GUARDRAIL_INTERVENED` → reject, API/timeout/auth error → fail closed
-  - retry / rate limit / production route 연결 없음
-- Google Model Armor / secondary safety provider / teacher AI UI: 미구현
+- B4 Teacher AI Runtime / UX: `generate_teacher_growth_interpretation(...)`
+  - user-triggered generation only (`[ AI 성장 해석 만들기 ]`). Growth GET은 API를 호출하지 않음
+  - account/day 30 user-initiated requests (KST, 실패도 1회, cache/조회/내부 retry는 추가 차감 없음)
+  - cache: same child + packet_hash + runtime_signature + SUCCESS
+  - stale: packet hash mismatch. 과거 해석을 최신처럼 표시하지 않음
+  - total deadline 20s (backend authoritative). frontend abort 21s
+  - max 1 internal retry if remaining time allows. AWS safety API 실패는 가능하면 safety만 재시도
+  - kill switch: `GROWTH_AI_ENABLED` (default off). OFF여도 deterministic Growth는 유지
+  - factual validator + AWS safety required before render
+  - friendly evidence UI (raw evidence_id 비노출)
+  - feedback은 DB만 저장. OpenAI/AWS로 전달하지 않음
+  - AI failure never breaks deterministic Growth
+- Google Model Armor / secondary safety provider: 미구현
 - B6 challenger: Gemini 2.5 Flash-Lite
 - final model selection: domain eval 기반
-- production Growth HTML/route는 아직 LLM / B3A validator / AWS Guardrails를 호출하지 않는다
 
 future extension (미구현): Reading Qualitative는 별도 input privacy guardrail을 두고
 `ApplyGuardrail(source="INPUT")`로 raw `review_text`의 PII를 ANONYMIZE한 뒤에만 LLM으로 전달하는 구조를 검토한다.
@@ -48,7 +58,7 @@ cited evidence value(또는 같은 item에서 같은 단위 current/previous 차
 
 env:
 
-- `OPENAI_API_KEY` (required at generate time)
+- `GROWTH_AI_ENABLED` (default off. `1`/`true`/`yes`/`on`일 때만 신규 generation)
 - `GROWTH_AI_MODEL` (optional override)
 - `GROWTH_SAFETY_GUARDRAIL_ID` (required at safety check time)
 - `GROWTH_SAFETY_GUARDRAIL_VERSION` (required at safety check time)

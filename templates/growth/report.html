@@ -114,6 +114,30 @@
     padding: 1.25rem 1.5rem;
   }
   .growth-chart-wrap { height: 220px; }
+  .growth-ai-card {
+    border: 0;
+    border-radius: 16px;
+    box-shadow: var(--card-shadow);
+    border-left: 4px solid #7c3aed;
+  }
+  .growth-ai-mascot {
+    width: 52px;
+    height: 52px;
+    flex: 0 0 52px;
+    animation: growth-ai-breathe 1.8s ease-in-out infinite;
+  }
+  .growth-ai-hint { font-size: 0.85rem; color: #6b7280; }
+  .growth-ai-steps { font-size: 0.9rem; color: #4b5563; }
+  .growth-ai-obs { margin: 0; padding-left: 1.1rem; }
+  .growth-ai-hidden { display: none !important; }
+  .growth-ai-feedback-btns { display: flex; gap: 0.5rem; }
+  @keyframes growth-ai-breathe {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .growth-ai-mascot { animation: none; }
+  }
   @media (max-width: 767.98px) {
     .growth-header .btn { width: 100%; }
     .growth-chart-wrap { height: 200px; }
@@ -155,6 +179,10 @@
             {% endif %}
         </div>
     </div>
+
+    {% if ai %}
+    {% include "growth/_ai_card.html" %}
+    {% endif %}
 
     <section class="mb-4">
         <h5 class="mb-3">발견된 변화</h5>
@@ -570,4 +598,5 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 </script>
+<script src="{{ url_for('static', filename='js/growth-ai.js') }}"></script>
 {% endblock %}
