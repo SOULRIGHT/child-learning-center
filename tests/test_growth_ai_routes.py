@@ -25,8 +25,12 @@ AS_OF = date(2026, 12, 15)
 def _pass_output():
     return {
         'schema_version': OUTPUT_SCHEMA_VERSION,
-        'summary': {
+        'priority_insight': {
             'text': '최근 독서 활동일은 5일입니다.',
+            'evidence_ids': ['reading.activity_days.current'],
+        },
+        'interpretation': {
+            'text': '최근 독서 활동일을 다른 기록과 함께 보면 우선 확인할 변화가 분명합니다.',
             'evidence_ids': ['reading.activity_days.current'],
         },
         'observations': [
@@ -35,13 +39,17 @@ def _pass_output():
                 'evidence_ids': ['reading.activity_days.current'],
             }
         ],
-        'suggestions': [
+        'next_actions': [
             {
                 'text': '학습 계획이 있으면 남은 학습량도 함께 보면 좋겠습니다.',
                 'evidence_ids': ['learning.math.plan.remaining_workload'],
                 'conditional': True,
             }
         ],
+        'next_check': {
+            'text': '다음 비교 시점에 같은 기록을 다시 보면 판단이 더 분명해집니다.',
+            'evidence_ids': ['reading.activity_days.current'],
+        },
     }
 
 
@@ -138,7 +146,10 @@ class GrowthAIRouteTests(unittest.TestCase):
         self.assertIn('AI가 기록의 흐름 해석', body)
         self.assertIn('사실이 맞는지 확인', body)
         self.assertIn('안전하게 보여드릴 수 있는지 확인', body)
-        self.assertIn('data-ai-mascot-scene', body)
+        self.assertIn('보통 5~10초 정도 걸려요', body)
+        self.assertIn('성장 해석을 꼼꼼하게 준비하고 있어요', body)
+        self.assertIn('잠시만 더 기다려주세요', body)
+        self.assertIn('data-stage="organize"', body)
         self.assertIn('prefers-reduced-motion', body)
         self.assertNotIn('현재 AWS', body)
         self.assertNotIn('fake percentage', body)
@@ -146,10 +157,18 @@ class GrowthAIRouteTests(unittest.TestCase):
         self.assertNotIn('%', loading)
         self.assertNotIn('✓', loading)
         self.assertNotIn('완료', loading)
+        waiting = loading.split('data-ai-role="waiting"', 1)[1]
+        self.assertIn('growth-ai-hidden', loading.split('data-ai-role="waiting"', 1)[0][-80:] + waiting[:80])
         self.assertNotIn('AI 성장 해석이 준비됐어요!', loading)
         self.assertIn('growth-ai-hidden', body.split('data-ai-role="ready"', 1)[0][-80:] + body.split('data-ai-role="ready"', 1)[1][:80])
         js = (PROJECT_ROOT / 'static' / 'js' / 'growth-ai.js').read_text(encoding='utf-8')
-        self.assertIn('const CYCLE_MS = 3500', js)
+        self.assertIn('const STAGE_MS = 1500', js)
+        self.assertIn('const MIN_HOLD_MS = 6000', js)
+        self.assertNotIn('const CYCLE_MS = 3500', js)
+        self.assertNotIn('% CYCLE.length', js)
+        self.assertIn("data-stage", js)
+        self.assertIn("'organize'", js)
+        self.assertIn("'waiting'", js)
         self.assertIn('prefers-reduced-motion', js)
         self.assertNotIn('percent', js.lower())
         self.assertNotIn('AWS', js)
@@ -181,7 +200,9 @@ class GrowthAIRouteTests(unittest.TestCase):
         body = self.client.get(self._url()).get_data(as_text=True)
         self.assertIn('최근 독서 활동일은 5일입니다.', body)
         self.assertIn('관찰한 점', body)
-        self.assertIn('함께 살펴볼 점', body)
+        self.assertIn('지금 해볼 일', body)
+        self.assertIn('다음에 확인할 점', body)
+        self.assertIn('가장 먼저 볼 변화', body)
         self.assertIn('분석 근거', body)
         self.assertIn('분석 근거 보기', body)
         self.assertIn('개별 근거 모두 보기', body)
@@ -218,10 +239,13 @@ class GrowthAIRouteTests(unittest.TestCase):
                 generation_id=99,
                 interpretation={'summary': '요약', 'observations': ['관찰'], 'suggestions': ['제안']},
                 evidence=[{'label': '최근 독서 활동일', 'value': '5일', 'note': None}],
+                started=True,
             )
             response = self.client.post(self._url('/ai/generate'))
         payload = response.get_json()
         self.assertTrue(payload['ok'])
+        self.assertTrue(payload['started'])
+        self.assertNotIn('generated_output', json.dumps(payload))
         self.assertNotIn('reading.activity_days', json.dumps(payload))
         row = GrowthAIGeneration(
             child_id=self.child.id,

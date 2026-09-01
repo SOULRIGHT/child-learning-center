@@ -30,6 +30,7 @@ class GenerationResult:
     response_id: str | None
     usage: dict
     latency_ms: int | None = None
+    raw_output: str | None = None
 
 
 class GrowthInterpretationProvider:

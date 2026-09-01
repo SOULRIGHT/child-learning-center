@@ -171,6 +171,16 @@ def _reading_slice(readings, days, days_by_reading, window, as_of):
         day.date for day in days
         if on_or_before(day.date, as_of) and date_in_window(day.date, window)
     }
+    recommended_ids = {
+        reading.id for reading in readings
+        if reading.program_type == PROGRAM_TYPE_RECOMMENDED
+    }
+    recommended_dates = {
+        day.date for day in days
+        if day.child_reading_id in recommended_ids
+        and on_or_before(day.date, as_of)
+        and date_in_window(day.date, window)
+    }
     completed = [
         reading for reading in readings
         if reading.status == STATUS_COMPLETED
@@ -208,6 +218,7 @@ def _reading_slice(readings, days, days_by_reading, window, as_of):
     ]
     return {
         'reading_days': len(reading_dates),
+        'recommended_reading_days': len(recommended_dates),
         'started_count': started_count,
         'completed_count': len(completed),
         'abandoned_count': abandoned_count,
@@ -390,6 +401,7 @@ def metrics_bundle(child_id, as_of=None, window_days=30):
     """reading/progress/points/learning/recent_window_bests 스냅샷을 한 묶음으로 모은다."""
     from features.growth.learning_metrics import learning_metrics
     from features.growth.recent_window_bests import recent_window_bests
+    from features.growth.reward_metrics import reward_metrics
     as_of = resolve_as_of(as_of)
     reading = reading_metrics(child_id, as_of=as_of, window_days=window_days)
     points = points_metrics(child_id, as_of=as_of, window_days=window_days)
@@ -412,4 +424,5 @@ def metrics_bundle(child_id, as_of=None, window_days=30):
             points_payload=points,
             learning_payload=learning,
         ),
+        'rewards': reward_metrics(child_id, as_of=as_of, window_days=window_days),
     }

@@ -60,6 +60,7 @@ def build_teacher_evidence_packet(bundle, selected_candidates=None, *, grade=Non
         'learning': _learning_facts(
             progress, points, learning, recent, selected_ids, selected,
         ),
+        'rewards': _rewards_facts(bundle.get('rewards') or {}),
     }
     packet = {
         'schema_version': SCHEMA_VERSION,
@@ -128,6 +129,18 @@ def _reading_facts(reading, recent, selected_ids):
             'reading.completions',
             current.get('completed_count'),
             previous.get('completed_count'),
+            comparable=completed_ok,
+        ),
+        'recommended_activity_days': _period_pair(
+            'reading.recommended.activity_days',
+            current.get('recommended_reading_days'),
+            previous.get('recommended_reading_days'),
+            comparable=comparable,
+        ),
+        'recommended_completions': _period_pair(
+            'reading.recommended.completions',
+            (current.get('completed_by_program') or {}).get('recommended'),
+            (previous.get('completed_by_program') or {}).get('recommended'),
             comparable=completed_ok,
         ),
     }
@@ -473,6 +486,61 @@ def _period_pair(prefix, current, previous, *, comparable):
             delta,
             available=delta_ok,
             status=None if delta_ok else STATUS_INSUFFICIENT_HISTORY,
+        ),
+    }
+
+
+def _rewards_facts(rewards):
+    usage = rewards.get('exemption_usage') or {}
+    manual = rewards.get('manual_points') or {}
+    event = rewards.get('reading_reward_points') or {}
+    return {
+        'exemption_usage': _period_pair(
+            'rewards.exemption.usage',
+            usage.get('current', 0),
+            usage.get('previous', 0),
+            comparable=True,
+        ),
+        'manual_points': _period_pair(
+            'rewards.manual.points',
+            manual.get('current', 0),
+            manual.get('previous', 0),
+            comparable=True,
+        ),
+        'manual_event_count': _period_pair(
+            'rewards.manual.event_count',
+            manual.get('event_count_current', 0),
+            manual.get('event_count_previous', 0),
+            comparable=True,
+        ),
+        'reading_reward_points': _period_pair(
+            'rewards.reading_event.points',
+            event.get('current', 0),
+            event.get('previous', 0),
+            comparable=True,
+        ),
+        'exemption_peer': _count_peer(
+            'rewards.exemption.usage.peer', usage.get('peer') or {},
+        ),
+        'manual_peer': _count_peer(
+            'rewards.manual.points.peer', manual.get('peer') or {},
+        ),
+    }
+
+
+def _count_peer(prefix, peer):
+    available = peer.get('available') is True
+    return {
+        'median': _measured(
+            f'{prefix}.median',
+            peer.get('median'),
+            available=available,
+            status=None if available else STATUS_INSUFFICIENT_HISTORY,
+        ),
+        'n': _measured(
+            f'{prefix}.n',
+            peer.get('n'),
+            available=peer.get('n') is not None,
         ),
     }
 

@@ -72,8 +72,14 @@ def _cited_ids(parsed_output):
     found = []
     seen = set()
     output = parsed_output if isinstance(parsed_output, dict) else {}
-    items = [output.get('summary')]
+    items = [
+        output.get('priority_insight'),
+        output.get('interpretation'),
+        output.get('next_check'),
+        output.get('summary'),
+    ]
     items.extend(output.get('observations') or [])
+    items.extend(output.get('next_actions') or [])
     items.extend(output.get('suggestions') or [])
     for item in items:
         if not isinstance(item, dict):
@@ -145,10 +151,30 @@ def _format_row(evidence_id, fact, catalog):
 def _label(evidence_id, ctx):
     subject = ctx.get('subject_label') or subject_name(ctx.get('subject_key')) or _subject_from_id(evidence_id)
     period = _period_word(evidence_id)
+    if evidence_id.startswith('reading.recommended.activity_days'):
+        return _join(period, '추천도서 활동일')
+    if evidence_id.startswith('reading.recommended.completions'):
+        return _join(period, '추천도서 완독')
     if evidence_id.startswith('reading.activity_days'):
         return _join(period, '독서 활동일')
     if evidence_id.startswith('reading.completions'):
-        return _join(period, '완독')
+        return _join(period, '완독 수')
+    if evidence_id.startswith('rewards.exemption.usage.peer.median'):
+        return '동일 학년 면제권 사용 중앙값'
+    if evidence_id.startswith('rewards.exemption.usage.peer.n'):
+        return '면제권 비교 인원'
+    if evidence_id.startswith('rewards.exemption.usage'):
+        return _join(period, '면제권 사용')
+    if evidence_id.startswith('rewards.manual.event_count'):
+        return _join(period, '추가 포인트 횟수')
+    if evidence_id.startswith('rewards.manual.points.peer.median'):
+        return '동일 학년 추가 포인트 중앙값'
+    if evidence_id.startswith('rewards.manual.points.peer.n'):
+        return '추가 포인트 비교 인원'
+    if evidence_id.startswith('rewards.manual.points'):
+        return _join(period, '추가 포인트')
+    if evidence_id.startswith('rewards.reading_event.points'):
+        return _join(period, '독서 보상 포인트')
     if evidence_id.startswith('reading.rwb.activity_days'):
         return _join(_rwb_period(evidence_id), '최근 구간 독서 활동일')
     if evidence_id.startswith('reading.rwb.completions'):
@@ -202,7 +228,17 @@ def _value_text(evidence_id, fact, ctx, catalog):
     if fact.get('available') is not True:
         return '자료 없음'
     value = fact.get('value')
-    if '.peer.median' in evidence_id:
+    if 'exemption.usage' in evidence_id and '.peer.n' not in evidence_id:
+        try:
+            return f'{int(round(value))}회'
+        except (TypeError, ValueError):
+            return str(value)
+    if 'manual.event_count' in evidence_id:
+        try:
+            return f'{int(round(value))}회'
+        except (TypeError, ValueError):
+            return str(value)
+    if '.peer.median' in evidence_id and not evidence_id.startswith('rewards.'):
         median_text = _with_unit(value, 'page')
         n_fact = catalog.get(evidence_id.rsplit('.', 1)[0] + '.n') or {}
         if n_fact.get('available') is True:
@@ -306,6 +342,7 @@ _GROUP_ORDER = (
     'math',
     'ssen',
     'learning_activity',
+    'rewards',
     'other',
 )
 
@@ -319,6 +356,10 @@ _KNOWN_SUBJECT_GROUPS = {
 def _group_spec(evidence_id, ctx):
     if evidence_id.startswith('reading.'):
         return 'reading', '독서 활동', '독서'
+    if evidence_id.startswith('rewards.') or evidence_id.startswith('reading.recommended'):
+        if evidence_id.startswith('reading.recommended'):
+            return 'reading', '독서 활동', '독서'
+        return 'rewards', '보상/활동', '보상'
     if (
         evidence_id.startswith('learning.observed_study_days')
         or evidence_id.startswith('learning.progress_entry_count')
@@ -400,6 +441,8 @@ def _compact_for(group_key, ids, catalog):
         return _compact_reading(ids, catalog)
     if group_key == 'learning_activity':
         return _compact_learning_activity(ids, catalog)
+    if group_key == 'rewards':
+        return _compact_rewards(ids, catalog)
     if group_key in _KNOWN_SUBJECT_GROUPS or (
         group_key not in ('other', 'reading', 'learning_activity')
         and any(eid.startswith('learning.') for eid in ids)
@@ -454,7 +497,43 @@ def _compact_reading(ids, catalog):
         rows.append(current)
     if previous:
         rows.append(previous)
+    rec_current = _compact_pair('최근 추천도서', (
+        ('활동', _simple_value('reading.recommended.activity_days.current', catalog) if _id_in(ids, 'reading.recommended.activity_days.current') else None),
+        ('완독', _simple_value('reading.recommended.completions.current', catalog) if _id_in(ids, 'reading.recommended.completions.current') else None),
+    ))
+    rec_previous = _compact_pair('이전 추천도서', (
+        ('활동', _simple_value('reading.recommended.activity_days.previous', catalog) if _id_in(ids, 'reading.recommended.activity_days.previous') else None),
+        ('완독', _simple_value('reading.recommended.completions.previous', catalog) if _id_in(ids, 'reading.recommended.completions.previous') else None),
+    ))
+    if rec_current:
+        rows.append(rec_current)
+    if rec_previous:
+        rows.append(rec_previous)
     return rows
+
+
+def _compact_rewards(ids, catalog):
+    rows = []
+    current = _compact_pair('최근 30일', (
+        ('면제권', _display_value('rewards.exemption.usage.current', catalog) if _id_in(ids, 'rewards.exemption.usage.current') else None),
+        ('추가 포인트', _display_value('rewards.manual.event_count.current', catalog) if _id_in(ids, 'rewards.manual.event_count.current') else None),
+    ))
+    previous = _compact_pair('이전 30일', (
+        ('면제권', _display_value('rewards.exemption.usage.previous', catalog) if _id_in(ids, 'rewards.exemption.usage.previous') else None),
+        ('추가 포인트', _display_value('rewards.manual.event_count.previous', catalog) if _id_in(ids, 'rewards.manual.event_count.previous') else None),
+    ))
+    if current:
+        rows.append(current)
+    if previous:
+        rows.append(previous)
+    return rows
+
+
+def _display_value(evidence_id, catalog):
+    fact = catalog.get(evidence_id)
+    if fact is None:
+        return None
+    return _value_text(evidence_id, fact, fact.get('_ctx') or {}, catalog)
 
 
 def _compact_learning_activity(ids, catalog):

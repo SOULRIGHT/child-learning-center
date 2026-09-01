@@ -1,6 +1,7 @@
 """Teacher Growth AI runtime. 실제 OpenAI/AWS 호출 없음."""
 from __future__ import annotations
 
+import json
 import os
 import unittest
 from datetime import date, datetime, timedelta
@@ -15,6 +16,7 @@ from feature_models import (  # noqa: E402
     GROWTH_AI_STATUS_FAILED,
     GROWTH_AI_STATUS_PENDING,
     GROWTH_AI_STATUS_SUCCESS,
+    GrowthAIAttempt,
     GrowthAIFeedback,
     GrowthAIGeneration,
 )
@@ -22,14 +24,20 @@ from features.growth.ai.bedrock_safety import ACTION_ERROR, ACTION_INTERVENED, A
 from features.growth.ai.hashing import packet_hash, runtime_signature
 from features.growth.ai.provider import GenerationResult, GrowthInterpretationAPIError
 from features.growth.ai.runtime import (
+    ATTEMPT_SUCCESS,
+    ATTEMPT_TIMEOUT,
+    ATTEMPT_VALIDATOR,
+    ATTEMPT_SAFETY,
     CODE_SAFETY_BLOCK,
     CODE_SAFETY_ERROR,
     CODE_VALIDATOR,
     DAILY_QUOTA,
     FEEDBACK_MAX_LEN,
     current_runtime_parts,
+    current_runtime_signature,
     generate_teacher_growth_interpretation,
     load_teacher_ai_view,
+    public_result_payload,
     save_teacher_ai_feedback,
 )
 from features.growth.ai.safety import SafetyDecision
@@ -43,8 +51,12 @@ AS_OF = date(2026, 12, 15)
 def _pass_output():
     return {
         'schema_version': OUTPUT_SCHEMA_VERSION,
-        'summary': {
+        'priority_insight': {
             'text': '최근 독서 활동일은 5일입니다.',
+            'evidence_ids': ['reading.activity_days.current'],
+        },
+        'interpretation': {
+            'text': '최근 독서 활동일을 다른 기록과 함께 보면 우선 확인할 변화가 분명합니다.',
             'evidence_ids': ['reading.activity_days.current'],
         },
         'observations': [
@@ -53,19 +65,23 @@ def _pass_output():
                 'evidence_ids': ['reading.activity_days.current'],
             }
         ],
-        'suggestions': [
+        'next_actions': [
             {
                 'text': '학습 계획이 있으면 남은 학습량도 함께 보면 좋겠습니다.',
                 'evidence_ids': ['learning.math.plan.remaining_workload'],
                 'conditional': True,
             }
         ],
+        'next_check': {
+            'text': '다음 비교 시점에 같은 기록을 다시 보면 판단이 더 분명해집니다.',
+            'evidence_ids': ['reading.activity_days.current'],
+        },
     }
 
 
 def _reject_output():
     parsed = _pass_output()
-    parsed['summary']['evidence_ids'] = ['learning.math.plan.status']
+    parsed['priority_insight']['evidence_ids'] = ['learning.math.plan.status']
     return parsed
 
 
@@ -100,6 +116,7 @@ class FakeGenerator:
             response_id='resp_test',
             usage={'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2},
             latency_ms=1,
+            raw_output=json.dumps(parsed, ensure_ascii=False),
         )
 
 
@@ -306,7 +323,7 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self.assertTrue(result.ok)
         row = GrowthAIGeneration.query.one()
         self.assertEqual(row.status, GROWTH_AI_STATUS_SUCCESS)
-        self.assertEqual(row.parsed_output['summary']['text'], '최근 독서 활동일은 5일입니다.')
+        self.assertEqual(row.parsed_output['priority_insight']['text'], '최근 독서 활동일은 5일입니다.')
         self.assertIsNone(getattr(row, 'packet', None))
         self.assertNotIn('evidence_packet', row.__dict__)
         blob = str(row.parsed_output)
@@ -461,3 +478,137 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self.assertEqual(generator.calls, [])
         self.assertEqual(safety.calls, [])
         self.assertIsNone(GrowthAIGeneration.query.one().parsed_output.get('feedback'))
+
+    def test_success_attempt_is_logged(self):
+        result = self._generate()
+        self.assertTrue(result.started)
+        attempts = GrowthAIAttempt.query.order_by(GrowthAIAttempt.attempt_number).all()
+        self.assertEqual(len(attempts), 1)
+        row = attempts[0]
+        self.assertEqual(row.status, ATTEMPT_SUCCESS)
+        self.assertEqual(row.attempt_number, 1)
+        self.assertEqual(row.generated_output['priority_insight']['text'], '최근 독서 활동일은 5일입니다.')
+        self.assertEqual(row.input_tokens, 1)
+        self.assertEqual(row.total_tokens, 2)
+        self.assertIsNotNone(row.generator_latency_ms)
+        self.assertIsNotNone(row.validator_latency_ms)
+        self.assertIsNotNone(row.total_latency_ms)
+        blob = json.dumps(row.generated_output, ensure_ascii=False) + (row.generated_text or '')
+        self.assertNotIn('GROWTH_TEACHER_SYSTEM_PROMPT', blob)
+        self.assertNotIn('review_text', blob)
+        self.assertNotIn('OPENAI_API_KEY', blob)
+        self.assertIsNone(getattr(row, 'packet', None))
+
+    def test_validator_reject_stores_generated_output_on_attempt_only(self):
+        clock = FakeClock()
+        generator = AdvancingGenerator(clock, outputs=[_reject_output()])
+        result = self._generate(generator=generator, clock=clock)
+        self.assertFalse(result.ok)
+        generation = GrowthAIGeneration.query.one()
+        self.assertIsNone(generation.parsed_output)
+        attempt = GrowthAIAttempt.query.one()
+        self.assertEqual(attempt.status, ATTEMPT_VALIDATOR)
+        self.assertEqual(attempt.stage, 'validator')
+        self.assertIsNotNone(attempt.generated_output)
+        self.assertIn('learning.math.plan.status', attempt.generated_output['priority_insight']['evidence_ids'])
+        self.assertIn('UNKNOWN_EVIDENCE_ID', attempt.validator_codes)
+        self.assertEqual(attempt.validator_issues[0]['evidence_id'], 'learning.math.plan.status')
+
+    def test_safety_reject_stores_generated_output_on_attempt(self):
+        clock = FakeClock()
+        safety = FakeSafety(decisions=[
+            SafetyDecision(
+                safe=False,
+                provider='aws_bedrock_guardrail',
+                action=ACTION_INTERVENED,
+                reason='Child Trait Inference',
+                assessments=('Child Trait Inference',),
+            ),
+        ])
+        result = self._generate(
+            generator=AdvancingGenerator(clock),
+            safety=safety,
+            clock=clock,
+        )
+        self.assertFalse(result.ok)
+        self.assertIsNone(GrowthAIGeneration.query.one().parsed_output)
+        attempt = GrowthAIAttempt.query.one()
+        self.assertEqual(attempt.status, ATTEMPT_SAFETY)
+        self.assertIsNotNone(attempt.generated_output)
+        self.assertEqual(attempt.safety_action, ACTION_INTERVENED)
+        self.assertIn('Child Trait Inference', attempt.safety_categories)
+
+    def test_timeout_attempt_output_may_be_null(self):
+        clock = FakeClock()
+
+        class TimeoutGenerator(FakeGenerator):
+            def generate(self, packet, timeout_s=None):
+                clock.advance(17)
+                raise GrowthInterpretationAPIError('openai api request timeout')
+
+        result = self._generate(generator=TimeoutGenerator(), clock=clock)
+        self.assertEqual(result.state, 'timeout')
+        attempt = GrowthAIAttempt.query.one()
+        self.assertEqual(attempt.status, ATTEMPT_TIMEOUT)
+        self.assertIsNone(attempt.generated_output)
+
+    def test_retry_writes_two_attempt_rows_and_one_quota(self):
+        generator = FakeGenerator(
+            errors=[GrowthInterpretationAPIError('openai api request failed')],
+            outputs=[_pass_output()],
+        )
+        result = self._generate(generator=generator)
+        self.assertTrue(result.ok)
+        self.assertEqual(GrowthAIGeneration.query.count(), 1)
+        attempts = GrowthAIAttempt.query.order_by(GrowthAIAttempt.attempt_number).all()
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(attempts[0].attempt_number, 1)
+        self.assertEqual(attempts[1].attempt_number, 2)
+        self.assertEqual(attempts[1].status, ATTEMPT_SUCCESS)
+
+    def test_quota_preflight_does_not_start_generation(self):
+        signature = runtime_signature(current_runtime_parts())
+        for i in range(DAILY_QUOTA):
+            db.session.add(GrowthAIGeneration(
+                child_id=self.child.id,
+                requested_by_user_id=self.teacher.id,
+                packet_hash=('a' * 63) + str(i % 10),
+                runtime_signature=signature,
+                as_of=AS_OF,
+                status=GROWTH_AI_STATUS_SUCCESS,
+                created_at=datetime.utcnow(),
+                completed_at=datetime.utcnow(),
+            ))
+        db.session.commit()
+        result = self._generate(generator=FakeGenerator())
+        self.assertEqual(result.state, 'quota')
+        self.assertFalse(result.started)
+        self.assertEqual(GrowthAIAttempt.query.count(), 0)
+
+    def test_v1_runtime_signature_is_not_reused(self):
+        old = runtime_signature({
+            'generator_provider': 'openai',
+            'model': 'gpt-5.6-luna',
+            'prompt_version': 'growth_teacher_prompt_v2',
+            'output_schema_version': 'growth_teacher_interpretation_v1',
+            'factual_validator_version': 'growth_teacher_factual_validator_v1',
+            'safety_provider': 'aws_bedrock_guardrail',
+            'safety_guardrail_id': 'gr-alpha',
+            'safety_guardrail_version': '1',
+        })
+        with patch.dict(os.environ, {
+            'GROWTH_SAFETY_GUARDRAIL_ID': 'gr-alpha',
+            'GROWTH_SAFETY_GUARDRAIL_VERSION': '1',
+            'GROWTH_AI_MODEL': 'gpt-5.6-luna',
+        }, clear=False):
+            current = current_runtime_signature()
+        self.assertNotEqual(old, current)
+
+    def test_public_payload_does_not_expose_attempts(self):
+        result = self._generate()
+        payload = public_result_payload(result)
+        blob = json.dumps(payload)
+        self.assertNotIn('attempt', blob.lower())
+        self.assertNotIn('generated_output', blob)
+        self.assertTrue(payload['started'])
+        self.assertNotIn('failure_code', payload)

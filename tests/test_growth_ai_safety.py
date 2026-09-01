@@ -75,6 +75,21 @@ class VisibleTextTests(unittest.TestCase):
         self.assertNotIn('reading.activity_days.current', text)
         self.assertNotIn(SENTINEL_PACKET, text)
 
+    def test_v2_fields_are_included(self):
+        parsed = {
+            'priority_insight': {'text': '핵심 변화.', 'evidence_ids': ['reading.activity_days.current']},
+            'interpretation': {'text': '의미.', 'evidence_ids': ['reading.activity_days.current']},
+            'observations': [{'text': '보조.', 'evidence_ids': ['points.period.current']}],
+            'next_actions': [{
+                'text': '다음 행동.',
+                'evidence_ids': ['reading.activity_days.current'],
+                'conditional': True,
+            }],
+            'next_check': {'text': '다음 확인.', 'evidence_ids': ['reading.activity_days.current']},
+        }
+        text = visible_interpretation_text(parsed)
+        self.assertEqual(text, '핵심 변화.\n\n의미.\n\n다음 확인.\n\n보조.\n\n다음 행동.')
+
 
 class GrowthAISafetyProviderTests(unittest.TestCase):
     def test_none_is_safe(self):

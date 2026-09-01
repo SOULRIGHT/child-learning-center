@@ -128,6 +128,24 @@ def _packet(**kwargs):
                     },
                 },
             },
+            'rewards': {
+                'exemption_usage': {
+                    'current': _fact(
+                        'rewards.exemption.usage.current',
+                        kwargs.get('exemption_current', 2),
+                    ),
+                    'previous': _fact(
+                        'rewards.exemption.usage.previous',
+                        kwargs.get('exemption_previous', 0),
+                    ),
+                },
+                'manual_event_count': {
+                    'current': _fact(
+                        'rewards.manual.event_count.current',
+                        kwargs.get('manual_events', 3),
+                    ),
+                },
+            },
         },
     }
 
@@ -135,9 +153,17 @@ def _packet(**kwargs):
 def _output(*, summary, summary_ids, observations=None, suggestions=None):
     return {
         'schema_version': OUTPUT_SCHEMA_VERSION,
-        'summary': {'text': summary, 'evidence_ids': summary_ids},
+        'priority_insight': {'text': summary, 'evidence_ids': summary_ids},
+        'interpretation': {
+            'text': '여러 기록을 함께 보면 우선 볼 변화가 분명해집니다.',
+            'evidence_ids': ['reading.activity_days.current'],
+        },
         'observations': observations if observations is not None else [],
-        'suggestions': suggestions if suggestions is not None else [],
+        'next_actions': suggestions if suggestions is not None else [],
+        'next_check': {
+            'text': '다음 비교 시점에 같은 기록을 다시 보면 판단이 더 분명해집니다.',
+            'evidence_ids': ['reading.activity_days.current'],
+        },
     }
 
 
@@ -161,7 +187,7 @@ class GrowthAIValidatorTests(unittest.TestCase):
         )
         self.assertFalse(result.valid)
         self.assertIn(CODE_EMPTY_EVIDENCE_IDS, _codes(result))
-        self.assertEqual(result.violations[0].location, 'summary')
+        self.assertEqual(result.violations[0].location, 'priority_insight')
 
     def test_empty_observation_evidence_ids_rejected(self):
         result = validate_teacher_interpretation(
@@ -187,7 +213,7 @@ class GrowthAIValidatorTests(unittest.TestCase):
         )
         self.assertFalse(result.valid)
         self.assertIn(CODE_EMPTY_EVIDENCE_IDS, _codes(result))
-        self.assertEqual(result.violations[0].location, 'suggestions[0]')
+        self.assertEqual(result.violations[0].location, 'next_actions[0]')
 
     def test_unknown_evidence_id_rejected(self):
         result = validate_teacher_interpretation(
@@ -522,3 +548,58 @@ class GrowthAIValidatorTests(unittest.TestCase):
         self.assertEqual(index['reading.activity_days.current'].unit, 'day')
         self.assertEqual(index['points.period.current'].unit, 'point')
         self.assertEqual(index['reading.completions.current'].unit, 'book')
+        self.assertEqual(index['rewards.exemption.usage.current'].unit, 'count')
+        self.assertEqual(index['rewards.manual.event_count.current'].unit, 'count')
+
+    def test_missing_next_check_rejected(self):
+        output = _output(
+            summary='독서 활동일은 5일입니다.',
+            summary_ids=['reading.activity_days.current'],
+        )
+        del output['next_check']
+        result = validate_teacher_interpretation(_packet(), output)
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_EMPTY_EVIDENCE_IDS, _codes(result))
+        self.assertTrue(any(item.location == 'next_check' for item in result.violations))
+
+    def test_unknown_evidence_id_is_kept_for_attempt_diagnostics(self):
+        result = validate_teacher_interpretation(
+            _packet(),
+            _output(
+                summary='계획이 있습니다.',
+                summary_ids=['learning.math.plan.status'],
+            ),
+        )
+        self.assertEqual(result.violations[0].evidence_id, 'learning.math.plan.status')
+
+    def test_exemption_usage_count_unit_passes(self):
+        result = validate_teacher_interpretation(
+            _packet(exemption_current=2),
+            _output(
+                summary='최근 면제권 사용은 2회입니다.',
+                summary_ids=['rewards.exemption.usage.current'],
+            ),
+        )
+        self.assertTrue(result.valid)
+
+    def test_exemption_usage_day_unit_rejected(self):
+        result = validate_teacher_interpretation(
+            _packet(exemption_current=2),
+            _output(
+                summary='최근 면제권 사용은 2일입니다.',
+                summary_ids=['rewards.exemption.usage.current'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_UNIT_MISMATCH, _codes(result))
+
+    def test_unavailable_data_does_not_allow_invented_zero(self):
+        result = validate_teacher_interpretation(
+            _packet(days_available=False),
+            _output(
+                summary='독서 활동일은 0일입니다.',
+                summary_ids=['reading.activity_days.current'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_UNAVAILABLE_AS_ZERO, _codes(result))

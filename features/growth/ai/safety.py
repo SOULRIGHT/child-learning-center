@@ -20,6 +20,7 @@ class SafetyDecision:
     reason: str | None = None
     usage: dict | None = None
     latency_ms: int | None = None
+    assessments: tuple | None = None
 
     def __repr__(self):
         return (
@@ -43,19 +44,21 @@ def visible_interpretation_text(parsed_output) -> str:
     if not isinstance(parsed_output, dict):
         return ''
     parts = []
-    summary = parsed_output.get('summary')
-    if isinstance(summary, dict):
-        _append_text(parts, summary.get('text'))
+    for key in ('priority_insight', 'interpretation', 'summary', 'next_check'):
+        item = parsed_output.get(key)
+        if isinstance(item, dict):
+            _append_text(parts, item.get('text'))
     observations = parsed_output.get('observations')
     if isinstance(observations, list):
         for item in observations:
             if isinstance(item, dict):
                 _append_text(parts, item.get('text'))
-    suggestions = parsed_output.get('suggestions')
-    if isinstance(suggestions, list):
-        for item in suggestions:
-            if isinstance(item, dict):
-                _append_text(parts, item.get('text'))
+    for key in ('next_actions', 'suggestions'):
+        rows = parsed_output.get(key)
+        if isinstance(rows, list):
+            for item in rows:
+                if isinstance(item, dict):
+                    _append_text(parts, item.get('text'))
     return '\n\n'.join(parts)
 
 

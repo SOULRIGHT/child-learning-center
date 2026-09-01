@@ -5,7 +5,10 @@
         '해석에 잘못된 사실이 없는지 확인하고 있어요...',
         '안전하게 보여드릴 수 있는 내용인지 확인하고 있어요...'
     ];
-    const CYCLE_MS = 3500;
+    const STAGE_KEYS = ['organize', 'interpret', 'verify', 'safety'];
+    const STAGE_MS = 1500;
+    const MIN_HOLD_MS = 6000;
+    const STAGE_COUNT = 4;
 
     function config() {
         const node = document.getElementById('growth-ai-config');
@@ -41,21 +44,37 @@
         return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     }
 
-    function applyFocus(index) {
+    function setPresentationStage(name) {
         const card = document.getElementById('growth-ai-card');
-        if (card) card.setAttribute('data-ai-focus-step', String(index));
+        if (card) card.setAttribute('data-stage', name);
+        document.querySelectorAll('[data-ai-role="mascot-slot"]').forEach(function (el) {
+            el.setAttribute('data-stage', name);
+        });
+    }
+
+    function applyFocus(index) {
+        const bounded = Math.max(0, Math.min(STAGE_COUNT - 1, index));
+        const card = document.getElementById('growth-ai-card');
+        if (card) card.setAttribute('data-ai-focus-step', String(bounded));
         document.querySelectorAll('[data-ai-step]').forEach(function (el) {
             const step = Number(el.getAttribute('data-ai-step'));
-            el.classList.toggle('is-focus', step === index);
+            el.classList.toggle('is-focus', step === bounded);
             el.classList.remove('is-done', 'is-complete');
             el.removeAttribute('data-complete');
         });
         document.querySelectorAll('[data-ai-mascot-scene]').forEach(function (el) {
             const step = Number(el.getAttribute('data-ai-mascot-scene'));
-            el.classList.toggle('is-focus', step === index);
+            el.classList.toggle('is-focus', step === bounded);
         });
         const node = document.querySelector('[data-ai-role="cycle"]');
-        if (node) node.textContent = CYCLE[index] || CYCLE[0];
+        if (node) node.textContent = CYCLE[bounded] || CYCLE[0];
+        setPresentationStage(STAGE_KEYS[bounded] || STAGE_KEYS[0]);
+    }
+
+    function setWaitingVisible(visible) {
+        const waiting = document.querySelector('[data-ai-role="waiting"]');
+        if (waiting) waiting.classList.toggle('growth-ai-hidden', !visible);
+        if (visible) setPresentationStage('waiting');
     }
 
     function fillList(selector, items) {
@@ -67,6 +86,11 @@
             li.textContent = text;
             node.appendChild(li);
         });
+    }
+
+    function setSection(selector, visible) {
+        const node = document.querySelector(selector);
+        if (node) node.classList.toggle('growth-ai-hidden', !visible);
     }
 
     function appendHint(parent, note) {
@@ -153,13 +177,17 @@
     function renderSuccess(payload, freshlyReady) {
         const interpretation = payload.interpretation || {};
         const summary = document.querySelector('[data-ai-role="summary"]');
-        if (summary) summary.textContent = interpretation.summary || '';
+        if (summary) summary.textContent = interpretation.priority_insight || interpretation.summary || '';
+        const meaning = document.querySelector('[data-ai-role="interpretation"]');
+        if (meaning) meaning.textContent = interpretation.interpretation || '';
+        setSection('[data-ai-role="interpretation-wrap"]', !!(interpretation.interpretation || '').trim());
         fillList('[data-ai-role="observations"]', interpretation.observations || []);
-        fillList('[data-ai-role="suggestions"]', interpretation.suggestions || []);
-        const obsWrap = document.querySelector('[data-ai-role="observations-wrap"]');
-        const sugWrap = document.querySelector('[data-ai-role="suggestions-wrap"]');
-        if (obsWrap) obsWrap.classList.toggle('growth-ai-hidden', !(interpretation.observations || []).length);
-        if (sugWrap) sugWrap.classList.toggle('growth-ai-hidden', !(interpretation.suggestions || []).length);
+        fillList('[data-ai-role="suggestions"]', interpretation.next_actions || interpretation.suggestions || []);
+        const nextCheck = document.querySelector('[data-ai-role="next-check"]');
+        if (nextCheck) nextCheck.textContent = interpretation.next_check || '';
+        setSection('[data-ai-role="observations-wrap"]', (interpretation.observations || []).length > 0);
+        setSection('[data-ai-role="suggestions-wrap"]', (interpretation.next_actions || interpretation.suggestions || []).length > 0);
+        setSection('[data-ai-role="next-check-wrap"]', !!(interpretation.next_check || '').trim());
         fillEvidence(payload.evidence || [], payload.evidence_groups || null);
         const feedback = document.querySelector('[data-ai-role="feedback"]');
         if (feedback && payload.generation_id) {
@@ -170,35 +198,108 @@
         showState('success');
     }
 
+    function isPreflight(payload) {
+        if (!payload) return false;
+        if (payload.started === true) return false;
+        const state = payload.state;
+        return state === 'disabled' || state === 'quota' || state === 'in_progress'
+            || (state === 'success' && payload.cached === true)
+            || payload.started === false;
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         const cfg = config();
         const card = document.getElementById('growth-ai-card');
         if (!cfg || !card) return;
 
-        let cycleTimer = null;
-        let cycleIndex = 0;
+        let stageTimers = [];
+        let presentation = null;
 
-        function stopCycle() {
-            if (cycleTimer) {
-                window.clearInterval(cycleTimer);
-                cycleTimer = null;
-            }
+        function clearStageTimers() {
+            stageTimers.forEach(function (id) { window.clearTimeout(id); });
+            stageTimers = [];
         }
 
-        function startCycle() {
-            cycleIndex = 0;
+        function stopPresentation() {
+            clearStageTimers();
+            presentation = null;
+            setWaitingVisible(false);
+        }
+
+        function startPresentation() {
+            stopPresentation();
+            const startedAt = Date.now();
+            presentation = {
+                startedAt: startedAt,
+                holdDone: false,
+                payload: null,
+                reducedMotion: prefersReducedMotion()
+            };
             applyFocus(0);
-            if (prefersReducedMotion()) return;
-            cycleTimer = window.setInterval(function () {
-                cycleIndex = (cycleIndex + 1) % CYCLE.length;
-                applyFocus(cycleIndex);
-            }, CYCLE_MS);
+            setWaitingVisible(false);
+            for (let i = 1; i < STAGE_COUNT; i += 1) {
+                stageTimers.push(window.setTimeout(function (step) {
+                    if (!presentation) return;
+                    applyFocus(step);
+                }, STAGE_MS * i, i));
+            }
+            stageTimers.push(window.setTimeout(function () {
+                if (!presentation) return;
+                presentation.holdDone = true;
+                if (!presentation.payload) {
+                    applyFocus(STAGE_COUNT - 1);
+                    setWaitingVisible(true);
+                    return;
+                }
+                reveal(presentation.payload);
+            }, MIN_HOLD_MS));
+        }
+
+        function reveal(payload) {
+            stopPresentation();
+            setDisabled(false);
+            if (payload && payload.ok && payload.state === 'success') {
+                renderSuccess(payload, true);
+                return;
+            }
+            const state = (payload && payload.state) || 'error';
+            if (state === 'quota' || state === 'stale' || state === 'disabled' || state === 'in_progress') {
+                if (state === 'stale' && payload.message) {
+                    const msg = document.querySelector('[data-ai-role="stale-message"]');
+                    if (msg) msg.textContent = payload.message;
+                }
+                if (state === 'in_progress') {
+                    showState('loading');
+                    applyFocus(0);
+                    return;
+                }
+                showState(state);
+                return;
+            }
+            const errorNode = document.querySelector('[data-ai-role="error-message"]');
+            if (errorNode && payload && payload.message) errorNode.textContent = payload.message;
+            showState(state === 'timeout' ? 'timeout' : 'error');
+        }
+
+        function settle(payload) {
+            if (isPreflight(payload)) {
+                reveal(payload);
+                return;
+            }
+            if (!presentation) {
+                reveal(payload);
+                return;
+            }
+            presentation.payload = payload;
+            if (presentation.holdDone) {
+                reveal(payload);
+            }
         }
 
         async function generate() {
             setDisabled(true);
             showState('loading');
-            startCycle();
+            startPresentation();
             const controller = new AbortController();
             const timeoutMs = Number(cfg.timeoutMs) || 21000;
             const timer = window.setTimeout(function () { controller.abort(); }, timeoutMs);
@@ -214,33 +315,14 @@
                     signal: controller.signal
                 });
                 const payload = await response.json();
-                stopCycle();
-                setDisabled(false);
-                if (payload && payload.ok && payload.state === 'success') {
-                    renderSuccess(payload, true);
-                    return;
-                }
-                const state = (payload && payload.state) || 'error';
-                if (state === 'quota' || state === 'stale' || state === 'disabled' || state === 'in_progress') {
-                    if (state === 'stale' && payload.message) {
-                        const msg = document.querySelector('[data-ai-role="stale-message"]');
-                        if (msg) msg.textContent = payload.message;
-                    }
-                    showState(state === 'in_progress' ? 'loading' : state);
-                    if (state === 'in_progress') startCycle();
-                    return;
-                }
-                const errorNode = document.querySelector('[data-ai-role="error-message"]');
-                if (errorNode && payload && payload.message) errorNode.textContent = payload.message;
-                showState(state === 'timeout' ? 'timeout' : 'error');
+                settle(payload);
             } catch (err) {
-                stopCycle();
-                setDisabled(false);
-                const errorNode = document.querySelector('[data-ai-role="error-message"]');
-                if (errorNode) {
-                    errorNode.textContent = 'AI 해석 준비 시간이 조금 길어졌어요.\n다시 시도해주세요.';
-                }
-                showState('timeout');
+                settle({
+                    ok: false,
+                    started: true,
+                    state: 'timeout',
+                    message: 'AI 해석 준비 시간이 조금 길어졌어요.\n다시 시도해주세요.'
+                });
             } finally {
                 window.clearTimeout(timer);
             }

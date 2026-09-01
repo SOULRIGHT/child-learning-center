@@ -62,6 +62,7 @@ class OpenAIGrowthInterpretationProvider(GrowthInterpretationProvider):
             response_id=getattr(response, 'id', None),
             usage=_usage(response),
             latency_ms=latency_ms,
+            raw_output=getattr(response, 'output_text', None),
         )
 
     def _request_client(self, timeout_s):

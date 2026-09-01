@@ -43,23 +43,31 @@ from tests.test_growth_evidence_packet import (
 
 VALID_OUTPUT = {
     'schema_version': OUTPUT_SCHEMA_VERSION,
-    'summary': {
-        'text': '최근 독서 기록일이 이전 기간보다 늘었고, 같은 교재 계획도 진행 중입니다.',
+    'priority_insight': {
+        'text': '가장 먼저 볼 변화는 독서 활동입니다. 최근 독서 활동일과 완독이 함께 줄었지만 같은 폭의 학습 감소로 보이지는 않습니다.',
+        'evidence_ids': ['reading.activity_days.current', 'reading.activity_days.previous'],
+    },
+    'interpretation': {
+        'text': '최근 독서 기록일과 이전 기간을 함께 보면 독서 영역의 변화가 두드러집니다.',
         'evidence_ids': ['reading.activity_days.current', 'reading.activity_days.previous'],
     },
     'observations': [
         {
-            'text': '최근 독서 기록일은 4일이고 이전은 2일입니다.',
+            'text': '최근 독서 기록일은 이전 기간보다 늘었습니다.',
             'evidence_ids': ['reading.activity_days.current', 'reading.activity_days.previous'],
         }
     ],
-    'suggestions': [
+    'next_actions': [
         {
-            'text': '같은 교재 계획이 있으면 다음 기록 때 남은 학습량도 함께 보면 좋겠습니다.',
-            'evidence_ids': ['learning.math.plan.remaining_workload'],
+            'text': '우선 실제 독서가 줄어든 것인지 기록만 누락된 것인지 확인해보면 좋겠습니다.',
+            'evidence_ids': ['reading.activity_days.current'],
             'conditional': True,
         }
     ],
+    'next_check': {
+        'text': '다음 2주 동안 독서 활동일과 완독 수를 함께 기록하면 이번 변화가 지속되는지 판단하는 데 도움이 됩니다.',
+        'evidence_ids': ['reading.activity_days.current'],
+    },
 }
 
 MIN_PACKET = {
@@ -93,7 +101,7 @@ def _walk_schema_objects(node, found=None):
 
 class GrowthAIPromptTests(unittest.TestCase):
     def test_prompt_version(self):
-        self.assertEqual(GROWTH_TEACHER_PROMPT_VERSION, 'growth_teacher_prompt_v2')
+        self.assertEqual(GROWTH_TEACHER_PROMPT_VERSION, 'growth_teacher_prompt_v3')
 
     def test_critical_policies_are_present(self):
         text = GROWTH_TEACHER_SYSTEM_PROMPT
@@ -122,6 +130,10 @@ class GrowthAIPromptTests(unittest.TestCase):
         self.assertIn('학습 활동일', text)
         self.assertIn('완독 수', text)
         self.assertIn('일반 JSON field name을 evidence_id라고 추측해서 만들지 않는다', text)
+        self.assertIn('priority_insight', text)
+        self.assertIn('next_check', text)
+        self.assertIn('면제권 때문에', text)
+        self.assertNotIn('review_text', text)
         self.assertNotIn('SENTINEL_CHILD_NAME', text)
         self.assertNotIn('{packet', text)
         self.assertNotIn('metrics_bundle', text)
@@ -129,7 +141,7 @@ class GrowthAIPromptTests(unittest.TestCase):
 
 class GrowthAISchemaTests(unittest.TestCase):
     def test_output_schema_version_and_json(self):
-        self.assertEqual(OUTPUT_SCHEMA_VERSION, 'growth_teacher_interpretation_v1')
+        self.assertEqual(OUTPUT_SCHEMA_VERSION, 'growth_teacher_interpretation_v2')
         json.dumps(INTERPRETATION_JSON_SCHEMA)
         fmt = structured_output_format()
         self.assertEqual(fmt['type'], 'json_schema')
@@ -141,22 +153,29 @@ class GrowthAISchemaTests(unittest.TestCase):
         schema = INTERPRETATION_JSON_SCHEMA
         self.assertEqual(
             set(schema['required']),
-            {'schema_version', 'summary', 'observations', 'suggestions'},
+            {
+                'schema_version',
+                'priority_insight',
+                'interpretation',
+                'observations',
+                'next_actions',
+                'next_check',
+            },
         )
         self.assertEqual(schema['properties']['observations']['maxItems'], 3)
-        self.assertEqual(schema['properties']['suggestions']['maxItems'], 2)
-        self.assertEqual(schema['properties']['summary']['properties']['evidence_ids']['minItems'], 1)
+        self.assertEqual(schema['properties']['next_actions']['maxItems'], 2)
+        self.assertEqual(schema['properties']['priority_insight']['properties']['evidence_ids']['minItems'], 1)
         self.assertEqual(
             schema['properties']['observations']['items']['properties']['evidence_ids']['minItems'],
             1,
         )
         self.assertEqual(
-            schema['properties']['suggestions']['items']['properties']['evidence_ids']['minItems'],
+            schema['properties']['next_actions']['items']['properties']['evidence_ids']['minItems'],
             1,
         )
-        self.assertEqual(set(schema['properties']['summary']['required']), {'text', 'evidence_ids'})
+        self.assertEqual(set(schema['properties']['priority_insight']['required']), {'text', 'evidence_ids'})
         self.assertEqual(
-            set(schema['properties']['suggestions']['items']['required']),
+            set(schema['properties']['next_actions']['items']['required']),
             {'text', 'evidence_ids', 'conditional'},
         )
 

@@ -384,7 +384,7 @@ class EvidencePacketContractTests(unittest.TestCase):
         self.assertIn('scope', packet)
         self.assertIn('selected_insights', packet)
         self.assertIn('supporting_facts', packet)
-        self.assertEqual(set(packet['supporting_facts']), {'reading', 'points', 'learning'})
+        self.assertEqual(set(packet['supporting_facts']), {'reading', 'points', 'learning', 'rewards'})
         self._assert_jsonable(packet)
         self._assert_privacy(packet)
         self._assert_ids(packet)

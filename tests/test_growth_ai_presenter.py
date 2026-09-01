@@ -122,6 +122,45 @@ class PresenterTests(unittest.TestCase):
         for group in bundle['groups']:
             self.assertEqual(len(group['items']), group['count'])
 
+    def test_rewards_compact_rows(self):
+        packet = {
+            'scope': {
+                'current_window': {'start': '2026-11-16', 'end': '2026-12-15'},
+                'previous_window': {'start': '2026-10-17', 'end': '2026-11-15'},
+            },
+            'supporting_facts': {
+                'rewards': {
+                    'exemption_usage': {
+                        'current': _fact('rewards.exemption.usage.current', 2),
+                        'previous': _fact('rewards.exemption.usage.previous', 0),
+                    },
+                    'manual_event_count': {
+                        'current': _fact('rewards.manual.event_count.current', 3),
+                        'previous': _fact('rewards.manual.event_count.previous', 1),
+                    },
+                },
+            },
+        }
+        parsed = {
+            'priority_insight': {
+                'text': '최근 면제권 사용이 늘었습니다.',
+                'evidence_ids': [
+                    'rewards.exemption.usage.current',
+                    'rewards.exemption.usage.previous',
+                    'rewards.manual.event_count.current',
+                    'rewards.manual.event_count.previous',
+                ],
+            },
+        }
+        bundle = present_cited_evidence_bundle(packet, parsed)
+        by_key = {group['key']: group for group in bundle['groups']}
+        self.assertEqual(by_key['rewards']['label'], '보상/활동')
+        compact = {row['label']: row['value'] for row in by_key['rewards']['compact']}
+        self.assertEqual(compact['최근 30일'], '면제권 2회 · 추가 포인트 3회')
+        self.assertEqual(compact['이전 30일'], '면제권 0회 · 추가 포인트 1회')
+        blob = json.dumps(bundle, ensure_ascii=False)
+        self.assertNotIn('rewards.exemption.usage.current', blob)
+
 
 def _fact(evidence_id, value, available=True):
     payload = {'evidence_id': evidence_id, 'available': available}

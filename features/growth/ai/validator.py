@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-FACTUAL_VALIDATOR_VERSION = 'growth_teacher_factual_validator_v1'
+FACTUAL_VALIDATOR_VERSION = 'growth_teacher_factual_validator_v2'
 
 CODE_EMPTY_EVIDENCE_IDS = 'EMPTY_EVIDENCE_IDS'
 CODE_UNKNOWN_EVIDENCE_ID = 'UNKNOWN_EVIDENCE_ID'
@@ -33,6 +33,7 @@ _UNIT_BY_TOKEN = {
     '쪽': UNIT_PAGE,
     '페이지': UNIT_PAGE,
     '건': UNIT_COUNT,
+    '회': UNIT_COUNT,
     '명': UNIT_PERSON,
 }
 
@@ -44,7 +45,7 @@ _YEAR_KR = re.compile(r'\d{4}년')
 _MONTH_KR = re.compile(r'\d{1,2}월')
 _GRADE_KR = re.compile(r'\d{1,2}학년')
 _CLAIM = re.compile(
-    r'(\d+(?:\.\d+)?)\s*(포인트|페이지|쪽|점|권|일|건|명)'
+    r'(\d+(?:\.\d+)?)\s*(포인트|페이지|쪽|점|권|일|건|회|명)'
 )
 
 _ESTIMATED_ID_MARKERS = ('.plan.remaining_workload', '.plan.required_per_day')
@@ -64,6 +65,7 @@ class EvidenceFact:
 class Violation:
     code: str
     location: str
+    evidence_id: str | None = None
 
     def __repr__(self):
         return f'Violation({self.code!r}, {self.location!r})'
@@ -109,7 +111,7 @@ def collect_evidence_index(packet):
 
 
 def validate_teacher_interpretation(packet, parsed_output) -> ValidationResult:
-    """packet vs growth_teacher_interpretation_v1. packet/output 전문을 예외에 넣지 않는다."""
+    """packet vs growth_teacher_interpretation_v2. packet/output 전문을 예외에 넣지 않는다."""
     index = collect_evidence_index(packet)
     exempt = _exempt_numbers(packet)
     violations = []
@@ -118,23 +120,28 @@ def validate_teacher_interpretation(packet, parsed_output) -> ValidationResult:
         violations.extend(_citation_violations(location, evidence_ids, index))
         if extra.get('check_conditional') and extra.get('conditional') is not True:
             violations.append(Violation(CODE_NON_CONDITIONAL_SUGGESTION, location))
-        cited = tuple(index[eid] for eid in evidence_ids if isinstance(eid, str) and eid in index)
+        cited = tuple(
+            index[eid]
+            for eid in (evidence_ids if isinstance(evidence_ids, list) else [])
+            if isinstance(eid, str) and eid in index
+        )
         violations.extend(_numeric_violations(location, text, cited, exempt))
         violations.extend(_estimated_violations(location, text, cited))
     return ValidationResult(valid=not violations, violations=tuple(violations))
 
 
 def _iter_items(output):
-    summary = output.get('summary')
-    if isinstance(summary, dict):
-        yield (
-            'summary',
-            summary.get('text') or '',
-            summary.get('evidence_ids'),
-            {},
-        )
-    else:
-        yield 'summary', '', None, {}
+    for key in ('priority_insight', 'interpretation', 'next_check', 'summary'):
+        item = output.get(key)
+        if isinstance(item, dict):
+            yield (
+                key,
+                item.get('text') or '',
+                item.get('evidence_ids'),
+                {},
+            )
+        elif key != 'summary':
+            yield key, '', None, {}
     observations = output.get('observations')
     if isinstance(observations, list):
         for i, item in enumerate(observations):
@@ -145,16 +152,18 @@ def _iter_items(output):
                 row.get('evidence_ids'),
                 {},
             )
-    suggestions = output.get('suggestions')
-    if isinstance(suggestions, list):
-        for i, item in enumerate(suggestions):
-            row = item if isinstance(item, dict) else {}
-            yield (
-                f'suggestions[{i}]',
-                row.get('text') or '',
-                row.get('evidence_ids'),
-                {'check_conditional': True, 'conditional': row.get('conditional')},
-            )
+    actions = output.get('next_actions')
+    if not isinstance(actions, list):
+        actions = output.get('suggestions') if isinstance(output.get('suggestions'), list) else []
+    action_name = 'next_actions' if isinstance(output.get('next_actions'), list) else 'suggestions'
+    for i, item in enumerate(actions):
+        row = item if isinstance(item, dict) else {}
+        yield (
+            f'{action_name}[{i}]',
+            row.get('text') or '',
+            row.get('evidence_ids'),
+            {'check_conditional': True, 'conditional': row.get('conditional')},
+        )
 
 
 def _citation_violations(location, evidence_ids, index):
@@ -163,7 +172,11 @@ def _citation_violations(location, evidence_ids, index):
     found = []
     for item in evidence_ids:
         if not isinstance(item, str) or not item or item not in index:
-            found.append(Violation(CODE_UNKNOWN_EVIDENCE_ID, location))
+            found.append(Violation(
+                CODE_UNKNOWN_EVIDENCE_ID,
+                location,
+                evidence_id=item if isinstance(item, str) else None,
+            ))
     return found
 
 
@@ -266,13 +279,17 @@ def _is_exempt(number, unit, exempt):
 def _unit_for(evidence_id):
     if '.peer.n' in evidence_id:
         return UNIT_PERSON
+    if 'exemption.usage' in evidence_id and '.peer.n' not in evidence_id:
+        return UNIT_COUNT
+    if 'manual.event_count' in evidence_id:
+        return UNIT_COUNT
     if 'observed_study_days' in evidence_id:
         return UNIT_DAY
     if 'activity_days' in evidence_id:
         return UNIT_DAY
     if 'completions' in evidence_id:
         return UNIT_BOOK
-    if evidence_id.startswith('points.') or '.rwb.period' in evidence_id:
+    if evidence_id.startswith('points.') or '.rwb.period' in evidence_id or 'manual.points' in evidence_id or 'reading_event.points' in evidence_id:
         return UNIT_POINT
     if 'progress_entry_count' in evidence_id:
         return UNIT_COUNT

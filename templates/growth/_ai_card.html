@@ -2,7 +2,7 @@
 {% set evidence_groups = ai.evidence_groups if ai and ai.evidence_groups else none %}
 {% set evidence_items = ai.evidence if ai and ai.evidence else [] %}
 {% set evidence_total = evidence_groups.total if evidence_groups else (evidence_items|length) %}
-<section class="mb-4" id="growth-ai-card" data-ai-state="{{ ai_state }}" data-ai-focus-step="0">
+<section class="mb-4" id="growth-ai-card" data-ai-state="{{ ai_state }}" data-ai-focus-step="0" data-stage="organize">
     <div class="card growth-ai-card">
         <div class="card-body">
             <div class="d-flex align-items-start gap-3 mb-3">
@@ -37,6 +37,7 @@
                     <p class="mb-2">잠시만 기다려주세요!</p>
                     <p class="growth-ai-hint" style="white-space: pre-line;">성장 데이터를 정리하고
 AI 해석과 검증을 차례대로 진행하고 있어요.</p>
+                    <p class="growth-ai-hint mb-2" data-ai-role="eta">보통 5~10초 정도 걸려요.</p>
                     <ol class="growth-ai-process" data-ai-role="process">
                         <li data-ai-step="0">성장 데이터 정리</li>
                         <li data-ai-step="1">AI가 기록의 흐름 해석</li>
@@ -44,12 +45,21 @@ AI 해석과 검증을 차례대로 진행하고 있어요.</p>
                         <li data-ai-step="3">안전하게 보여드릴 수 있는지 확인</li>
                     </ol>
                     <p class="growth-ai-steps mb-0" data-ai-role="cycle">성장 데이터를 차근차근 정리하고 있어요...</p>
+                    <div class="growth-ai-hidden mt-2" data-ai-role="waiting">
+                        <p class="fw-semibold mb-1">성장 해석을 꼼꼼하게 준비하고 있어요...</p>
+                        <p class="growth-ai-hint mb-0">잠시만 더 기다려주세요.</p>
+                    </div>
                 </div>
             </div>
 
             <div data-ai-panel="success" class="{% if ai_state != 'success' %}growth-ai-hidden{% endif %}">
                 <p class="growth-ai-ready growth-ai-hidden" data-ai-role="ready">AI 성장 해석이 준비됐어요!</p>
-                <p class="mb-3" data-ai-role="summary">{% if ai and ai.interpretation %}{{ ai.interpretation.summary }}{% endif %}</p>
+                <h6 class="growth-ai-section-title">가장 먼저 볼 변화</h6>
+                <p class="mb-3" data-ai-role="summary">{% if ai and ai.interpretation %}{{ ai.interpretation.priority_insight or ai.interpretation.summary }}{% endif %}</p>
+                <div data-ai-role="interpretation-wrap" class="{% if not ai or not ai.interpretation or not ai.interpretation.interpretation %}growth-ai-hidden{% endif %}">
+                    <h6>이 변화의 의미</h6>
+                    <p class="mb-3" data-ai-role="interpretation">{% if ai and ai.interpretation %}{{ ai.interpretation.interpretation }}{% endif %}</p>
+                </div>
                 <div data-ai-role="observations-wrap" class="{% if not ai or not ai.interpretation or not ai.interpretation.observations %}growth-ai-hidden{% endif %}">
                     <h6>관찰한 점</h6>
                     <ul class="growth-ai-obs" data-ai-role="observations">
@@ -60,15 +70,19 @@ AI 해석과 검증을 차례대로 진행하고 있어요.</p>
                         {% endif %}
                     </ul>
                 </div>
-                <div data-ai-role="suggestions-wrap" class="{% if not ai or not ai.interpretation or not ai.interpretation.suggestions %}growth-ai-hidden{% endif %}">
-                    <h6>함께 살펴볼 점</h6>
+                <div data-ai-role="suggestions-wrap" class="{% if not ai or not ai.interpretation or not (ai.interpretation.next_actions or ai.interpretation.suggestions) %}growth-ai-hidden{% endif %}">
+                    <h6>지금 해볼 일</h6>
                     <ul class="growth-ai-obs" data-ai-role="suggestions">
                         {% if ai and ai.interpretation %}
-                        {% for item in ai.interpretation.suggestions %}
+                        {% for item in (ai.interpretation.next_actions or ai.interpretation.suggestions) %}
                         <li>{{ item }}</li>
                         {% endfor %}
                         {% endif %}
                     </ul>
+                </div>
+                <div data-ai-role="next-check-wrap" class="{% if not ai or not ai.interpretation or not ai.interpretation.next_check %}growth-ai-hidden{% endif %}">
+                    <h6>다음에 확인할 점</h6>
+                    <p class="mb-3" data-ai-role="next-check">{% if ai and ai.interpretation %}{{ ai.interpretation.next_check }}{% endif %}</p>
                 </div>
                 <div class="mt-3{% if not evidence_total %} growth-ai-hidden{% endif %}" data-ai-role="evidence-block">
                     <p class="fw-semibold mb-1" data-ai-role="evidence-title">분석 근거 {% if evidence_total %}{{ evidence_total }}개{% endif %}</p>

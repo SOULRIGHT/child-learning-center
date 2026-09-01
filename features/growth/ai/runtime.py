@@ -1,6 +1,7 @@
 """Teacher Growth AI application service. route에 provider를 나열하지 않는다."""
 from __future__ import annotations
 
+import json
 import os
 import time
 from dataclasses import dataclass, field
@@ -11,6 +12,7 @@ from feature_models import (
     GROWTH_AI_STATUS_FAILED,
     GROWTH_AI_STATUS_PENDING,
     GROWTH_AI_STATUS_SUCCESS,
+    GrowthAIAttempt,
     GrowthAIFeedback,
     GrowthAIGeneration,
 )
@@ -47,6 +49,7 @@ from features.growth.ai.provider import (
     GrowthInterpretationAPIError,
     GrowthInterpretationConfigError,
     GrowthInterpretationError,
+    GrowthInterpretationParseError,
 )
 from features.growth.ai.schema import OUTPUT_SCHEMA_VERSION
 from features.growth.ai.safety import visible_interpretation_text
@@ -76,6 +79,16 @@ CODE_SAFETY_BLOCK = 'SAFETY_INTERVENED'
 CODE_SAFETY_ERROR = 'SAFETY_ERROR'
 CODE_STALE = 'STALE_DURING_GENERATION'
 CODE_CONFIG = 'CONFIG'
+CODE_PARSE = 'PARSE_ERROR'
+
+ATTEMPT_SUCCESS = 'SUCCESS'
+ATTEMPT_GENERATOR = 'GENERATOR_ERROR'
+ATTEMPT_PARSE = 'PARSE_ERROR'
+ATTEMPT_VALIDATOR = 'VALIDATOR_REJECT'
+ATTEMPT_SAFETY = 'SAFETY_REJECT'
+ATTEMPT_SAFETY_ERROR = 'SAFETY_ERROR'
+ATTEMPT_TIMEOUT = 'TIMEOUT'
+ATTEMPT_CONFIG = 'CONFIG'
 
 
 class DeadlineExceeded(Exception):
@@ -94,6 +107,7 @@ class TeacherAIResult:
     quota_remaining: int | None = None
     cached: bool = False
     failure_code: str | None = None
+    started: bool = False
 
 
 @dataclass
@@ -192,7 +206,7 @@ def generate_teacher_growth_interpretation(
     clock=time.monotonic,
 ):
     if not is_growth_ai_enabled():
-        return TeacherAIResult(ok=False, state='disabled', message=MSG_DISABLED, failure_code=CODE_DISABLED)
+        return TeacherAIResult(ok=False, state='disabled', message=MSG_DISABLED, failure_code=CODE_DISABLED, started=False)
     as_of = resolve_as_of(as_of)
     packet = build_current_packet(child, as_of=as_of)
     digest = packet_hash(packet)
@@ -210,6 +224,7 @@ def generate_teacher_growth_interpretation(
             evidence_groups=view.get('evidence_groups'),
             cached=True,
             quota_remaining=_quota_remaining(user_id),
+            started=False,
         )
     pending = _active_pending(child.id, digest, signature)
     if pending is not None:
@@ -220,6 +235,7 @@ def generate_teacher_growth_interpretation(
             generation_id=pending.id,
             failure_code=CODE_IN_PROGRESS,
             quota_remaining=_quota_remaining(user_id),
+            started=False,
         )
     used = _quota_used(user_id)
     if used >= DAILY_QUOTA:
@@ -229,6 +245,7 @@ def generate_teacher_growth_interpretation(
             message=MSG_QUOTA,
             failure_code=CODE_QUOTA,
             quota_remaining=0,
+            started=False,
         )
     row = GrowthAIGeneration(
         child_id=child.id,
@@ -265,6 +282,7 @@ def generate_teacher_growth_interpretation(
             generation_id=row.id,
             failure_code=CODE_TIMEOUT,
             quota_remaining=_quota_remaining(user_id),
+            started=True,
         )
     except _PipelineFail as exc:
         _fail(row, exc.code)
@@ -277,6 +295,7 @@ def generate_teacher_growth_interpretation(
             generation_id=row.id,
             failure_code=exc.code,
             quota_remaining=_quota_remaining(user_id),
+            started=True,
         )
     current_packet = build_current_packet(child, as_of=as_of)
     current_digest = packet_hash(current_packet)
@@ -289,6 +308,7 @@ def generate_teacher_growth_interpretation(
             generation_id=row.id,
             failure_code=CODE_STALE,
             quota_remaining=_quota_remaining(user_id),
+            started=True,
         )
     row.status = GROWTH_AI_STATUS_SUCCESS
     row.parsed_output = parsed
@@ -312,6 +332,7 @@ def generate_teacher_growth_interpretation(
         evidence_groups=view.get('evidence_groups'),
         cached=False,
         quota_remaining=_quota_remaining(user_id),
+        started=True,
     )
 
 
@@ -368,6 +389,7 @@ def public_result_payload(result: TeacherAIResult):
         payload['quota_remaining'] = result.quota_remaining
     if result.cached:
         payload['cached'] = True
+    payload['started'] = bool(result.started)
     return payload
 
 
@@ -379,77 +401,246 @@ class _PipelineFail(Exception):
 def _run_pipeline(packet, generator, safety, deadline, row):
     regenerated = False
     safety_retried = False
-    parsed = None
-    gen_meta = None
+    attempt_number = 0
     while True:
-        deadline.raise_if_expired()
+        attempt_number += 1
+        row.attempt_count = attempt_number
+        db.session.commit()
+        rec = _AttemptRecorder(row, attempt_number)
         try:
-            gen_meta = generator.generate(packet, timeout_s=deadline.remaining())
-        except TypeError:
-            gen_meta = generator.generate(packet)
+            deadline.raise_if_expired()
         except DeadlineExceeded:
+            rec.finish(ATTEMPT_TIMEOUT, stage='generator', failure_code=CODE_TIMEOUT)
+            raise
+        try:
+            try:
+                gen_meta = generator.generate(packet, timeout_s=deadline.remaining())
+            except TypeError:
+                gen_meta = generator.generate(packet)
+        except DeadlineExceeded:
+            rec.finish(ATTEMPT_TIMEOUT, stage='generator', failure_code=CODE_TIMEOUT)
             raise
         except GrowthInterpretationConfigError as exc:
+            rec.finish(ATTEMPT_CONFIG, stage='generator', failure_code=CODE_CONFIG)
             raise _PipelineFail(CODE_CONFIG) from exc
-        except GrowthInterpretationError as exc:
-            if deadline.remaining() < MIN_CALL_S:
-                raise DeadlineExceeded() from exc
-            if not regenerated and deadline.remaining() >= MIN_RETRY_REMAINING_S:
+        except GrowthInterpretationParseError as exc:
+            rec.finish(ATTEMPT_PARSE, stage='parse', failure_code=CODE_GENERATOR)
+            if _can_retry(regenerated, deadline):
                 regenerated = True
-                row.attempt_count = (row.attempt_count or 1) + 1
-                db.session.commit()
                 continue
-            if isinstance(exc, GrowthInterpretationAPIError) and 'timeout' in str(exc).lower():
-                raise _PipelineFail(CODE_TIMEOUT) from exc
             raise _PipelineFail(CODE_GENERATOR) from exc
-        deadline.raise_if_expired()
+        except GrowthInterpretationError as exc:
+            timeout_like = (
+                isinstance(exc, GrowthInterpretationAPIError)
+                and 'timeout' in str(exc).lower()
+            )
+            attempt_status = ATTEMPT_TIMEOUT if timeout_like else ATTEMPT_GENERATOR
+            fail_code = CODE_TIMEOUT if timeout_like else CODE_GENERATOR
+            if deadline.remaining() < MIN_CALL_S:
+                rec.finish(ATTEMPT_TIMEOUT, stage='generator', failure_code=CODE_TIMEOUT)
+                raise DeadlineExceeded() from exc
+            rec.finish(attempt_status, stage='generator', failure_code=fail_code)
+            if _can_retry(regenerated, deadline):
+                regenerated = True
+                continue
+            raise _PipelineFail(fail_code) from exc
+        rec.capture_generator(gen_meta)
+        try:
+            deadline.raise_if_expired()
+        except DeadlineExceeded:
+            rec.finish(ATTEMPT_TIMEOUT, stage='generator', failure_code=CODE_TIMEOUT)
+            raise
         parsed = gen_meta.parsed_output if isinstance(gen_meta, GenerationResult) else None
         if not isinstance(parsed, dict):
-            if not regenerated and deadline.remaining() >= MIN_RETRY_REMAINING_S:
+            rec.finish(ATTEMPT_PARSE, stage='parse', failure_code=CODE_GENERATOR)
+            if _can_retry(regenerated, deadline):
                 regenerated = True
-                row.attempt_count = (row.attempt_count or 1) + 1
-                db.session.commit()
                 continue
             raise _PipelineFail(CODE_GENERATOR)
+        rec.generated_output = parsed
+        if rec.generated_text is None:
+            rec.generated_text = gen_meta.raw_output if isinstance(gen_meta, GenerationResult) else None
+        validator_started = time.perf_counter()
         validation = validate_teacher_interpretation(packet, parsed)
+        rec.validator_latency_ms = int((time.perf_counter() - validator_started) * 1000)
+        rec.capture_validator(validation)
         if not validation.valid:
-            if not regenerated and deadline.remaining() >= MIN_RETRY_REMAINING_S:
+            rec.finish(ATTEMPT_VALIDATOR, stage='validator', failure_code=CODE_VALIDATOR)
+            if _can_retry(regenerated, deadline):
                 regenerated = True
-                row.attempt_count = (row.attempt_count or 1) + 1
-                db.session.commit()
                 continue
             raise _PipelineFail(CODE_VALIDATOR)
         text = visible_interpretation_text(parsed)
-        deadline.raise_if_expired()
+        rec.generated_text = rec.generated_text or text
+        try:
+            deadline.raise_if_expired()
+        except DeadlineExceeded:
+            rec.finish(ATTEMPT_TIMEOUT, stage='safety', failure_code=CODE_TIMEOUT)
+            raise
+        decision = _check_safety(safety, text, deadline)
+        rec.capture_safety(decision)
+        if decision is None or getattr(decision, 'action', None) == ACTION_ERROR:
+            if not safety_retried and deadline.remaining() >= MIN_SAFETY_RETRY_S:
+                safety_retried = True
+                retry_started = time.perf_counter()
+                decision = _check_safety(safety, text, deadline)
+                extra_ms = int((time.perf_counter() - retry_started) * 1000)
+                rec.safety_latency_ms = (rec.safety_latency_ms or 0) + extra_ms
+                rec.capture_safety(decision)
+            if decision is None or getattr(decision, 'action', None) == ACTION_ERROR:
+                rec.finish(ATTEMPT_SAFETY_ERROR, stage='safety', failure_code=CODE_SAFETY_ERROR)
+                raise _PipelineFail(CODE_SAFETY_ERROR)
+        if decision.action == ACTION_INTERVENED:
+            rec.finish(ATTEMPT_SAFETY, stage='safety', failure_code=CODE_SAFETY_BLOCK)
+            if _can_retry(regenerated, deadline):
+                regenerated = True
+                continue
+            raise _PipelineFail(CODE_SAFETY_BLOCK)
+        if decision.action != ACTION_NONE or decision.safe is not True:
+            rec.finish(ATTEMPT_SAFETY_ERROR, stage='safety', failure_code=CODE_SAFETY_ERROR)
+            raise _PipelineFail(CODE_SAFETY_ERROR)
+        rec.finish(ATTEMPT_SUCCESS, stage='safety', failure_code=None)
+        return parsed, gen_meta, decision
+
+
+def _can_retry(regenerated, deadline):
+    return (not regenerated) and deadline.remaining() >= MIN_RETRY_REMAINING_S
+
+
+def _check_safety(safety, text, deadline):
+    started = time.perf_counter()
+    try:
         try:
             decision = safety.check_response(text, timeout_s=deadline.remaining())
         except TypeError:
             decision = safety.check_response(text)
+    except Exception:
+        decision = None
+    if decision is not None and getattr(decision, 'latency_ms', None) is None:
+        try:
+            object.__setattr__(decision, 'latency_ms', int((time.perf_counter() - started) * 1000))
         except Exception:
-            decision = None
-        if decision is None or getattr(decision, 'action', None) == ACTION_ERROR:
-            if not safety_retried and deadline.remaining() >= MIN_SAFETY_RETRY_S:
-                safety_retried = True
-                row.attempt_count = (row.attempt_count or 1) + 1
-                db.session.commit()
-                try:
-                    decision = safety.check_response(text, timeout_s=deadline.remaining())
-                except TypeError:
-                    decision = safety.check_response(text)
-                except Exception:
-                    raise _PipelineFail(CODE_SAFETY_ERROR)
-            if decision is None or getattr(decision, 'action', None) == ACTION_ERROR:
-                raise _PipelineFail(CODE_SAFETY_ERROR)
-        if decision.action == ACTION_INTERVENED:
-            if not regenerated and deadline.remaining() >= MIN_RETRY_REMAINING_S:
-                regenerated = True
-                row.attempt_count = (row.attempt_count or 1) + 1
-                db.session.commit()
-                continue
-            raise _PipelineFail(CODE_SAFETY_BLOCK)
-        if decision.action != ACTION_NONE or decision.safe is not True:
-            raise _PipelineFail(CODE_SAFETY_ERROR)
-        return parsed, gen_meta, decision
+            pass
+    return decision
+
+
+class _AttemptRecorder:
+    def __init__(self, generation, attempt_number):
+        self.generation = generation
+        self.attempt_number = attempt_number
+        self.started_at = datetime.utcnow()
+        self.started_mono = time.perf_counter()
+        self.generator_provider = generation.generator_provider
+        self.model = generation.model
+        self.prompt_version = generation.prompt_version
+        self.output_schema_version = generation.output_schema_version
+        self.generated_output = None
+        self.generated_text = None
+        self.validator_valid = None
+        self.validator_codes = None
+        self.validator_issues = None
+        self.safety_action = None
+        self.safety_reason = None
+        self.safety_categories = None
+        self.input_tokens = None
+        self.output_tokens = None
+        self.total_tokens = None
+        self.generator_latency_ms = None
+        self.validator_latency_ms = None
+        self.safety_latency_ms = None
+
+    def capture_generator(self, gen_meta):
+        if not isinstance(gen_meta, GenerationResult):
+            return
+        self.generator_provider = gen_meta.provider
+        self.model = gen_meta.model
+        self.prompt_version = gen_meta.prompt_version
+        self.output_schema_version = gen_meta.output_schema_version
+        self.generator_latency_ms = gen_meta.latency_ms
+        usage = gen_meta.usage if isinstance(gen_meta.usage, dict) else {}
+        self.input_tokens = usage.get('input_tokens')
+        self.output_tokens = usage.get('output_tokens')
+        self.total_tokens = usage.get('total_tokens')
+        self.generated_output = gen_meta.parsed_output if isinstance(gen_meta.parsed_output, dict) else None
+        raw = gen_meta.raw_output
+        if isinstance(raw, str) and raw.strip():
+            self.generated_text = raw
+        elif self.generated_output is not None:
+            self.generated_text = json.dumps(self.generated_output, ensure_ascii=False)
+
+    def capture_validator(self, validation):
+        self.validator_valid = bool(validation.valid)
+        issues = []
+        codes = []
+        for item in validation.violations or ():
+            codes.append(item.code)
+            issue = {'code': item.code, 'location': item.location}
+            if getattr(item, 'evidence_id', None):
+                issue['evidence_id'] = item.evidence_id
+            issues.append(issue)
+        self.validator_codes = codes or None
+        self.validator_issues = issues or None
+
+    def capture_safety(self, decision):
+        if decision is None:
+            self.safety_action = ACTION_ERROR
+            self.safety_reason = 'safety provider returned no decision'
+            return
+        self.safety_action = getattr(decision, 'action', None)
+        self.safety_reason = getattr(decision, 'reason', None)
+        assessments = getattr(decision, 'assessments', None)
+        if assessments:
+            self.safety_categories = list(assessments)
+        elif isinstance(self.safety_reason, str) and self.safety_reason:
+            self.safety_categories = [part.strip() for part in self.safety_reason.split(',') if part.strip()]
+        if getattr(decision, 'latency_ms', None) is not None:
+            self.safety_latency_ms = decision.latency_ms
+
+    def finish(self, status, *, stage, failure_code):
+        total_ms = int((time.perf_counter() - self.started_mono) * 1000)
+        row = GrowthAIAttempt(
+            generation_id=self.generation.id,
+            attempt_number=self.attempt_number,
+            started_at=self.started_at,
+            completed_at=datetime.utcnow(),
+            generator_provider=self.generator_provider,
+            model=self.model,
+            prompt_version=self.prompt_version,
+            output_schema_version=self.output_schema_version,
+            stage=stage,
+            status=status,
+            generated_output=self.generated_output,
+            generated_text=_clip_text(self.generated_text),
+            validator_valid=self.validator_valid,
+            validator_codes=self.validator_codes,
+            validator_issues=self.validator_issues,
+            safety_action=self.safety_action,
+            safety_reason=_clip_text(self.safety_reason, 255),
+            safety_categories=self.safety_categories,
+            input_tokens=self.input_tokens,
+            output_tokens=self.output_tokens,
+            total_tokens=self.total_tokens,
+            generator_latency_ms=self.generator_latency_ms,
+            validator_latency_ms=self.validator_latency_ms,
+            safety_latency_ms=self.safety_latency_ms,
+            total_latency_ms=total_ms,
+            failure_code=failure_code,
+        )
+        db.session.add(row)
+        db.session.commit()
+
+
+def _clip_text(value, limit=20000):
+    if not isinstance(value, str):
+        return value
+    if len(value) <= limit:
+        return value
+    return value[:limit]
+
+
+def attempt_diagnostic_query():
+    """B5 eval이 읽는 attempt 필드. 일반 UI/API에 노출하지 않는다."""
+    return GrowthAIAttempt.query
 
 
 def _success_view(row, packet, *, cached, enabled):
@@ -469,19 +660,30 @@ def _success_view(row, packet, *, cached, enabled):
 
 
 def _ui_interpretation(parsed):
-    summary = parsed.get('summary') if isinstance(parsed.get('summary'), dict) else {}
+    def text_of(key):
+        item = parsed.get(key) if isinstance(parsed.get(key), dict) else {}
+        return (item.get('text') or '').strip()
+
     observations = []
     for item in parsed.get('observations') or []:
         if isinstance(item, dict) and isinstance(item.get('text'), str) and item['text'].strip():
             observations.append(item['text'].strip())
-    suggestions = []
-    for item in parsed.get('suggestions') or []:
-        if isinstance(item, dict) and isinstance(item.get('text'), str) and item['text'].strip():
-            suggestions.append(item['text'].strip())
+    actions = []
+    for key in ('next_actions', 'suggestions'):
+        for item in parsed.get(key) or []:
+            if isinstance(item, dict) and isinstance(item.get('text'), str) and item['text'].strip():
+                actions.append(item['text'].strip())
+        if actions:
+            break
+    priority = text_of('priority_insight') or text_of('summary')
     return {
-        'summary': (summary.get('text') or '').strip(),
+        'priority_insight': priority,
+        'interpretation': text_of('interpretation'),
+        'summary': priority,
         'observations': observations,
-        'suggestions': suggestions,
+        'next_actions': actions,
+        'suggestions': actions,
+        'next_check': text_of('next_check'),
     }
 
 

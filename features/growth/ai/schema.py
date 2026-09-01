@@ -1,7 +1,7 @@
-"""growth_teacher_interpretation_v1 Structured Outputs JSON Schema."""
+"""growth_teacher_interpretation_v2 Structured Outputs JSON Schema."""
 
-OUTPUT_SCHEMA_VERSION = 'growth_teacher_interpretation_v1'
-OUTPUT_SCHEMA_NAME = 'growth_teacher_interpretation_v1'
+OUTPUT_SCHEMA_VERSION = 'growth_teacher_interpretation_v2'
+OUTPUT_SCHEMA_NAME = 'growth_teacher_interpretation_v2'
 
 _TEXT_EVIDENCE = {
     'type': 'object',
@@ -17,7 +17,7 @@ _TEXT_EVIDENCE = {
     },
 }
 
-_SUGGESTION = {
+_ACTION = {
     'type': 'object',
     'additionalProperties': False,
     'required': ['text', 'evidence_ids', 'conditional'],
@@ -35,23 +35,32 @@ _SUGGESTION = {
 INTERPRETATION_JSON_SCHEMA = {
     'type': 'object',
     'additionalProperties': False,
-    'required': ['schema_version', 'summary', 'observations', 'suggestions'],
+    'required': [
+        'schema_version',
+        'priority_insight',
+        'interpretation',
+        'observations',
+        'next_actions',
+        'next_check',
+    ],
     'properties': {
         'schema_version': {
             'type': 'string',
             'enum': [OUTPUT_SCHEMA_VERSION],
         },
-        'summary': _TEXT_EVIDENCE,
+        'priority_insight': _TEXT_EVIDENCE,
+        'interpretation': _TEXT_EVIDENCE,
         'observations': {
             'type': 'array',
             'maxItems': 3,
             'items': _TEXT_EVIDENCE,
         },
-        'suggestions': {
+        'next_actions': {
             'type': 'array',
             'maxItems': 2,
-            'items': _SUGGESTION,
+            'items': _ACTION,
         },
+        'next_check': _TEXT_EVIDENCE,
     },
 }
 

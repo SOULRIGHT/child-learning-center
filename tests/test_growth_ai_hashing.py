@@ -61,6 +61,24 @@ class PacketHashTests(unittest.TestCase):
         other['prompt_version'] = 'growth_teacher_prompt_v9'
         self.assertNotEqual(runtime_signature(base), runtime_signature(other))
 
+    def test_v2_prompt_and_schema_change_current_signature(self):
+        v1 = {
+            'generator_provider': 'openai',
+            'model': 'gpt-5.6-luna',
+            'prompt_version': 'growth_teacher_prompt_v2',
+            'output_schema_version': 'growth_teacher_interpretation_v1',
+            'factual_validator_version': 'growth_teacher_factual_validator_v1',
+            'safety_provider': 'aws_bedrock_guardrail',
+            'safety_guardrail_id': 'gr-alpha',
+            'safety_guardrail_version': '1',
+        }
+        with patch.dict(os.environ, {
+            'GROWTH_SAFETY_GUARDRAIL_ID': 'gr-alpha',
+            'GROWTH_SAFETY_GUARDRAIL_VERSION': '1',
+            'GROWTH_AI_MODEL': 'gpt-5.6-luna',
+        }, clear=False):
+            self.assertNotEqual(runtime_signature(v1), current_runtime_signature())
+
     def test_same_guardrail_id_and_version_same_signature(self):
         env = {
             'GROWTH_SAFETY_GUARDRAIL_ID': 'gr-alpha',

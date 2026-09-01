@@ -29,6 +29,9 @@ MSG_LOADING_CYCLE = (
     '해석에 잘못된 사실이 없는지 확인하고 있어요...',
     '안전하게 보여드릴 수 있는 내용인지 확인하고 있어요...',
 )
+MSG_LOADING_ETA = '보통 5~10초 정도 걸려요.'
+MSG_LOADING_WAITING = '성장 해석을 꼼꼼하게 준비하고 있어요...'
+MSG_LOADING_WAITING_HINT = '잠시만 더 기다려주세요.'
 MSG_READY = 'AI 성장 해석이 준비됐어요!'
 MSG_STALE = (
     '성장 데이터가 업데이트됐어요.\n'
@@ -59,8 +62,11 @@ BTN_RETRY = '다시 시도'
 BTN_REFRESH = '새로 분석하기'
 BTN_REFRESH_AGAIN = '다시 분석하기'
 CARD_TITLE = 'AI 성장 해석'
+PRIORITY_TITLE = '가장 먼저 볼 변화'
+INTERPRETATION_TITLE = '이 변화의 의미'
 OBS_TITLE = '관찰한 점'
-SUG_TITLE = '함께 살펴볼 점'
+SUG_TITLE = '지금 해볼 일'
+NEXT_CHECK_TITLE = '다음에 확인할 점'
 EVIDENCE_TITLE = '분석 근거'
 EVIDENCE_VIEW = '분석 근거 보기'
 EVIDENCE_EXPAND_ALL = '모든 근거 펼쳐보기'

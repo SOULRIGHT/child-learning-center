@@ -59,6 +59,7 @@ class AwsBedrockGuardrailSafetyProvider(SafetyProvider):
             )
         latency_ms = int((time.perf_counter() - started) * 1000)
         action = response.get('action')
+        categories = _categories(response)
         if action == ACTION_NONE:
             return SafetyDecision(
                 safe=True,
@@ -67,6 +68,7 @@ class AwsBedrockGuardrailSafetyProvider(SafetyProvider):
                 reason=_reason(response),
                 usage=_usage(response),
                 latency_ms=latency_ms,
+                assessments=categories,
             )
         if action == ACTION_INTERVENED:
             return SafetyDecision(
@@ -76,6 +78,7 @@ class AwsBedrockGuardrailSafetyProvider(SafetyProvider):
                 reason=_reason(response),
                 usage=_usage(response),
                 latency_ms=latency_ms,
+                assessments=categories,
             )
         return SafetyDecision(
             safe=False,
@@ -133,10 +136,7 @@ def _usage(response):
     }
 
 
-def _reason(response):
-    action_reason = response.get('actionReason')
-    if isinstance(action_reason, str) and action_reason.strip():
-        return action_reason.strip()
+def _categories(response):
     names = []
     for assessment in response.get('assessments') or []:
         if not isinstance(assessment, dict):
@@ -155,6 +155,14 @@ def _reason(response):
                 kind = filt.get('type')
                 if isinstance(kind, str) and kind.strip():
                     names.append(kind.strip())
+    return tuple(names[:8]) if names else None
+
+
+def _reason(response):
+    action_reason = response.get('actionReason')
+    if isinstance(action_reason, str) and action_reason.strip():
+        return action_reason.strip()
+    names = _categories(response)
     if names:
-        return ','.join(names[:8])
+        return ','.join(names)
     return None

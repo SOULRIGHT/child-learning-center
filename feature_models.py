@@ -513,8 +513,56 @@ class GrowthAIGeneration(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     completed_at = db.Column(db.DateTime, nullable=True)
 
+    attempts = db.relationship(
+        'GrowthAIAttempt', back_populates='generation', lazy='dynamic',
+    )
+
     def __repr__(self):
         return f'<GrowthAIGeneration {self.id} {self.status}>'
+
+
+class GrowthAIAttempt(db.Model):
+    """generation 내부 1회 attempt 진단 로그. 일반 UI/API에 노출하지 않는다."""
+    __tablename__ = 'growth_ai_attempt'
+    __table_args__ = (
+        Index('ix_growth_ai_attempt_generation_id', 'generation_id'),
+        Index('ix_growth_ai_attempt_status', 'status'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    generation_id = db.Column(
+        db.Integer, db.ForeignKey('growth_ai_generation.id'), nullable=False,
+    )
+    attempt_number = db.Column(db.Integer, nullable=False)
+    started_at = db.Column(db.DateTime, nullable=False)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    generator_provider = db.Column(db.String(32), nullable=True)
+    model = db.Column(db.String(64), nullable=True)
+    prompt_version = db.Column(db.String(64), nullable=True)
+    output_schema_version = db.Column(db.String(64), nullable=True)
+    stage = db.Column(db.String(32), nullable=True)
+    status = db.Column(db.String(32), nullable=False)
+    generated_output = db.Column(db.JSON, nullable=True)
+    generated_text = db.Column(db.Text, nullable=True)
+    validator_valid = db.Column(db.Boolean, nullable=True)
+    validator_codes = db.Column(db.JSON, nullable=True)
+    validator_issues = db.Column(db.JSON, nullable=True)
+    safety_action = db.Column(db.String(64), nullable=True)
+    safety_reason = db.Column(db.String(255), nullable=True)
+    safety_categories = db.Column(db.JSON, nullable=True)
+    input_tokens = db.Column(db.Integer, nullable=True)
+    output_tokens = db.Column(db.Integer, nullable=True)
+    total_tokens = db.Column(db.Integer, nullable=True)
+    generator_latency_ms = db.Column(db.Integer, nullable=True)
+    validator_latency_ms = db.Column(db.Integer, nullable=True)
+    safety_latency_ms = db.Column(db.Integer, nullable=True)
+    total_latency_ms = db.Column(db.Integer, nullable=True)
+    failure_code = db.Column(db.String(64), nullable=True)
+
+    generation = db.relationship('GrowthAIGeneration', back_populates='attempts')
+
+    def __repr__(self):
+        return f'<GrowthAIAttempt {self.id} gen={self.generation_id} {self.status}>'
 
 
 class GrowthAIFeedback(db.Model):

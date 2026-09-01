@@ -1,7 +1,7 @@
 {# 최종 캐릭터는 static/img/growth-ai-mascot.{webp,png} 또는 static/img/growth-ai/mascot.{webp,png} 로 교체. #}
 {% set mascot = ai_mascot if ai_mascot is defined else {'kind': none, 'url': none} %}
 {% set mascot_variant = mascot_variant|default('header') %}
-<div class="growth-ai-mascot-slot is-{{ mascot_variant }}" data-ai-role="mascot-slot" data-ai-mascot-variant="{{ mascot_variant }}" aria-hidden="true">
+<div class="growth-ai-mascot-slot is-{{ mascot_variant }}" data-ai-role="mascot-slot" data-ai-mascot-variant="{{ mascot_variant }}" data-stage="organize" aria-hidden="true">
     {% if mascot.kind == 'image' and mascot.url %}
     <img class="growth-ai-mascot-asset" src="{{ mascot.url }}" alt="">
     {% elif mascot.kind == 'video' and mascot.url %}
