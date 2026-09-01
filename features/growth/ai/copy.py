@@ -30,8 +30,8 @@ MSG_LOADING_CYCLE = (
     '안전하게 보여드릴 수 있는 내용인지 확인하고 있어요...',
 )
 MSG_LOADING_ETA = '보통 5~10초 정도 걸려요.'
-MSG_LOADING_WAITING = '성장 해석을 꼼꼼하게 준비하고 있어요...'
-MSG_LOADING_WAITING_HINT = '잠시만 더 기다려주세요.'
+MSG_LOADING_WAITING = '성장 해석을 꼼꼼하게 마무리하고 있어요...'
+MSG_LOADING_WAITING_HINT = '거의 다 준비됐어요. 잠시만 기다려주세요.'
 MSG_READY = 'AI 성장 해석이 준비됐어요!'
 MSG_STALE = (
     '성장 데이터가 업데이트됐어요.\n'

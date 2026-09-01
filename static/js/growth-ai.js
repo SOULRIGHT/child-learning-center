@@ -6,8 +6,8 @@
         '안전하게 보여드릴 수 있는 내용인지 확인하고 있어요...'
     ];
     const STAGE_KEYS = ['organize', 'interpret', 'verify', 'safety'];
-    const STAGE_MS = 1500;
-    const MIN_HOLD_MS = 6000;
+    const STAGE_MS = 2000;
+    const MIN_HOLD_MS = 8000;
     const STAGE_COUNT = 4;
 
     function config() {
@@ -203,8 +203,7 @@
         if (payload.started === true) return false;
         const state = payload.state;
         return state === 'disabled' || state === 'quota' || state === 'in_progress'
-            || (state === 'success' && payload.cached === true)
-            || payload.started === false;
+            || (state === 'success' && payload.cached === true);
     }
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -214,10 +213,27 @@
 
         let stageTimers = [];
         let presentation = null;
+        let requestSeq = 0;
+        let inFlight = false;
+        let activeController = null;
 
         function clearStageTimers() {
             stageTimers.forEach(function (id) { window.clearTimeout(id); });
             stageTimers = [];
+        }
+
+        function setWaitingCopy(titleText, hintText) {
+            const title = document.querySelector('[data-ai-role="waiting-title"]');
+            const hint = document.querySelector('[data-ai-role="waiting-hint"]');
+            if (title) title.textContent = titleText;
+            if (hint) hint.textContent = hintText;
+        }
+
+        function resetWaitingCopy() {
+            setWaitingCopy(
+                '성장 해석을 꼼꼼하게 마무리하고 있어요...',
+                '거의 다 준비됐어요. 잠시만 기다려주세요.'
+            );
         }
 
         function stopPresentation() {
@@ -228,6 +244,7 @@
 
         function startPresentation() {
             stopPresentation();
+            resetWaitingCopy();
             const startedAt = Date.now();
             presentation = {
                 startedAt: startedAt,
@@ -238,10 +255,12 @@
             applyFocus(0);
             setWaitingVisible(false);
             for (let i = 1; i < STAGE_COUNT; i += 1) {
-                stageTimers.push(window.setTimeout(function (step) {
-                    if (!presentation) return;
-                    applyFocus(step);
-                }, STAGE_MS * i, i));
+                (function (step) {
+                    stageTimers.push(window.setTimeout(function () {
+                        if (!presentation) return;
+                        applyFocus(step);
+                    }, STAGE_MS * step));
+                }(i));
             }
             stageTimers.push(window.setTimeout(function () {
                 if (!presentation) return;
@@ -256,6 +275,7 @@
         }
 
         function reveal(payload) {
+            inFlight = false;
             stopPresentation();
             setDisabled(false);
             if (payload && payload.ok && payload.state === 'success') {
@@ -269,8 +289,15 @@
                     if (msg) msg.textContent = payload.message;
                 }
                 if (state === 'in_progress') {
+                    const message = (payload && payload.message) || '';
+                    const parts = message.split('\n');
+                    setWaitingCopy(
+                        parts[0] || '이미 같은 해석을 준비하고 있어요.',
+                        parts[1] || '잠시만 기다려주세요.'
+                    );
                     showState('loading');
-                    applyFocus(0);
+                    applyFocus(STAGE_COUNT - 1);
+                    setWaitingVisible(true);
                     return;
                 }
                 showState(state);
@@ -281,7 +308,8 @@
             showState(state === 'timeout' ? 'timeout' : 'error');
         }
 
-        function settle(payload) {
+        function settle(payload, seq) {
+            if (seq !== requestSeq) return;
             if (isPreflight(payload)) {
                 reveal(payload);
                 return;
@@ -297,10 +325,16 @@
         }
 
         async function generate() {
+            if (inFlight) return;
+            inFlight = true;
+            requestSeq += 1;
+            const seq = requestSeq;
+            if (activeController) activeController.abort();
             setDisabled(true);
             showState('loading');
             startPresentation();
             const controller = new AbortController();
+            activeController = controller;
             const timeoutMs = Number(cfg.timeoutMs) || 21000;
             const timer = window.setTimeout(function () { controller.abort(); }, timeoutMs);
             try {
@@ -315,16 +349,18 @@
                     signal: controller.signal
                 });
                 const payload = await response.json();
-                settle(payload);
+                settle(payload, seq);
             } catch (err) {
+                if (seq !== requestSeq) return;
                 settle({
                     ok: false,
                     started: true,
                     state: 'timeout',
                     message: 'AI 해석 준비 시간이 조금 길어졌어요.\n다시 시도해주세요.'
-                });
+                }, seq);
             } finally {
                 window.clearTimeout(timer);
+                if (activeController === controller) activeController = null;
             }
         }
 

@@ -52,8 +52,8 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
   - friendly evidence UI (raw evidence_id 비노출)
   - feedback은 DB만 저장. OpenAI/AWS로 전달하지 않음
   - AI failure never breaks deterministic Growth
-  - loading presentation: 1.5s × 4 unidirectional stages, min 6s hold when generation started.
-    preflight(disabled/quota/in_progress/cache)는 6s를 강제하지 않음.
+  - loading presentation: 2.0s × 4 unidirectional stages, min 8s hold when generation started.
+    preflight(disabled/quota/in_progress/cache)는 8s를 강제하지 않음.
     4단계 이후 1단계로 돌아가지 않음. fake % / fake completion 없음. timeout 20s 유지.
     mascot slot `data-stage=organize|interpret|verify|safety|waiting`
   - attempt diagnostics: `growth_ai_attempt` (Alembic `c3a8f17b2d01`). generation당 1~2 row.

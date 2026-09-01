@@ -499,6 +499,18 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self.assertNotIn('OPENAI_API_KEY', blob)
         self.assertIsNone(getattr(row, 'packet', None))
 
+    def test_attempt_persist_failure_does_not_leave_generation_pending(self):
+        with patch(
+            'features.growth.ai.runtime.GrowthAIAttempt',
+            side_effect=RuntimeError('table growth_ai_attempt has no column named safety_categories'),
+        ):
+            result = self._generate()
+        self.assertTrue(result.ok)
+        self.assertEqual(result.state, 'success')
+        row = GrowthAIGeneration.query.one()
+        self.assertEqual(row.status, GROWTH_AI_STATUS_SUCCESS)
+        self.assertEqual(GrowthAIAttempt.query.count(), 0)
+
     def test_validator_reject_stores_generated_output_on_attempt_only(self):
         clock = FakeClock()
         generator = AdvancingGenerator(clock, outputs=[_reject_output()])

@@ -597,37 +597,40 @@ class _AttemptRecorder:
             self.safety_latency_ms = decision.latency_ms
 
     def finish(self, status, *, stage, failure_code):
-        total_ms = int((time.perf_counter() - self.started_mono) * 1000)
-        row = GrowthAIAttempt(
-            generation_id=self.generation.id,
-            attempt_number=self.attempt_number,
-            started_at=self.started_at,
-            completed_at=datetime.utcnow(),
-            generator_provider=self.generator_provider,
-            model=self.model,
-            prompt_version=self.prompt_version,
-            output_schema_version=self.output_schema_version,
-            stage=stage,
-            status=status,
-            generated_output=self.generated_output,
-            generated_text=_clip_text(self.generated_text),
-            validator_valid=self.validator_valid,
-            validator_codes=self.validator_codes,
-            validator_issues=self.validator_issues,
-            safety_action=self.safety_action,
-            safety_reason=_clip_text(self.safety_reason, 255),
-            safety_categories=self.safety_categories,
-            input_tokens=self.input_tokens,
-            output_tokens=self.output_tokens,
-            total_tokens=self.total_tokens,
-            generator_latency_ms=self.generator_latency_ms,
-            validator_latency_ms=self.validator_latency_ms,
-            safety_latency_ms=self.safety_latency_ms,
-            total_latency_ms=total_ms,
-            failure_code=failure_code,
-        )
-        db.session.add(row)
-        db.session.commit()
+        try:
+            total_ms = int((time.perf_counter() - self.started_mono) * 1000)
+            row = GrowthAIAttempt(
+                generation_id=self.generation.id,
+                attempt_number=self.attempt_number,
+                started_at=self.started_at,
+                completed_at=datetime.utcnow(),
+                generator_provider=self.generator_provider,
+                model=self.model,
+                prompt_version=self.prompt_version,
+                output_schema_version=self.output_schema_version,
+                stage=stage,
+                status=status,
+                generated_output=self.generated_output,
+                generated_text=_clip_text(self.generated_text),
+                validator_valid=self.validator_valid,
+                validator_codes=self.validator_codes,
+                validator_issues=self.validator_issues,
+                safety_action=self.safety_action,
+                safety_reason=_clip_text(self.safety_reason, 255),
+                safety_categories=self.safety_categories,
+                input_tokens=self.input_tokens,
+                output_tokens=self.output_tokens,
+                total_tokens=self.total_tokens,
+                generator_latency_ms=self.generator_latency_ms,
+                validator_latency_ms=self.validator_latency_ms,
+                safety_latency_ms=self.safety_latency_ms,
+                total_latency_ms=total_ms,
+                failure_code=failure_code,
+            )
+            db.session.add(row)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
 
 def _clip_text(value, limit=20000):
