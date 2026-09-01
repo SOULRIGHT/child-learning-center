@@ -372,7 +372,7 @@ operational ledgers
 teacher whitelist packet은 구현되어 있다.
 interpretation generator v1도 구현되어 있다.
 **production Growth HTML/route는 아직 generator를 호출하지 않는다.**
-validator / Google Model Armor / retry UI는 미구현이다.
+B3A deterministic factual validator는 구현되어 있다. Google Model Armor / retry UI는 미구현이다.
 
 ```
 DB / raw ORM
@@ -381,6 +381,7 @@ DB / raw ORM
     → build_teacher_evidence_packet()          # growth_teacher_evidence_v1
     → OpenAIGrowthInterpretationProvider       # 미연결, 독립 provider
     → growth_teacher_interpretation_v1
+    → validate_teacher_interpretation()        # B3A, production 미연결
 ```
 
 packet은 bundle/ORM dump가 아니라 READ-ONLY projection이다.
@@ -392,7 +393,7 @@ generator v1:
 - provider: OpenAI Responses API, `store=false`, tools/search 없음
 - model: `gpt-5.6-luna` (production winner 미확정)
 - reasoning.effort: `low` baseline
-- prompt: `growth_teacher_prompt_v1`
+- prompt: `growth_teacher_prompt_v2`
 - output: `growth_teacher_interpretation_v1` Structured Outputs
 - B6에서 Gemini 2.5 Flash-Lite challenger와 domain eval로 최종 모델 선정 예정
 

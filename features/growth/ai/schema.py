@@ -11,6 +11,7 @@ _TEXT_EVIDENCE = {
         'text': {'type': 'string'},
         'evidence_ids': {
             'type': 'array',
+            'minItems': 1,
             'items': {'type': 'string'},
         },
     },
@@ -24,6 +25,7 @@ _SUGGESTION = {
         'text': {'type': 'string'},
         'evidence_ids': {
             'type': 'array',
+            'minItems': 1,
             'items': {'type': 'string'},
         },
         'conditional': {'type': 'boolean'},

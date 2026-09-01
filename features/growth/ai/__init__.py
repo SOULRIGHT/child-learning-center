@@ -15,6 +15,12 @@ from features.growth.ai.schema import (
     OUTPUT_SCHEMA_VERSION,
     structured_output_format,
 )
+from features.growth.ai.validator import (
+    ValidationResult,
+    Violation,
+    collect_evidence_index,
+    validate_teacher_interpretation,
+)
 
 __all__ = [
     'GenerationResult',
@@ -28,5 +34,9 @@ __all__ = [
     'INTERPRETATION_JSON_SCHEMA',
     'OUTPUT_SCHEMA_VERSION',
     'OpenAIGrowthInterpretationProvider',
+    'ValidationResult',
+    'Violation',
+    'collect_evidence_index',
     'structured_output_format',
+    'validate_teacher_interpretation',
 ]
