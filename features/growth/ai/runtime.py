@@ -20,6 +20,7 @@ from features.growth.ai.bedrock_safety import (
     ACTION_INTERVENED,
     ACTION_NONE,
     AwsBedrockGuardrailSafetyProvider,
+    GUARDRAIL_ID_ENV,
     GUARDRAIL_VERSION_ENV,
     PROVIDER_NAME as SAFETY_PROVIDER_NAME,
 )
@@ -61,7 +62,7 @@ FRONTEND_TIMEOUT_MS = 21000
 MIN_CALL_S = 0.5
 MIN_RETRY_REMAINING_S = 4.0
 MIN_SAFETY_RETRY_S = 2.0
-PENDING_STALE_S = 30
+PENDING_STALE_S = 60
 FEEDBACK_MAX_LEN = 1000
 TEACHER_AI_ROLES = frozenset({'돌봄선생님', '센터장', '개발자'})
 
@@ -129,6 +130,7 @@ def current_runtime_parts():
         'output_schema_version': OUTPUT_SCHEMA_VERSION,
         'factual_validator_version': FACTUAL_VALIDATOR_VERSION,
         'safety_provider': SAFETY_PROVIDER_NAME,
+        'safety_guardrail_id': (os.environ.get(GUARDRAIL_ID_ENV) or '').strip(),
         'safety_guardrail_version': (os.environ.get(GUARDRAIL_VERSION_ENV) or '').strip(),
     }
 

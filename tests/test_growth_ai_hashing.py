@@ -1,9 +1,12 @@
 """Canonical packet hash / runtime signature. DB/AWS 없음."""
 from __future__ import annotations
 
+import os
 import unittest
+from unittest.mock import patch
 
 from features.growth.ai.hashing import packet_hash, runtime_signature
+from features.growth.ai.runtime import current_runtime_signature
 from features.growth.evidence_packet import build_teacher_evidence_packet
 
 
@@ -51,8 +54,31 @@ class PacketHashTests(unittest.TestCase):
             'output_schema_version': 'growth_teacher_interpretation_v1',
             'factual_validator_version': 'growth_teacher_factual_validator_v1',
             'safety_provider': 'aws_bedrock_guardrail',
+            'safety_guardrail_id': 'gr-alpha',
             'safety_guardrail_version': '1',
         }
         other = dict(base)
         other['prompt_version'] = 'growth_teacher_prompt_v9'
         self.assertNotEqual(runtime_signature(base), runtime_signature(other))
+
+    def test_same_guardrail_id_and_version_same_signature(self):
+        env = {
+            'GROWTH_SAFETY_GUARDRAIL_ID': 'gr-alpha',
+            'GROWTH_SAFETY_GUARDRAIL_VERSION': '1',
+            'GROWTH_AI_MODEL': 'gpt-5.6-luna',
+        }
+        with patch.dict(os.environ, env, clear=False):
+            first = current_runtime_signature()
+            second = current_runtime_signature()
+        self.assertEqual(first, second)
+
+    def test_different_guardrail_id_same_version_different_signature(self):
+        env = {
+            'GROWTH_SAFETY_GUARDRAIL_VERSION': '1',
+            'GROWTH_AI_MODEL': 'gpt-5.6-luna',
+        }
+        with patch.dict(os.environ, {**env, 'GROWTH_SAFETY_GUARDRAIL_ID': 'gr-alpha'}, clear=False):
+            left = current_runtime_signature()
+        with patch.dict(os.environ, {**env, 'GROWTH_SAFETY_GUARDRAIL_ID': 'gr-beta'}, clear=False):
+            right = current_runtime_signature()
+        self.assertNotEqual(left, right)

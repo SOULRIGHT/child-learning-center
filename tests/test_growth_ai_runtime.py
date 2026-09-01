@@ -12,6 +12,7 @@ app, db = bootstrap_test_app()
 
 from app import Child, User  # noqa: E402
 from feature_models import (  # noqa: E402
+    GROWTH_AI_STATUS_FAILED,
     GROWTH_AI_STATUS_PENDING,
     GROWTH_AI_STATUS_SUCCESS,
     GrowthAIFeedback,
@@ -152,6 +153,7 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self.packet = _packet()
         self.env = {
             'GROWTH_AI_ENABLED': 'true',
+            'GROWTH_SAFETY_GUARDRAIL_ID': 'gr-test',
             'GROWTH_SAFETY_GUARDRAIL_VERSION': '1',
             'GROWTH_AI_MODEL': 'gpt-5.6-luna',
         }
@@ -395,6 +397,27 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         result = self._generate(generator=generator)
         self.assertEqual(result.state, 'in_progress')
         self.assertEqual(generator.calls, [])
+
+    def test_stale_pending_allows_new_generation(self):
+        digest = packet_hash(self.packet)
+        signature = runtime_signature(current_runtime_parts())
+        db.session.add(GrowthAIGeneration(
+            child_id=self.child.id,
+            requested_by_user_id=self.teacher.id,
+            packet_hash=digest,
+            runtime_signature=signature,
+            as_of=AS_OF,
+            status=GROWTH_AI_STATUS_PENDING,
+            created_at=datetime.utcnow() - timedelta(seconds=61),
+        ))
+        db.session.commit()
+        generator = FakeGenerator()
+        result = self._generate(generator=generator)
+        self.assertTrue(result.ok)
+        self.assertEqual(len(generator.calls), 1)
+        statuses = {row.status for row in GrowthAIGeneration.query.all()}
+        self.assertIn(GROWTH_AI_STATUS_FAILED, statuses)
+        self.assertIn(GROWTH_AI_STATUS_SUCCESS, statuses)
 
     def test_feedback_positive_and_negative(self):
         result = self._generate()
