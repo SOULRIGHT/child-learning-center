@@ -101,7 +101,7 @@ def _walk_schema_objects(node, found=None):
 
 class GrowthAIPromptTests(unittest.TestCase):
     def test_prompt_version(self):
-        self.assertEqual(GROWTH_TEACHER_PROMPT_VERSION, 'growth_teacher_prompt_v7')
+        self.assertEqual(GROWTH_TEACHER_PROMPT_VERSION, 'growth_teacher_prompt_v8')
 
     def test_critical_policies_are_present(self):
         text = GROWTH_TEACHER_SYSTEM_PROMPT
@@ -142,9 +142,16 @@ class GrowthAIPromptTests(unittest.TestCase):
         self.assertIn('스냅샷', text)
         self.assertIn('다음 비교 시점에 현재 페이지를 다시 기록해 주세요', text)
         self.assertNotIn('다음 교재 snapshot 기록', text)
-        self.assertIn('서로 다른 단위의 정량 비교', text)
-        self.assertIn('독서 활동일은 15일에서 2일로, 완독 수는 4회에서 1회로', text)
-        self.assertIn('독서 활동일은 15일에서 2일로 줄었습니다. 완독 수는 4회에서 1회로 줄었습니다.', text)
+        self.assertNotIn('서로 다른 단위의 정량 비교', text)
+        self.assertNotIn('단위가 다른 숫자는 문장을 나눈다', text)
+        self.assertNotIn('한 문장에 서로 다른 단위의 정량 비교를 병렬로 넣지 않는다', text)
+        self.assertIn('여러 지표를 한 문장이나 한 항목에서 연결하는 것은 허용한다', text)
+        self.assertIn('독서 활동일은 15일에서 2일로 줄었고, 완독 수는 4권에서 1권으로 줄었습니다.', text)
+        self.assertIn('완독 수는 4회에서 1회로 줄었습니다.', text)
+        self.assertIn('완독 횟수 4회', text)
+        self.assertIn('책 완독은 반드시 권이다', text)
+        self.assertIn('점 또는 포인트', text)
+        self.assertIn('쪽 또는 페이지', text)
         self.assertNotIn('review_text', text)
         self.assertNotIn('SENTINEL_CHILD_NAME', text)
         self.assertNotIn('{packet', text)

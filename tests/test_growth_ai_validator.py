@@ -549,6 +549,53 @@ class GrowthAIValidatorTests(unittest.TestCase):
         )
         self.assertTrue(result.valid)
 
+    def test_completions_book_unit_passes(self):
+        result = validate_teacher_interpretation(
+            _packet(completions=1, completions_previous=4),
+            _output(
+                summary='완독 수는 4권에서 1권으로 줄었습니다.',
+                summary_ids=['reading.completions.current', 'reading.completions.previous'],
+            ),
+        )
+        self.assertTrue(result.valid)
+
+    def test_completions_count_unit_rejected(self):
+        result = validate_teacher_interpretation(
+            _packet(completions=1, completions_previous=4),
+            _output(
+                summary='완독 수는 4회에서 1회로 줄었습니다.',
+                summary_ids=['reading.completions.current', 'reading.completions.previous'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertEqual(_codes(result), (CODE_UNIT_MISMATCH, CODE_UNIT_MISMATCH))
+        mismatches = [item for item in result.violations if item.code == CODE_UNIT_MISMATCH]
+        self.assertEqual([item.location for item in mismatches], ['priority_insight', 'priority_insight'])
+        self.assertEqual({item.claim for item in mismatches}, {'4회', '1회'})
+        self.assertTrue(all(item.expected_unit == 'book/권' for item in mismatches))
+
+    def test_activity_days_and_completion_books_in_same_text_pass(self):
+        result = validate_teacher_interpretation(
+            _packet(
+                days=2,
+                days_previous=15,
+                days_delta=-13,
+                completions=1,
+                completions_previous=4,
+                completions_delta=-3,
+            ),
+            _output(
+                summary='독서 활동일은 15일에서 2일로 줄었고, 완독 수는 4권에서 1권으로 줄었습니다.',
+                summary_ids=[
+                    'reading.activity_days.current',
+                    'reading.activity_days.previous',
+                    'reading.completions.current',
+                    'reading.completions.previous',
+                ],
+            ),
+        )
+        self.assertTrue(result.valid)
+
     def test_negative_delta_absolute_value_with_matching_unit_passes(self):
         result = validate_teacher_interpretation(
             _packet(completions=5, completions_previous=6, completions_delta=-1),

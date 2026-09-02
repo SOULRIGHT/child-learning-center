@@ -37,6 +37,15 @@ _UNIT_BY_TOKEN = {
     '명': UNIT_PERSON,
 }
 
+_LABEL_BY_UNIT = {
+    UNIT_DAY: '일',
+    UNIT_BOOK: '권',
+    UNIT_POINT: '점',
+    UNIT_PAGE: '쪽',
+    UNIT_COUNT: '회',
+    UNIT_PERSON: '명',
+}
+
 _ESTIMATED_MARKERS = ('현재 추정 기준', '대략', '추정', '예상', '약')
 
 _DATE_ISO = re.compile(r'\d{4}-\d{2}-\d{2}')
@@ -66,6 +75,8 @@ class Violation:
     code: str
     location: str
     evidence_id: str | None = None
+    claim: str | None = None
+    expected_unit: str | None = None
 
     def __repr__(self):
         return f'Violation({self.code!r}, {self.location!r})'
@@ -182,7 +193,7 @@ def _citation_violations(location, evidence_ids, index):
 
 def _numeric_violations(location, text, cited, exempt):
     violations = []
-    for number, unit in _numeric_claims(text):
+    for number, unit, token in _numeric_claims(text):
         if _is_exempt(number, unit, exempt):
             continue
         matching = [
@@ -203,7 +214,12 @@ def _numeric_violations(location, text, cited, exempt):
             continue
         typed = [fact for fact in matching if fact.unit is not None]
         if typed and not any(fact.unit == unit for fact in typed):
-            violations.append(Violation(CODE_UNIT_MISMATCH, location))
+            violations.append(Violation(
+                CODE_UNIT_MISMATCH,
+                location,
+                claim=f'{number}{token}',
+                expected_unit=_expected_unit_label(typed),
+            ))
     return violations
 
 
@@ -232,7 +248,7 @@ def _estimated_violations(location, text, cited):
 
 
 def _mentions_estimated_value(text, fact):
-    for number, unit in _numeric_claims(text):
+    for number, unit, _token in _numeric_claims(text):
         if _claim_matches_value(fact.value, number) and (fact.unit is None or unit == fact.unit):
             return True
     return False
@@ -242,8 +258,22 @@ def _numeric_claims(text):
     masked = _mask_non_metric_numbers(text or '')
     claims = []
     for match in _CLAIM.finditer(masked):
-        claims.append((_parse_number(match.group(1)), _UNIT_BY_TOKEN[match.group(2)]))
+        token = match.group(2)
+        claims.append((_parse_number(match.group(1)), _UNIT_BY_TOKEN[token], token))
     return claims
+
+
+def _expected_unit_label(facts):
+    labels = []
+    seen = set()
+    for fact in facts:
+        unit = fact.unit
+        if unit in seen:
+            continue
+        seen.add(unit)
+        korean = _LABEL_BY_UNIT.get(unit)
+        labels.append(f'{unit}/{korean}' if korean else unit)
+    return ','.join(labels)
 
 
 def _mask_non_metric_numbers(text):

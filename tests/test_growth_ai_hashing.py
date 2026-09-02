@@ -6,7 +6,8 @@ import unittest
 from unittest.mock import patch
 
 from features.growth.ai.hashing import packet_hash, runtime_signature
-from features.growth.ai.runtime import current_runtime_signature
+from features.growth.ai.prompt import GROWTH_TEACHER_PROMPT_VERSION
+from features.growth.ai.runtime import current_runtime_parts, current_runtime_signature
 from features.growth.evidence_packet import build_teacher_evidence_packet
 
 
@@ -60,6 +61,8 @@ class PacketHashTests(unittest.TestCase):
         other = dict(base)
         other['prompt_version'] = 'growth_teacher_prompt_v9'
         self.assertNotEqual(runtime_signature(base), runtime_signature(other))
+        self.assertEqual(GROWTH_TEACHER_PROMPT_VERSION, 'growth_teacher_prompt_v8')
+        self.assertEqual(current_runtime_parts()['prompt_version'], GROWTH_TEACHER_PROMPT_VERSION)
 
     def test_v2_prompt_and_schema_change_current_signature(self):
         v1 = {

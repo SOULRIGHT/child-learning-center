@@ -5,7 +5,7 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
 - generator v1 model: `gpt-5.6-luna` (OpenAI Responses API)
 - production winner: 미확정
 - input: `growth_teacher_evidence_v1` only
-- prompt: `growth_teacher_prompt_v7`
+- prompt: `growth_teacher_prompt_v8`
   - v1 → v2: live probe에서 관측된 unknown citation(`plan.status`, `effective_weekdays`)과
     metric label confusion(`reading.activity_days`를 "학습 활동일"로 혼용)을 prompt에서만 보강.
     runtime semantic classifier는 두지 않는다.
@@ -17,8 +17,10 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
   - v5 → v6: live VALIDATOR_REJECT에서 observations/next_actions가
     `learning.math.plan.status` / `learning.ssen.plan.status`를 과목 유추로 생성.
     analogical `.plan.status` 금지. 교사 문장에서 snapshot/스냅샷 금지(페이지 기록).
-  - v6 → v7: 서로 다른 단위의 정량 비교를 한 문장에 병렬 금지 (UNIT_MISMATCH).
-    예: 활동일과 완독 수는 문장을 나눈다.
+  - v6 → v7: 서로 다른 단위의 정량 비교를 한 문장에 병렬 금지. generation 42 조사 결과
+    실제 원인은 mixed sentence가 아니라 completions를 `회`로 쓴 단위 계약 위반.
+  - v7 → v8: mixed-unit sentence 금지 제거. metric canonical unit 계약 강화
+    (완독 → 권, 활동일 → 일). 여러 지표를 한 문장/field에서 연결하는 것은 허용.
 - output: `growth_teacher_interpretation_v2`
   - required: `priority_insight`, `interpretation`, `observations`(max 3),
     `next_actions`(max 2, `conditional=true`), `next_check`

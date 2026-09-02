@@ -532,6 +532,10 @@ class _AttemptRecorder:
             issue = {'code': item.code, 'location': item.location}
             if getattr(item, 'evidence_id', None):
                 issue['evidence_id'] = item.evidence_id
+            if getattr(item, 'claim', None):
+                issue['claim'] = item.claim
+            if getattr(item, 'expected_unit', None):
+                issue['expected_unit'] = item.expected_unit
             issues.append(issue)
         self.validator_codes = codes or None
         self.validator_issues = issues or None

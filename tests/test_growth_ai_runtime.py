@@ -586,6 +586,23 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self.assertIn('UNKNOWN_EVIDENCE_ID', attempt.validator_codes)
         self.assertEqual(attempt.validator_issues[0]['evidence_id'], 'learning.math.plan.status')
 
+    def test_unit_mismatch_attempt_stores_claim_and_expected_unit(self):
+        self.packet = _packet(completions=1, completions_previous=4)
+        parsed = _pass_output()
+        parsed['priority_insight'] = {
+            'text': '완독 수는 4회에서 1회로 줄었습니다.',
+            'evidence_ids': ['reading.completions.current', 'reading.completions.previous'],
+        }
+        result = self._generate(generator=FakeGenerator(outputs=[parsed]))
+        self.assertFalse(result.ok)
+        attempt = GrowthAIAttempt.query.one()
+        self.assertEqual(attempt.status, ATTEMPT_VALIDATOR)
+        self.assertEqual(attempt.validator_codes, ['UNIT_MISMATCH', 'UNIT_MISMATCH'])
+        issues = attempt.validator_issues
+        self.assertEqual({item['claim'] for item in issues}, {'4회', '1회'})
+        self.assertTrue(all(item['location'] == 'priority_insight' for item in issues))
+        self.assertTrue(all(item['expected_unit'] == 'book/권' for item in issues))
+
     def test_safety_reject_stores_generated_output_on_attempt(self):
         clock = FakeClock()
         safety = FakeSafety(decisions=[
