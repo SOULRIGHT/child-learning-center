@@ -101,7 +101,7 @@ def _walk_schema_objects(node, found=None):
 
 class GrowthAIPromptTests(unittest.TestCase):
     def test_prompt_version(self):
-        self.assertEqual(GROWTH_TEACHER_PROMPT_VERSION, 'growth_teacher_prompt_v3')
+        self.assertEqual(GROWTH_TEACHER_PROMPT_VERSION, 'growth_teacher_prompt_v4')
 
     def test_critical_policies_are_present(self):
         text = GROWTH_TEACHER_SYSTEM_PROMPT

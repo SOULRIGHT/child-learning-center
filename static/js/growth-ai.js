@@ -77,6 +77,54 @@
         if (visible) setPresentationStage('waiting');
     }
 
+    function fillActions(selector, items) {
+        const node = document.querySelector(selector);
+        if (!node) return;
+        node.innerHTML = '';
+        (items || []).forEach(function (text, index) {
+            const card = document.createElement('article');
+            card.className = 'growth-ai-action-card';
+            const num = document.createElement('span');
+            num.className = 'growth-ai-action-num';
+            num.setAttribute('aria-hidden', 'true');
+            num.textContent = String(index + 1);
+            const body = document.createElement('p');
+            body.className = 'mb-0';
+            body.textContent = text;
+            card.appendChild(num);
+            card.appendChild(body);
+            node.appendChild(card);
+        });
+    }
+
+    function splitCheckItems(text) {
+        const raw = (text || '').trim();
+        if (!raw) return [];
+        const lines = raw.split(/\n+/).map(function (item) { return item.trim(); }).filter(Boolean);
+        if (lines.length > 1) return lines;
+        const sentences = raw.split(/(?<=다\.|요\.|니다\.)\s+/).map(function (item) {
+            return item.trim();
+        }).filter(Boolean);
+        return sentences.length ? sentences : [raw];
+    }
+
+    function fillChecklist(selector, text) {
+        const node = document.querySelector(selector);
+        if (!node) return;
+        node.innerHTML = '';
+        splitCheckItems(text).forEach(function (item) {
+            const li = document.createElement('li');
+            li.textContent = item;
+            node.appendChild(li);
+        });
+    }
+
+    function setObservationsSummary(count) {
+        const node = document.querySelector('[data-ai-role="observations-summary"]');
+        if (!node) return;
+        node.textContent = count ? ('세부 관찰 ' + count + '개 보기') : '세부 관찰 보기';
+    }
+
     function fillList(selector, items) {
         const node = document.querySelector(selector);
         if (!node) return;
@@ -182,9 +230,9 @@
         if (meaning) meaning.textContent = interpretation.interpretation || '';
         setSection('[data-ai-role="interpretation-wrap"]', !!(interpretation.interpretation || '').trim());
         fillList('[data-ai-role="observations"]', interpretation.observations || []);
-        fillList('[data-ai-role="suggestions"]', interpretation.next_actions || interpretation.suggestions || []);
-        const nextCheck = document.querySelector('[data-ai-role="next-check"]');
-        if (nextCheck) nextCheck.textContent = interpretation.next_check || '';
+        setObservationsSummary((interpretation.observations || []).length);
+        fillActions('[data-ai-role="suggestions"]', interpretation.next_actions || interpretation.suggestions || []);
+        fillChecklist('[data-ai-role="next-check-list"]', interpretation.next_check || '');
         setSection('[data-ai-role="observations-wrap"]', (interpretation.observations || []).length > 0);
         setSection('[data-ai-role="suggestions-wrap"]', (interpretation.next_actions || interpretation.suggestions || []).length > 0);
         setSection('[data-ai-role="next-check-wrap"]', !!(interpretation.next_check || '').trim());

@@ -5,12 +5,13 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
 - generator v1 model: `gpt-5.6-luna` (OpenAI Responses API)
 - production winner: 미확정
 - input: `growth_teacher_evidence_v1` only
-- prompt: `growth_teacher_prompt_v3`
+- prompt: `growth_teacher_prompt_v4`
   - v1 → v2: live probe에서 관측된 unknown citation(`plan.status`, `effective_weekdays`)과
     metric label confusion(`reading.activity_days`를 "학습 활동일"로 혼용)을 prompt에서만 보강.
     runtime semantic classifier는 두지 않는다.
   - v2 → v3: metric 낭독 금지. 반드시 핵심 변화 / 의미 / 지금 할 일 / 다음 확인.
     원인·심리·능력 추측 금지. 보상 인과 단정 금지.
+  - v3 → v4: 길이 상한(insight 2문장 / interpretation 3문장). 다른 단위 숫자 한 문장 나열 금지.
 - output: `growth_teacher_interpretation_v2`
   - required: `priority_insight`, `interpretation`, `observations`(max 3),
     `next_actions`(max 2, `conditional=true`), `next_check`

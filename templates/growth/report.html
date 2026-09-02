@@ -199,7 +199,111 @@
   }
   .growth-ai-hint { font-size: 0.85rem; color: #6b7280; }
   .growth-ai-steps { font-size: 0.9rem; color: #4b5563; }
-  .growth-ai-obs { margin: 0; padding-left: 1.1rem; }
+  .growth-ai-result {
+    max-width: 920px;
+  }
+  .growth-ai-section {
+    margin-top: 1.35rem;
+  }
+  .growth-ai-section-title {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #5b21b6;
+    margin-bottom: 0.55rem;
+  }
+  .growth-ai-priority {
+    margin-top: 0.35rem;
+    padding: 1rem 1.1rem;
+    border-radius: 14px;
+    background: #f5f3ff;
+    border: 1px solid #ddd6fe;
+    border-left: 4px solid #7c3aed;
+  }
+  .growth-ai-priority-text {
+    font-size: 1.12rem;
+    font-weight: 600;
+    line-height: 1.55;
+    color: #1f2937;
+  }
+  .growth-ai-prose {
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: #374151;
+    max-width: 42rem;
+  }
+  .growth-ai-actions {
+    display: grid;
+    gap: 0.7rem;
+  }
+  .growth-ai-action-card {
+    display: flex;
+    gap: 0.8rem;
+    align-items: flex-start;
+    padding: 0.85rem 0.95rem;
+    border-radius: 12px;
+    background: #faf8ff;
+    border: 1px solid #ede9fe;
+  }
+  .growth-ai-action-num {
+    flex: 0 0 1.7rem;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 999px;
+    background: #7c3aed;
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+    margin-top: 0.1rem;
+  }
+  .growth-ai-action-card p {
+    font-size: 1.02rem;
+    line-height: 1.6;
+    color: #1f2937;
+  }
+  .growth-ai-check {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .growth-ai-check li {
+    position: relative;
+    padding: 0.4rem 0 0.4rem 1.85rem;
+    font-size: 1.02rem;
+    line-height: 1.6;
+    color: #1f2937;
+  }
+  .growth-ai-check li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.7rem;
+    width: 0.95rem;
+    height: 0.95rem;
+    border: 2px solid #7c3aed;
+    border-radius: 4px;
+    background: #fff;
+  }
+  .growth-ai-obs-fold > summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #4c1d95;
+    list-style: none;
+  }
+  .growth-ai-obs-fold > summary::-webkit-details-marker { display: none; }
+  .growth-ai-obs-fold > summary::before {
+    content: "▸";
+    display: inline-block;
+    margin-right: 0.35rem;
+  }
+  .growth-ai-obs-fold[open] > summary::before { content: "▾"; }
+  .growth-ai-obs { margin: 0.65rem 0 0; padding-left: 1.1rem; }
+  .growth-ai-obs li {
+    font-size: 1.02rem;
+    line-height: 1.6;
+    margin-bottom: 0.35rem;
+  }
   .growth-ai-hidden { display: none !important; }
   .growth-ai-feedback-btns { display: flex; gap: 0.5rem; }
   .growth-ai-evidence-group {
@@ -282,6 +386,10 @@
   @media (max-width: 767.98px) {
     .growth-header .btn { width: 100%; }
     .growth-chart-wrap { height: 200px; }
+    .growth-ai-priority-text { font-size: 1.05rem; }
+    .growth-ai-prose,
+    .growth-ai-action-card p,
+    .growth-ai-check li { font-size: 1rem; }
   }
 </style>
 {% endblock %}
