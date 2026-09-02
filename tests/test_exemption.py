@@ -621,7 +621,8 @@ class ExemptionLedgerTests(unittest.TestCase):
         self._complete_exemption(child, self._rec_book(), self.today)
         issue_exemption_ticket(child.id, self.teacher, today=self.today)
         self._login(self.teacher_id)
-        html = self.client.get(f'/children/{child.id}').get_data(as_text=True)
+        with mock.patch('features.exemption.service.kst_today', return_value=self.today):
+            html = self.client.get(f'/children/{child.id}').get_data(as_text=True)
         self.assertIn('name="subject_key"', html)
         self.assertIn('과목을 선택하세요', html)
         self.assertIn('value="" selected', html)
