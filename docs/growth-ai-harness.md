@@ -56,7 +56,7 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
     preflight(disabled/quota/in_progress/cache)는 8s를 강제하지 않음.
     4단계 이후 1단계로 돌아가지 않음. fake % / fake completion 없음. timeout 20s 유지.
     mascot slot `data-stage=organize|interpret|verify|safety|waiting`
-  - attempt diagnostics: `growth_ai_attempt` (Alembic `c3a8f17b2d01`). generation당 1~2 row.
+  - attempt diagnostics: `growth_ai_attempt` (Alembic `c3a8f17b2d01`, additive `d9e1b24c7a03` for existing tables missing `safety_categories`). generation당 1~2 row.
     validator/safety reject 출력 저장. timeout은 generated_output null 허용.
     일반 UI/API 비노출. packet/prompt/credentials/review_text 저장 금지.
     B5가 읽을 필드: status/stage/failure_code/validator_codes/safety_action/safety_categories/

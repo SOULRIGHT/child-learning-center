@@ -75,6 +75,44 @@ class GrowthAIMigrationTests(unittest.TestCase):
             finally:
                 engine.dispose()
 
+    def test_safety_categories_added_when_attempt_table_already_exists(self):
+        root = Path(__file__).resolve().parents[1] / 'migrations' / 'versions'
+        patch = _load(
+            root / 'd9e1b24c7a03_add_growth_ai_attempt_safety_categories.py',
+            'growth_ai_attempt_patch',
+        )
+        with tempfile.TemporaryDirectory(prefix='clc_growth_ai_attempt_col_') as tmp:
+            db_path = Path(tmp) / 'existing.db'
+            engine = create_engine('sqlite:///' + db_path.resolve().as_posix())
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(
+                        'CREATE TABLE growth_ai_generation (id INTEGER PRIMARY KEY)'
+                    ))
+                    conn.execute(text(
+                        """
+                        CREATE TABLE growth_ai_attempt (
+                            id INTEGER PRIMARY KEY,
+                            generation_id INTEGER NOT NULL,
+                            attempt_number INTEGER NOT NULL,
+                            started_at DATETIME NOT NULL,
+                            status VARCHAR(32) NOT NULL,
+                            failure_code VARCHAR(64)
+                        )
+                        """
+                    ))
+                    context = MigrationContext.configure(conn)
+                    with Operations.context(context):
+                        patch.upgrade()
+                    columns = {col['name'] for col in inspect(conn).get_columns('growth_ai_attempt')}
+                    self.assertIn('safety_categories', columns)
+                    with Operations.context(context):
+                        patch.upgrade()
+                    columns = {col['name'] for col in inspect(conn).get_columns('growth_ai_attempt')}
+                    self.assertIn('safety_categories', columns)
+            finally:
+                engine.dispose()
+
 
 def _load(path, name):
     spec = importlib.util.spec_from_file_location(name, path)
