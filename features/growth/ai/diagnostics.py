@@ -27,7 +27,9 @@ FAILURE_BUCKETS = (
     'PARSE_ERROR',
     'VALIDATOR_REJECT',
     'SAFETY_REJECT',
+    'SAFETY_INTERVENED',
     'SAFETY_ERROR',
+    'PERSISTENCE_ERROR',
 )
 
 
@@ -50,6 +52,21 @@ def _rate(num, den):
     if not den:
         return None
     return round(num / den, 4)
+
+
+def _percentile(values, p):
+    ordered = sorted(item for item in values if isinstance(item, (int, float)))
+    if not ordered:
+        return None
+    if len(ordered) == 1:
+        return ordered[0]
+    rank = (len(ordered) - 1) * p
+    low = int(rank)
+    high = min(low + 1, len(ordered) - 1)
+    if low == high:
+        return ordered[low]
+    frac = rank - low
+    return ordered[low] + (ordered[high] - ordered[low]) * frac
 
 
 def _text_snippets(output, limit=4):
@@ -87,12 +104,19 @@ def _codes(value):
     return []
 
 
-def aggregate_growth_ai_logs(generations, attempts):
+def aggregate_growth_ai_logs(generations, attempts, *, prompt_version=None, runtime_signature=None):
     """generations/attempts: dict rows. child_id/name을 결과에 넣지 않는다."""
     gens = list(generations or [])
+    if prompt_version:
+        gens = [row for row in gens if row.get('prompt_version') == prompt_version]
+    if runtime_signature:
+        gens = [row for row in gens if row.get('runtime_signature') == runtime_signature]
+    kept = {row.get('id') for row in gens}
     attempts_by_gen = {}
     for row in attempts or []:
         gid = row.get('generation_id')
+        if gid not in kept:
+            continue
         attempts_by_gen.setdefault(gid, []).append(row)
     for rows in attempts_by_gen.values():
         rows.sort(key=lambda item: (item.get('attempt_number') or 0, item.get('id') or 0))
@@ -118,6 +142,7 @@ def aggregate_growth_ai_logs(generations, attempts):
     proxy_retry = 0
     proxy_recovered = 0
     proxy_retry_fail = 0
+    latencies = []
 
     for gen in gens:
         gid = gen.get('id')
@@ -165,6 +190,9 @@ def aggregate_growth_ai_logs(generations, attempts):
                 attempt_stage[row.get('stage')] += 1
             if status != SUCCESS:
                 attempt_failure[row.get('failure_code') or status] += 1
+            latency = row.get('total_latency_ms')
+            if isinstance(latency, (int, float)):
+                latencies.append(latency)
             number = row.get('attempt_number')
             for code in _codes(row.get('validator_codes')):
                 validator_codes[code] += 1
@@ -230,4 +258,8 @@ def aggregate_growth_ai_logs(generations, attempts):
         'pending_with_attempts': pending_with_attempts,
         'pending_without_attempts': pending_without_attempts,
         'validator_reject_samples': fail_patterns[:12],
+        'attempt_latency_p50_ms': _percentile(latencies, 0.5),
+        'attempt_latency_p95_ms': _percentile(latencies, 0.95),
+        'prompt_version_filter': prompt_version,
+        'runtime_signature_filter': runtime_signature,
     }

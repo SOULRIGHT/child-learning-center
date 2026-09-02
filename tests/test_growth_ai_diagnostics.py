@@ -49,3 +49,34 @@ class GrowthAiDiagnosticsTests(unittest.TestCase):
         self.assertEqual(stats['pending_without_attempts'][0]['generation_id'], 4)
         self.assertNotIn('child', str(stats).lower())
         self.assertNotIn('name', stats['validator_reject_samples'][0])
+
+    def test_prompt_version_filter_and_latency(self):
+        generations = [
+            {
+                'id': 1, 'status': 'SUCCESS', 'failure_code': None, 'attempt_count': 1,
+                'prompt_version': 'growth_teacher_prompt_v5', 'runtime_signature': 'sig-a',
+            },
+            {
+                'id': 2, 'status': 'FAILED', 'failure_code': 'TIMEOUT', 'attempt_count': 1,
+                'prompt_version': 'growth_teacher_prompt_v4', 'runtime_signature': 'sig-b',
+            },
+        ]
+        attempts = [
+            {
+                'id': 1, 'generation_id': 1, 'attempt_number': 1, 'status': 'SUCCESS',
+                'stage': 'safety', 'total_latency_ms': 11000,
+            },
+            {
+                'id': 2, 'generation_id': 2, 'attempt_number': 1, 'status': 'TIMEOUT',
+                'stage': 'generator', 'failure_code': 'TIMEOUT', 'total_latency_ms': 20000,
+            },
+        ]
+        stats = aggregate_growth_ai_logs(
+            generations, attempts, prompt_version='growth_teacher_prompt_v5',
+        )
+        self.assertEqual(stats['generation_count'], 1)
+        self.assertEqual(stats['final_success_count'], 1)
+        self.assertEqual(stats['attempt_failure_buckets']['TIMEOUT'], 0)
+        self.assertEqual(stats['attempt_latency_p50_ms'], 11000)
+        self.assertEqual(stats['attempt_latency_p95_ms'], 11000)
+        self.assertEqual(stats['prompt_version_filter'], 'growth_teacher_prompt_v5')

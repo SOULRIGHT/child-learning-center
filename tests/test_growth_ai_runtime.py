@@ -22,14 +22,20 @@ from feature_models import (  # noqa: E402
 )
 from features.growth.ai.bedrock_safety import ACTION_ERROR, ACTION_INTERVENED, ACTION_NONE
 from features.growth.ai.hashing import packet_hash, runtime_signature
-from features.growth.ai.provider import GenerationResult, GrowthInterpretationAPIError
+from features.growth.ai.provider import GenerationResult, GrowthInterpretationAPIError, GrowthInterpretationParseError
 from features.growth.ai.runtime import (
+    ATTEMPT_GENERATOR,
+    ATTEMPT_PARSE,
     ATTEMPT_SUCCESS,
     ATTEMPT_TIMEOUT,
     ATTEMPT_VALIDATOR,
     ATTEMPT_SAFETY,
+    ATTEMPT_SAFETY_ERROR,
+    CODE_GENERATOR,
+    CODE_PARSE,
     CODE_SAFETY_BLOCK,
     CODE_SAFETY_ERROR,
+    CODE_TIMEOUT,
     CODE_VALIDATOR,
     DAILY_QUOTA,
     FEEDBACK_MAX_LEN,
@@ -289,16 +295,19 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self._generate()
         self.assertEqual(GrowthAIGeneration.query.count(), before)
 
-    def test_internal_retry_does_not_add_quota_row(self):
+    def test_provider_error_does_not_retry_or_add_quota_row(self):
         generator = FakeGenerator(
             errors=[GrowthInterpretationAPIError('openai api request failed')],
             outputs=[_pass_output()],
         )
         result = self._generate(generator=generator)
-        self.assertTrue(result.ok)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_code, CODE_GENERATOR)
+        self.assertEqual(len(generator.calls), 1)
         rows = GrowthAIGeneration.query.all()
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].attempt_count, 2)
+        self.assertEqual(rows[0].attempt_count, 1)
+        self.assertEqual(GrowthAIAttempt.query.count(), 1)
 
     def test_kst_day_rollover(self):
         yesterday = datetime.utcnow() - timedelta(hours=36)
@@ -363,7 +372,7 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         result = self._generate(safety=safety)
         self.assertFalse(result.ok)
         self.assertEqual(GrowthAIGeneration.query.one().failure_code, CODE_SAFETY_ERROR)
-        self.assertEqual(len(safety.calls), 2)
+        self.assertEqual(len(safety.calls), 1)
 
     def test_deadline_timeout(self):
         clock = FakeClock()
@@ -377,7 +386,7 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self.assertEqual(result.state, 'timeout')
         self.assertIsNone(GrowthAIGeneration.query.one().parsed_output)
 
-    def test_retry_does_not_ignore_deadline(self):
+    def test_provider_error_does_not_ignore_deadline_or_retry(self):
         clock = FakeClock()
         generator = AdvancingGenerator(
             clock,
@@ -564,19 +573,113 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self.assertEqual(attempt.status, ATTEMPT_TIMEOUT)
         self.assertIsNone(attempt.generated_output)
 
-    def test_retry_writes_two_attempt_rows_and_one_quota(self):
+    def test_provider_error_writes_one_attempt_and_one_quota(self):
         generator = FakeGenerator(
             errors=[GrowthInterpretationAPIError('openai api request failed')],
             outputs=[_pass_output()],
         )
         result = self._generate(generator=generator)
-        self.assertTrue(result.ok)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_code, CODE_GENERATOR)
         self.assertEqual(GrowthAIGeneration.query.count(), 1)
         attempts = GrowthAIAttempt.query.order_by(GrowthAIAttempt.attempt_number).all()
-        self.assertEqual(len(attempts), 2)
+        self.assertEqual(len(attempts), 1)
         self.assertEqual(attempts[0].attempt_number, 1)
-        self.assertEqual(attempts[1].attempt_number, 2)
-        self.assertEqual(attempts[1].status, ATTEMPT_SUCCESS)
+        self.assertEqual(attempts[0].status, ATTEMPT_GENERATOR)
+
+    def test_timeout_does_not_retry(self):
+        clock = FakeClock()
+
+        class SlowGenerator(FakeGenerator):
+            def generate(self, packet, timeout_s=None):
+                clock.advance(20)
+                return super().generate(packet, timeout_s=timeout_s)
+
+        generator = SlowGenerator(outputs=[_pass_output(), _pass_output()])
+        result = self._generate(generator=generator, clock=clock)
+        self.assertEqual(result.state, 'timeout')
+        self.assertEqual(
+            result.message,
+            'AI 해석 준비 시간이 조금 길어졌어요.\n다시 시도해주세요.',
+        )
+        self.assertEqual(len(generator.calls), 1)
+        self.assertEqual(GrowthAIGeneration.query.one().attempt_count, 1)
+        self.assertEqual(GrowthAIAttempt.query.count(), 1)
+
+    def test_safety_error_does_not_retry_luna(self):
+        generator = FakeGenerator(outputs=[_pass_output(), _pass_output()])
+        safety = FakeSafety(decisions=[
+            SafetyDecision(safe=False, provider='aws_bedrock_guardrail', action=ACTION_ERROR),
+        ])
+        result = self._generate(generator=generator, safety=safety)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_code, CODE_SAFETY_ERROR)
+        self.assertEqual(len(generator.calls), 1)
+        self.assertEqual(len(safety.calls), 1)
+        self.assertEqual(GrowthAIAttempt.query.count(), 1)
+
+    def test_parse_failure_does_not_retry(self):
+        generator = FakeGenerator(errors=[GrowthInterpretationParseError('invalid json')])
+        result = self._generate(generator=generator)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_code, CODE_PARSE)
+        self.assertEqual(len(generator.calls), 1)
+        self.assertEqual(GrowthAIGeneration.query.one().attempt_count, 1)
+        self.assertEqual(GrowthAIAttempt.query.one().status, ATTEMPT_PARSE)
+
+    def test_validator_reject_does_not_retry(self):
+        generator = FakeGenerator(outputs=[_reject_output(), _pass_output()])
+        result = self._generate(generator=generator)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_code, CODE_VALIDATOR)
+        self.assertEqual(len(generator.calls), 1)
+        self.assertEqual(GrowthAIAttempt.query.count(), 1)
+        self.assertEqual(result.message, '이번에는 AI 성장 해석을 준비하지 못했어요.\n잠시 후 다시 시도해주세요.')
+
+    def test_safety_reject_does_not_retry_luna(self):
+        generator = FakeGenerator(outputs=[_pass_output(), _pass_output()])
+        safety = FakeSafety(decisions=[
+            SafetyDecision(safe=False, provider='aws_bedrock_guardrail', action=ACTION_INTERVENED),
+        ])
+        result = self._generate(generator=generator, safety=safety)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_code, CODE_SAFETY_BLOCK)
+        self.assertEqual(len(generator.calls), 1)
+        self.assertEqual(len(safety.calls), 1)
+
+    def test_user_retry_starts_new_generation(self):
+        first = FakeGenerator(outputs=[_reject_output()])
+        failed = self._generate(generator=first)
+        self.assertFalse(failed.ok)
+        second = FakeGenerator()
+        ok = self._generate(generator=second)
+        self.assertTrue(ok.ok)
+        self.assertEqual(len(first.calls), 1)
+        self.assertEqual(len(second.calls), 1)
+        rows = GrowthAIGeneration.query.order_by(GrowthAIGeneration.id).all()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0].status, GROWTH_AI_STATUS_FAILED)
+        self.assertEqual(rows[1].status, GROWTH_AI_STATUS_SUCCESS)
+        self.assertEqual(GrowthAIAttempt.query.count(), 2)
+        self.assertTrue(all(row.attempt_count == 1 for row in rows))
+
+    def test_failed_user_request_consumes_quota(self):
+        self._generate(generator=FakeGenerator(errors=[GrowthInterpretationAPIError('openai api request failed')]))
+        signature = runtime_signature(current_runtime_parts())
+        for i in range(DAILY_QUOTA - 1):
+            db.session.add(GrowthAIGeneration(
+                child_id=self.child.id,
+                requested_by_user_id=self.teacher.id,
+                packet_hash=('d' * 63) + str(i % 10),
+                runtime_signature=signature,
+                as_of=AS_OF,
+                status=GROWTH_AI_STATUS_SUCCESS,
+                created_at=datetime.utcnow(),
+                completed_at=datetime.utcnow(),
+            ))
+        db.session.commit()
+        result = self._generate(generator=FakeGenerator())
+        self.assertEqual(result.state, 'quota')
 
     def test_quota_preflight_does_not_start_generation(self):
         signature = runtime_signature(current_runtime_parts())

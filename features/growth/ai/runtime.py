@@ -63,8 +63,6 @@ DAILY_QUOTA = 30
 DEADLINE_S = 20.0
 FRONTEND_TIMEOUT_MS = 21000
 MIN_CALL_S = 0.5
-MIN_RETRY_REMAINING_S = 4.0
-MIN_SAFETY_RETRY_S = 2.0
 PENDING_STALE_S = 60
 FEEDBACK_MAX_LEN = 1000
 TEACHER_AI_ROLES = frozenset({'돌봄선생님', '센터장', '개발자'})
@@ -399,112 +397,80 @@ class _PipelineFail(Exception):
 
 
 def _run_pipeline(packet, generator, safety, deadline, row):
-    regenerated = False
-    safety_retried = False
-    attempt_number = 0
-    while True:
-        attempt_number += 1
-        row.attempt_count = attempt_number
-        db.session.commit()
-        rec = _AttemptRecorder(row, attempt_number)
+    row.attempt_count = 1
+    db.session.commit()
+    rec = _AttemptRecorder(row, 1)
+    try:
+        deadline.raise_if_expired()
+    except DeadlineExceeded:
+        rec.finish(ATTEMPT_TIMEOUT, stage='generator', failure_code=CODE_TIMEOUT)
+        raise
+    try:
         try:
-            deadline.raise_if_expired()
-        except DeadlineExceeded:
+            gen_meta = generator.generate(packet, timeout_s=deadline.remaining())
+        except TypeError:
+            gen_meta = generator.generate(packet)
+    except DeadlineExceeded:
+        rec.finish(ATTEMPT_TIMEOUT, stage='generator', failure_code=CODE_TIMEOUT)
+        raise
+    except GrowthInterpretationConfigError as exc:
+        rec.finish(ATTEMPT_CONFIG, stage='generator', failure_code=CODE_CONFIG)
+        raise _PipelineFail(CODE_CONFIG) from exc
+    except GrowthInterpretationParseError as exc:
+        rec.finish(ATTEMPT_PARSE, stage='parse', failure_code=CODE_PARSE)
+        raise _PipelineFail(CODE_PARSE) from exc
+    except GrowthInterpretationError as exc:
+        timeout_like = (
+            isinstance(exc, GrowthInterpretationAPIError)
+            and 'timeout' in str(exc).lower()
+        )
+        if timeout_like or deadline.remaining() < MIN_CALL_S:
             rec.finish(ATTEMPT_TIMEOUT, stage='generator', failure_code=CODE_TIMEOUT)
-            raise
-        try:
-            try:
-                gen_meta = generator.generate(packet, timeout_s=deadline.remaining())
-            except TypeError:
-                gen_meta = generator.generate(packet)
-        except DeadlineExceeded:
-            rec.finish(ATTEMPT_TIMEOUT, stage='generator', failure_code=CODE_TIMEOUT)
-            raise
-        except GrowthInterpretationConfigError as exc:
-            rec.finish(ATTEMPT_CONFIG, stage='generator', failure_code=CODE_CONFIG)
-            raise _PipelineFail(CODE_CONFIG) from exc
-        except GrowthInterpretationParseError as exc:
-            rec.finish(ATTEMPT_PARSE, stage='parse', failure_code=CODE_GENERATOR)
-            if _can_retry(regenerated, deadline):
-                regenerated = True
-                continue
-            raise _PipelineFail(CODE_GENERATOR) from exc
-        except GrowthInterpretationError as exc:
-            timeout_like = (
-                isinstance(exc, GrowthInterpretationAPIError)
-                and 'timeout' in str(exc).lower()
-            )
-            attempt_status = ATTEMPT_TIMEOUT if timeout_like else ATTEMPT_GENERATOR
-            fail_code = CODE_TIMEOUT if timeout_like else CODE_GENERATOR
-            if deadline.remaining() < MIN_CALL_S:
-                rec.finish(ATTEMPT_TIMEOUT, stage='generator', failure_code=CODE_TIMEOUT)
-                raise DeadlineExceeded() from exc
-            rec.finish(attempt_status, stage='generator', failure_code=fail_code)
-            if _can_retry(regenerated, deadline):
-                regenerated = True
-                continue
-            raise _PipelineFail(fail_code) from exc
-        rec.capture_generator(gen_meta)
-        try:
-            deadline.raise_if_expired()
-        except DeadlineExceeded:
-            rec.finish(ATTEMPT_TIMEOUT, stage='generator', failure_code=CODE_TIMEOUT)
-            raise
-        parsed = gen_meta.parsed_output if isinstance(gen_meta, GenerationResult) else None
-        if not isinstance(parsed, dict):
-            rec.finish(ATTEMPT_PARSE, stage='parse', failure_code=CODE_GENERATOR)
-            if _can_retry(regenerated, deadline):
-                regenerated = True
-                continue
-            raise _PipelineFail(CODE_GENERATOR)
-        rec.generated_output = parsed
-        if rec.generated_text is None:
-            rec.generated_text = gen_meta.raw_output if isinstance(gen_meta, GenerationResult) else None
-        validator_started = time.perf_counter()
-        validation = validate_teacher_interpretation(packet, parsed)
-        rec.validator_latency_ms = int((time.perf_counter() - validator_started) * 1000)
-        rec.capture_validator(validation)
-        if not validation.valid:
-            rec.finish(ATTEMPT_VALIDATOR, stage='validator', failure_code=CODE_VALIDATOR)
-            if _can_retry(regenerated, deadline):
-                regenerated = True
-                continue
-            raise _PipelineFail(CODE_VALIDATOR)
-        text = visible_interpretation_text(parsed)
-        rec.generated_text = rec.generated_text or text
-        try:
-            deadline.raise_if_expired()
-        except DeadlineExceeded:
-            rec.finish(ATTEMPT_TIMEOUT, stage='safety', failure_code=CODE_TIMEOUT)
-            raise
-        decision = _check_safety(safety, text, deadline)
-        rec.capture_safety(decision)
-        if decision is None or getattr(decision, 'action', None) == ACTION_ERROR:
-            if not safety_retried and deadline.remaining() >= MIN_SAFETY_RETRY_S:
-                safety_retried = True
-                retry_started = time.perf_counter()
-                decision = _check_safety(safety, text, deadline)
-                extra_ms = int((time.perf_counter() - retry_started) * 1000)
-                rec.safety_latency_ms = (rec.safety_latency_ms or 0) + extra_ms
-                rec.capture_safety(decision)
-            if decision is None or getattr(decision, 'action', None) == ACTION_ERROR:
-                rec.finish(ATTEMPT_SAFETY_ERROR, stage='safety', failure_code=CODE_SAFETY_ERROR)
-                raise _PipelineFail(CODE_SAFETY_ERROR)
-        if decision.action == ACTION_INTERVENED:
-            rec.finish(ATTEMPT_SAFETY, stage='safety', failure_code=CODE_SAFETY_BLOCK)
-            if _can_retry(regenerated, deadline):
-                regenerated = True
-                continue
-            raise _PipelineFail(CODE_SAFETY_BLOCK)
-        if decision.action != ACTION_NONE or decision.safe is not True:
-            rec.finish(ATTEMPT_SAFETY_ERROR, stage='safety', failure_code=CODE_SAFETY_ERROR)
-            raise _PipelineFail(CODE_SAFETY_ERROR)
-        rec.finish(ATTEMPT_SUCCESS, stage='safety', failure_code=None)
-        return parsed, gen_meta, decision
-
-
-def _can_retry(regenerated, deadline):
-    return (not regenerated) and deadline.remaining() >= MIN_RETRY_REMAINING_S
+            if timeout_like:
+                raise _PipelineFail(CODE_TIMEOUT) from exc
+            raise DeadlineExceeded() from exc
+        rec.finish(ATTEMPT_GENERATOR, stage='generator', failure_code=CODE_GENERATOR)
+        raise _PipelineFail(CODE_GENERATOR) from exc
+    rec.capture_generator(gen_meta)
+    try:
+        deadline.raise_if_expired()
+    except DeadlineExceeded:
+        rec.finish(ATTEMPT_TIMEOUT, stage='generator', failure_code=CODE_TIMEOUT)
+        raise
+    parsed = gen_meta.parsed_output if isinstance(gen_meta, GenerationResult) else None
+    if not isinstance(parsed, dict):
+        rec.finish(ATTEMPT_PARSE, stage='parse', failure_code=CODE_PARSE)
+        raise _PipelineFail(CODE_PARSE)
+    rec.generated_output = parsed
+    if rec.generated_text is None:
+        rec.generated_text = gen_meta.raw_output if isinstance(gen_meta, GenerationResult) else None
+    validator_started = time.perf_counter()
+    validation = validate_teacher_interpretation(packet, parsed)
+    rec.validator_latency_ms = int((time.perf_counter() - validator_started) * 1000)
+    rec.capture_validator(validation)
+    if not validation.valid:
+        rec.finish(ATTEMPT_VALIDATOR, stage='validator', failure_code=CODE_VALIDATOR)
+        raise _PipelineFail(CODE_VALIDATOR)
+    text = visible_interpretation_text(parsed)
+    rec.generated_text = rec.generated_text or text
+    try:
+        deadline.raise_if_expired()
+    except DeadlineExceeded:
+        rec.finish(ATTEMPT_TIMEOUT, stage='safety', failure_code=CODE_TIMEOUT)
+        raise
+    decision = _check_safety(safety, text, deadline)
+    rec.capture_safety(decision)
+    if decision is None or getattr(decision, 'action', None) == ACTION_ERROR:
+        rec.finish(ATTEMPT_SAFETY_ERROR, stage='safety', failure_code=CODE_SAFETY_ERROR)
+        raise _PipelineFail(CODE_SAFETY_ERROR)
+    if decision.action == ACTION_INTERVENED:
+        rec.finish(ATTEMPT_SAFETY, stage='safety', failure_code=CODE_SAFETY_BLOCK)
+        raise _PipelineFail(CODE_SAFETY_BLOCK)
+    if decision.action != ACTION_NONE or decision.safe is not True:
+        rec.finish(ATTEMPT_SAFETY_ERROR, stage='safety', failure_code=CODE_SAFETY_ERROR)
+        raise _PipelineFail(CODE_SAFETY_ERROR)
+    rec.finish(ATTEMPT_SUCCESS, stage='safety', failure_code=None)
+    return parsed, gen_meta, decision
 
 
 def _check_safety(safety, text, deadline):

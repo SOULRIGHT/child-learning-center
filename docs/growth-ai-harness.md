@@ -5,13 +5,15 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
 - generator v1 model: `gpt-5.6-luna` (OpenAI Responses API)
 - production winner: 미확정
 - input: `growth_teacher_evidence_v1` only
-- prompt: `growth_teacher_prompt_v4`
+- prompt: `growth_teacher_prompt_v5`
   - v1 → v2: live probe에서 관측된 unknown citation(`plan.status`, `effective_weekdays`)과
     metric label confusion(`reading.activity_days`를 "학습 활동일"로 혼용)을 prompt에서만 보강.
     runtime semantic classifier는 두지 않는다.
   - v2 → v3: metric 낭독 금지. 반드시 핵심 변화 / 의미 / 지금 할 일 / 다음 확인.
     원인·심리·능력 추측 금지. 보상 인과 단정 금지.
   - v3 → v4: 길이 상한(insight 2문장 / interpretation 3문장). 다른 단위 숫자 한 문장 나열 금지.
+  - v4 → v5: evidence_id는 packet exact copy만. `*.plan.status` 등 field name 금지.
+    next_actions citation은 제안을 만든 기존 관찰 사실만.
 - output: `growth_teacher_interpretation_v2`
   - required: `priority_insight`, `interpretation`, `observations`(max 3),
     `next_actions`(max 2, `conditional=true`), `next_check`
@@ -43,11 +45,12 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
   - `action=NONE` → safe, `GUARDRAIL_INTERVENED` → reject, API/timeout/auth error → fail closed
 - B4 Teacher AI Runtime / UX: `generate_teacher_growth_interpretation(...)`
   - user-triggered generation only (`[ AI 성장 해석 만들기 ]`). Growth GET은 API를 호출하지 않음
-  - account/day 30 user-initiated requests (KST, 실패도 1회, cache/조회/내부 retry는 추가 차감 없음)
+  - account/day 30 user-initiated requests (KST, 실패도 1회, cache/조회는 추가 차감 없음. 내부 regeneration 없음)
   - cache: same child + packet_hash + runtime_signature + SUCCESS
   - stale: packet hash mismatch. 과거 해석을 최신처럼 표시하지 않음
   - total deadline 20s (backend authoritative). frontend abort 21s
-  - max 1 internal retry if remaining time allows. AWS safety API 실패는 가능하면 safety만 재시도
+  - max 1 Luna generation per user request. validator/parse/provider/safety 실패 시 내부 재생성 없음.
+    AWS safety API도 요청당 1회. 사용자 [다시 시도]만 새 generation + 새 20초 deadline.
   - kill switch: `GROWTH_AI_ENABLED` (default off). OFF여도 deterministic Growth는 유지
   - factual validator + AWS safety required before render
   - friendly evidence UI (raw evidence_id 비노출)
@@ -57,7 +60,7 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
     preflight(disabled/quota/in_progress/cache)는 8s를 강제하지 않음.
     4단계 이후 1단계로 돌아가지 않음. fake % / fake completion 없음. timeout 20s 유지.
     mascot slot `data-stage=organize|interpret|verify|safety|waiting`
-  - attempt diagnostics: `growth_ai_attempt` (Alembic `c3a8f17b2d01`, additive `d9e1b24c7a03` for existing tables missing `safety_categories`). generation당 1~2 row.
+  - attempt diagnostics: `growth_ai_attempt` (Alembic `c3a8f17b2d01`, additive `d9e1b24c7a03` for existing tables missing `safety_categories`). generation당 최대 1 row (user request당 Luna 1회).
     validator/safety reject 출력 저장. timeout은 generated_output null 허용.
     일반 UI/API 비노출. packet/prompt/credentials/review_text 저장 금지.
     B5가 읽을 필드: status/stage/failure_code/validator_codes/safety_action/safety_categories/

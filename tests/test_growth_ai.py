@@ -101,7 +101,7 @@ def _walk_schema_objects(node, found=None):
 
 class GrowthAIPromptTests(unittest.TestCase):
     def test_prompt_version(self):
-        self.assertEqual(GROWTH_TEACHER_PROMPT_VERSION, 'growth_teacher_prompt_v4')
+        self.assertEqual(GROWTH_TEACHER_PROMPT_VERSION, 'growth_teacher_prompt_v5')
 
     def test_critical_policies_are_present(self):
         text = GROWTH_TEACHER_SYSTEM_PROMPT
@@ -129,7 +129,10 @@ class GrowthAIPromptTests(unittest.TestCase):
         self.assertIn('관측 학습일', text)
         self.assertIn('학습 활동일', text)
         self.assertIn('완독 수', text)
-        self.assertIn('일반 JSON field name을 evidence_id라고 추측해서 만들지 않는다', text)
+        self.assertIn('*.plan.status', text)
+        self.assertIn('한 글자도 바꾸지 않고 그대로 복사', text)
+        self.assertIn('그 제안을 하게 만든 기존 관찰 사실', text)
+        self.assertIn('일반 JSON field name', text)
         self.assertIn('priority_insight', text)
         self.assertIn('next_check', text)
         self.assertIn('면제권 때문에', text)

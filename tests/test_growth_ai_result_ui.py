@@ -27,5 +27,5 @@ class GrowthAiResultUiTests(unittest.TestCase):
         self.assertIn('setObservationsSummary', js)
         self.assertIn('INTERPRETATION_TITLE = \'왜 중요하게 보나요?\'', copy_src)
         self.assertIn('OBS_TITLE = \'세부 관찰\'', copy_src)
-        self.assertIn('growth_teacher_prompt_v4', (PROJECT_ROOT / 'features' / 'growth' / 'ai' / 'prompt.py').read_text(encoding='utf-8'))
+        self.assertIn('growth_teacher_prompt_v5', (PROJECT_ROOT / 'features' / 'growth' / 'ai' / 'prompt.py').read_text(encoding='utf-8'))
         self.assertIn('최대 2문장', (PROJECT_ROOT / 'features' / 'growth' / 'ai' / 'prompt.py').read_text(encoding='utf-8'))
