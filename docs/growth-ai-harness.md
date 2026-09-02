@@ -5,7 +5,7 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
 - generator v1 model: `gpt-5.6-luna` (OpenAI Responses API)
 - production winner: 미확정
 - input: `growth_teacher_evidence_v1` only
-- prompt: `growth_teacher_prompt_v5`
+- prompt: `growth_teacher_prompt_v6`
   - v1 → v2: live probe에서 관측된 unknown citation(`plan.status`, `effective_weekdays`)과
     metric label confusion(`reading.activity_days`를 "학습 활동일"로 혼용)을 prompt에서만 보강.
     runtime semantic classifier는 두지 않는다.
@@ -14,6 +14,9 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
   - v3 → v4: 길이 상한(insight 2문장 / interpretation 3문장). 다른 단위 숫자 한 문장 나열 금지.
   - v4 → v5: evidence_id는 packet exact copy만. `*.plan.status` 등 field name 금지.
     next_actions citation은 제안을 만든 기존 관찰 사실만.
+  - v5 → v6: live VALIDATOR_REJECT에서 observations/next_actions가
+    `learning.math.plan.status` / `learning.ssen.plan.status`를 과목 유추로 생성.
+    analogical `.plan.status` 금지. 교사 문장에서 snapshot/스냅샷 금지(페이지 기록).
 - output: `growth_teacher_interpretation_v2`
   - required: `priority_insight`, `interpretation`, `observations`(max 3),
     `next_actions`(max 2, `conditional=true`), `next_check`
@@ -52,6 +55,8 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
   - max 1 Luna generation per user request. validator/parse/provider/safety 실패 시 내부 재생성 없음.
     AWS safety API도 요청당 1회. 사용자 [다시 시도]만 새 generation + 새 20초 deadline.
   - kill switch: `GROWTH_AI_ENABLED` (default off). OFF여도 deterministic Growth는 유지
+  - allowed generate roles: 센터장, 돌봄선생님, 일반사용자(봉사선생님), 개발자.
+    DB role 문자열 `일반사용자`는 rename하지 않는다. 학생열람/viewer는 금지.
   - factual validator + AWS safety required before render
   - friendly evidence UI (raw evidence_id 비노출)
   - feedback은 DB만 저장. OpenAI/AWS로 전달하지 않음

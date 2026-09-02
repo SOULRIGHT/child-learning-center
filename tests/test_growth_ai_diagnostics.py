@@ -4,6 +4,7 @@ from __future__ import annotations
 import unittest
 
 from features.growth.ai.diagnostics import aggregate_growth_ai_logs
+from tests.helpers import PROJECT_ROOT
 
 
 class GrowthAiDiagnosticsTests(unittest.TestCase):
@@ -20,7 +21,7 @@ class GrowthAiDiagnosticsTests(unittest.TestCase):
                 'id': 2, 'generation_id': 2, 'attempt_number': 1, 'status': 'VALIDATOR_REJECT',
                 'stage': 'validator', 'failure_code': 'VALIDATOR_REJECT',
                 'validator_codes': '["UNKNOWN_EVIDENCE_ID"]',
-                'validator_issues': '[{"code":"UNKNOWN_EVIDENCE_ID","evidence_id":"learning.math.plan.status"}]',
+                'validator_issues': '[{"code":"UNKNOWN_EVIDENCE_ID","location":"observations[2]","evidence_id":"learning.math.plan.status"}]',
                 'generated_output': '{"next_actions":[{"text":"plan status를 확인하세요."}]}',
             },
             {
@@ -45,6 +46,8 @@ class GrowthAiDiagnosticsTests(unittest.TestCase):
         self.assertEqual(stats['attempt_failure_buckets']['TIMEOUT'], 1)
         self.assertEqual(stats['attempt_failure_buckets']['VALIDATOR_REJECT'], 2)
         self.assertEqual(stats['unknown_evidence_id_counts']['learning.math.plan.status'], 1)
+        self.assertEqual(stats['validator_reject_samples'][0]['unknown_ids'], ['learning.math.plan.status'])
+        self.assertEqual(stats['validator_reject_samples'][0]['locations'], ['observations[2]'])
         self.assertEqual(stats['generation_proxy']['retry_recovery_count'], 1)
         self.assertEqual(stats['pending_without_attempts'][0]['generation_id'], 4)
         self.assertNotIn('child', str(stats).lower())
@@ -80,3 +83,45 @@ class GrowthAiDiagnosticsTests(unittest.TestCase):
         self.assertEqual(stats['attempt_latency_p50_ms'], 11000)
         self.assertEqual(stats['attempt_latency_p95_ms'], 11000)
         self.assertEqual(stats['prompt_version_filter'], 'growth_teacher_prompt_v5')
+
+    def test_unknown_ids_from_sqlite_json_issues(self):
+        issues = (
+            '[{"code":"UNKNOWN_EVIDENCE_ID","location":"observations[2]",'
+            '"evidence_id":"learning.math.plan.status"},'
+            '{"code":"UNKNOWN_EVIDENCE_ID","location":"observations[2]",'
+            '"evidence_id":"learning.ssen.plan.status"},'
+            '{"code":"UNKNOWN_EVIDENCE_ID","location":"next_actions[1]",'
+            '"evidence_id":"learning.math.plan.status"},'
+            '{"code":"UNKNOWN_EVIDENCE_ID","location":"next_actions[1]",'
+            '"evidence_id":"learning.ssen.plan.status"}]'
+        )
+        stats = aggregate_growth_ai_logs(
+            [{'id': 24, 'status': 'FAILED', 'failure_code': 'VALIDATOR_REJECT', 'attempt_count': 1}],
+            [{
+                'id': 1, 'generation_id': 24, 'attempt_number': 1,
+                'status': 'VALIDATOR_REJECT', 'stage': 'validator',
+                'failure_code': 'VALIDATOR_REJECT',
+                'validator_codes': '["UNKNOWN_EVIDENCE_ID","UNKNOWN_EVIDENCE_ID","UNKNOWN_EVIDENCE_ID","UNKNOWN_EVIDENCE_ID"]',
+                'validator_issues': issues,
+            }],
+        )
+        self.assertEqual(stats['unknown_evidence_id_counts']['learning.math.plan.status'], 2)
+        self.assertEqual(stats['unknown_evidence_id_counts']['learning.ssen.plan.status'], 2)
+        sample = stats['validator_reject_samples'][0]
+        self.assertEqual(
+            sample['unknown_ids'],
+            [
+                'learning.math.plan.status',
+                'learning.ssen.plan.status',
+                'learning.math.plan.status',
+                'learning.ssen.plan.status',
+            ],
+        )
+        self.assertEqual(
+            sample['locations'],
+            ['observations[2]', 'observations[2]', 'next_actions[1]', 'next_actions[1]'],
+        )
+
+    def test_debug_stats_script_loads_validator_issues(self):
+        script = (PROJECT_ROOT / 'scripts' / 'debug' / 'growth_ai_attempt_stats.py').read_text(encoding='utf-8')
+        self.assertIn('validator_issues', script)

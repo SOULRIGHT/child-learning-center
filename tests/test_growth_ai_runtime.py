@@ -39,6 +39,7 @@ from features.growth.ai.runtime import (
     CODE_VALIDATOR,
     DAILY_QUOTA,
     FEEDBACK_MAX_LEN,
+    can_use_teacher_ai,
     current_runtime_parts,
     current_runtime_signature,
     generate_teacher_growth_interpretation,
@@ -217,6 +218,15 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self.assertEqual(result.state, 'disabled')
         self.assertEqual(generator.calls, [])
         self.assertEqual(GrowthAIGeneration.query.count(), 0)
+
+    def test_volunteer_general_user_can_use_teacher_ai(self):
+        self.assertTrue(can_use_teacher_ai('일반사용자'))
+        self.assertTrue(can_use_teacher_ai('돌봄선생님'))
+        self.assertTrue(can_use_teacher_ai('센터장'))
+        self.assertTrue(can_use_teacher_ai('개발자'))
+        self.assertFalse(can_use_teacher_ai('학생열람'))
+        self.assertFalse(can_use_teacher_ai('학생'))
+        self.assertFalse(can_use_teacher_ai(None))
 
     def test_cache_reuses_success_without_providers(self):
         first = self._generate()

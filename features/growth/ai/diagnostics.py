@@ -199,19 +199,25 @@ def aggregate_growth_ai_logs(generations, attempts, *, prompt_version=None, runt
                 if number in validator_codes_attempt:
                     validator_codes_attempt[number][code] += 1
             if status == 'VALIDATOR_REJECT':
-                unknown = [
-                    item.get('evidence_id')
-                    for item in (_load_json(row.get('validator_issues')) or [])
-                    if isinstance(item, dict) and item.get('code') == 'UNKNOWN_EVIDENCE_ID'
-                    and item.get('evidence_id')
-                ]
-                for item in unknown:
-                    unknown_ids[item] += 1
+                issues = _load_json(row.get('validator_issues')) or []
+                unknown = []
+                locations = []
+                for item in issues:
+                    if not isinstance(item, dict) or item.get('code') != 'UNKNOWN_EVIDENCE_ID':
+                        continue
+                    eid = item.get('evidence_id')
+                    if eid:
+                        unknown.append(eid)
+                        unknown_ids[eid] += 1
+                    loc = item.get('location')
+                    if loc:
+                        locations.append(loc)
                 fail_patterns.append({
                     'generation_id': gid,
                     'attempt_number': number,
                     'codes': _codes(row.get('validator_codes')),
                     'unknown_ids': unknown,
+                    'locations': locations,
                     'snippets': _text_snippets(row.get('generated_output')),
                 })
 

@@ -47,7 +47,7 @@ def main():
     """)
     attempts = _rows(cur, """
         SELECT id, generation_id, attempt_number, status, stage, failure_code,
-               validator_codes, generated_output, started_at, completed_at,
+               validator_codes, validator_issues, generated_output, started_at, completed_at,
                total_latency_ms
         FROM growth_ai_attempt
         ORDER BY generation_id, attempt_number

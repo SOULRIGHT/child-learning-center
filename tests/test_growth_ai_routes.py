@@ -81,8 +81,15 @@ class GrowthAIRouteTests(unittest.TestCase):
             email='ai-general@example.test',
             password_hash='',
         )
+        self.student = User(
+            username='ai_route_student',
+            name='AI학생',
+            role='학생',
+            email='ai-student@example.test',
+            password_hash='',
+        )
         self.child = Child(name='라우트아동', grade=2, viewer_slug='airoutetchildslugxxx')
-        db.session.add_all([self.teacher, self.viewer, self.general, self.child])
+        db.session.add_all([self.teacher, self.viewer, self.general, self.student, self.child])
         db.session.commit()
         self.client = app.test_client()
         self.env = patch.dict(os.environ, {
@@ -119,10 +126,69 @@ class GrowthAIRouteTests(unittest.TestCase):
         response = self.client.post(self._url('/ai/generate'))
         self.assertEqual(response.status_code, 302)
 
-    def test_non_teacher_generate_rejected(self):
-        self._login(self.general)
+    def test_student_generate_rejected(self):
+        self._login(self.student)
         response = self.client.post(self._url('/ai/generate'))
         self.assertEqual(response.status_code, 403)
+
+    def test_general_user_generate_allowed(self):
+        self._login(self.general)
+        with patch('features.growth.routes.generate_teacher_growth_interpretation') as generate:
+            generate.return_value = TeacherAIResult(
+                ok=True,
+                state='success',
+                generation_id=101,
+                interpretation={'summary': '요약'},
+                started=True,
+            )
+            response = self.client.post(self._url('/ai/generate'))
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['ok'])
+        generate.assert_called_once()
+
+    def test_general_user_sees_ai_generate_control(self):
+        self._login(self.general)
+        with patch(
+            'features.growth.routes.generate_teacher_growth_interpretation'
+        ) as generate:
+            response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 200)
+        generate.assert_not_called()
+        body = response.get_data(as_text=True)
+        self.assertIn('data-ai-action="generate"', body)
+        self.assertIn('AI 성장 해석 만들기', body)
+
+    def test_director_generate_allowed(self):
+        director = User(
+            username='ai_route_director',
+            name='AI센터장',
+            role='센터장',
+            email='ai-director@example.test',
+            password_hash='',
+        )
+        developer = User(
+            username='ai_route_dev',
+            name='AI개발자',
+            role='개발자',
+            email='ai-dev@example.test',
+            password_hash='',
+        )
+        db.session.add_all([director, developer])
+        db.session.commit()
+        for user in (self.teacher, director, developer):
+            self._login(user)
+            with patch('features.growth.routes.generate_teacher_growth_interpretation') as generate:
+                generate.return_value = TeacherAIResult(
+                    ok=True,
+                    state='success',
+                    generation_id=102,
+                    interpretation={'summary': '요약'},
+                    started=True,
+                )
+                response = self.client.post(self._url('/ai/generate'))
+            self.assertEqual(response.status_code, 200, user.role)
+            self.assertTrue(response.get_json()['ok'])
 
     def test_missing_child_rejected(self):
         self._login(self.teacher)

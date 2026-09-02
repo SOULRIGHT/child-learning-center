@@ -65,7 +65,7 @@ FRONTEND_TIMEOUT_MS = 21000
 MIN_CALL_S = 0.5
 PENDING_STALE_S = 60
 FEEDBACK_MAX_LEN = 1000
-TEACHER_AI_ROLES = frozenset({'돌봄선생님', '센터장', '개발자'})
+TEACHER_AI_ROLES = frozenset({'돌봄선생님', '센터장', '개발자', '일반사용자'})  # 일반사용자 = 봉사선생님. DB role rename 없음.
 
 CODE_DISABLED = 'DISABLED'
 CODE_QUOTA = 'QUOTA_EXCEEDED'

@@ -238,6 +238,44 @@ class GrowthAIValidatorTests(unittest.TestCase):
         self.assertEqual(_codes(result), (CODE_UNKNOWN_EVIDENCE_ID,))
         self.assertNotIn('learning.math.plan.status', collect_evidence_index(_packet()))
 
+    def test_ssen_plan_status_field_name_is_unknown_evidence_id(self):
+        result = validate_teacher_interpretation(
+            _packet(),
+            _output(
+                summary='계획이 있습니다.',
+                summary_ids=['reading.activity_days.current'],
+                observations=[
+                    _obs(
+                        '수학과 쎈 계획 상태를 확인합니다.',
+                        ['learning.math.plan.status', 'learning.ssen.plan.status'],
+                    ),
+                ],
+                suggestions=[
+                    _sug(
+                        '계획이 있으면 페이지를 다시 기록해 주세요.',
+                        ['learning.math.plan.status', 'learning.ssen.plan.status'],
+                    ),
+                ],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertEqual(_codes(result), (CODE_UNKNOWN_EVIDENCE_ID,) * 4)
+        locations = [item.location for item in result.violations]
+        self.assertEqual(locations, ['observations[0]', 'observations[0]', 'next_actions[0]', 'next_actions[0]'])
+        ids = [item.evidence_id for item in result.violations]
+        self.assertEqual(
+            ids,
+            [
+                'learning.math.plan.status',
+                'learning.ssen.plan.status',
+                'learning.math.plan.status',
+                'learning.ssen.plan.status',
+            ],
+        )
+        index = collect_evidence_index(_packet())
+        self.assertNotIn('learning.ssen.plan.status', index)
+        self.assertNotIn('learning.math.plan.status', index)
+
     def test_effective_weekdays_field_name_is_unknown_evidence_id(self):
         result = validate_teacher_interpretation(
             _packet(),
