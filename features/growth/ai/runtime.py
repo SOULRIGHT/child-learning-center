@@ -674,15 +674,28 @@ def _latest_success_for_child(child_id):
 
 
 def _usage_preflight(user_id):
-    """Luna 호출 전 계정 단위 차단. started=False, failure budget 미증가."""
+    """Luna 호출 전 계정 단위 차단. started=False, quota/failure count 미증가.
+
+    사용자 메시지 우선순위(여러 조건이 동시에 참이어도):
+    1. success quota  2. daily failure budget  3. consecutive cooldown  4. in-progress
+    stale PENDING 정리는 메시지 선택 전에 수행한다.
+    """
     pending = _account_active_pending(user_id)
-    if pending is not None:
+    if _success_quota_used(user_id) >= SUCCESS_QUOTA_PER_DAY:
         return TeacherAIResult(
             ok=False,
-            state='in_progress',
-            message=MSG_IN_PROGRESS,
-            generation_id=pending.id,
-            failure_code=CODE_IN_PROGRESS,
+            state='quota',
+            message=MSG_QUOTA,
+            failure_code=CODE_QUOTA,
+            quota_remaining=0,
+            started=False,
+        )
+    if _failure_budget_used(user_id) >= FAILURE_BUDGET_PER_DAY:
+        return TeacherAIResult(
+            ok=False,
+            state='failure_limit',
+            message=MSG_FAILURE_LIMIT,
+            failure_code=CODE_FAILURE_LIMIT,
             quota_remaining=_quota_remaining(user_id),
             started=False,
         )
@@ -695,22 +708,14 @@ def _usage_preflight(user_id):
             quota_remaining=_quota_remaining(user_id),
             started=False,
         )
-    if _failure_budget_used(user_id) >= FAILURE_BUDGET_PER_DAY:
+    if pending is not None:
         return TeacherAIResult(
             ok=False,
-            state='failure_limit',
-            message=MSG_FAILURE_LIMIT,
-            failure_code=CODE_FAILURE_LIMIT,
+            state='in_progress',
+            message=MSG_IN_PROGRESS,
+            generation_id=pending.id,
+            failure_code=CODE_IN_PROGRESS,
             quota_remaining=_quota_remaining(user_id),
-            started=False,
-        )
-    if _success_quota_used(user_id) >= SUCCESS_QUOTA_PER_DAY:
-        return TeacherAIResult(
-            ok=False,
-            state='quota',
-            message=MSG_QUOTA,
-            failure_code=CODE_QUOTA,
-            quota_remaining=0,
             started=False,
         )
     return None

@@ -345,8 +345,8 @@
                     const message = (payload && payload.message) || '';
                     const parts = message.split('\n');
                     setWaitingCopy(
-                        parts[0] || '이미 AI 해석을 준비하고 있어요.',
-                        parts[1] || '잠시만 기다려주세요.'
+                        parts[0] || '다른 AI 성장 해석을 준비하고 있어요.',
+                        parts[1] || '완료된 뒤 다시 시도해주세요.'
                     );
                     showState('loading', payload);
                     applyFocus(STAGE_COUNT - 1);

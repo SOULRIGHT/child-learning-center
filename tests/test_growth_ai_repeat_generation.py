@@ -122,8 +122,8 @@ class GrowthAiLoadingMachine:
             message = (payload or {}).get('message') or ''
             parts = message.split('\n')
             self._set_waiting_copy(
-                parts[0] or '이미 AI 해석을 준비하고 있어요.',
-                parts[1] if len(parts) > 1 else '잠시만 기다려주세요.',
+                parts[0] or '다른 AI 성장 해석을 준비하고 있어요.',
+                parts[1] if len(parts) > 1 else '완료된 뒤 다시 시도해주세요.',
             )
             self.state = 'loading'
             self._apply_focus(self.STAGE_COUNT - 1)
@@ -295,12 +295,12 @@ class GrowthAiRepeatGenerationTests(unittest.TestCase):
         machine = GrowthAiLoadingMachine()
         seq = machine.generate()
         self.assertEqual(machine.focus, 0)
-        machine.settle({'ok': False, 'started': False, 'state': 'in_progress', 'message': '이미 AI 해석을 준비하고 있어요.\n잠시만 기다려주세요.'}, seq)
+        machine.settle({'ok': False, 'started': False, 'state': 'in_progress', 'message': '다른 AI 성장 해석을 준비하고 있어요.\n완료된 뒤 다시 시도해주세요.'}, seq)
         self.assertEqual(machine.state, 'loading')
         self.assertEqual(machine.focus, 3)
         self.assertTrue(machine.waiting)
         self.assertFalse(machine.in_flight)
-        self.assertIn('이미 AI 해석', machine.waiting_title)
+        self.assertIn('다른 AI 성장 해석', machine.waiting_title)
         self.assertEqual(machine.timers, [])
 
     def test_preflight_cache_skips_eight_second_hold(self):

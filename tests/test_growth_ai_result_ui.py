@@ -38,5 +38,7 @@ class GrowthAiResultUiTests(unittest.TestCase):
         self.assertIn('ai_state not in [\'success\', \'stale\']', html)
         self.assertIn('cooldown', html)
         self.assertIn('failure_limit', html)
+        self.assertIn('다른 AI 성장 해석을 준비하고 있어요.', (PROJECT_ROOT / 'features' / 'growth' / 'ai' / 'copy.py').read_text(encoding='utf-8'))
+        self.assertIn('완료된 뒤 다시 시도해주세요.', (PROJECT_ROOT / 'features' / 'growth' / 'ai' / 'copy.py').read_text(encoding='utf-8'))
         self.assertIn('state === \'cooldown\'', js)
         self.assertIn('visible.push(\'success\')', js)
