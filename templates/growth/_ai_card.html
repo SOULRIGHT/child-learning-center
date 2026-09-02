@@ -52,7 +52,14 @@ AI 해석과 검증을 차례대로 진행하고 있어요.</p>
                 </div>
             </div>
 
-            <div data-ai-panel="success" class="{% if ai_state != 'success' %}growth-ai-hidden{% endif %}">
+            <div data-ai-panel="stale" class="{% if ai_state != 'stale' %}growth-ai-hidden{% endif %}">
+                <p class="fw-semibold mb-1">이전 기록 기준 해석</p>
+                <p style="white-space: pre-line;" data-ai-role="stale-message">{{ ai.message if ai and ai.message else '이 해석 이후 기록이 변경됐어요.
+현재 기록과 내용이 다를 수 있습니다.' }}</p>
+                <button type="button" class="btn btn-primary mb-3" data-ai-action="generate" data-ai-label="refresh">현재 기록으로 다시 분석</button>
+            </div>
+
+            <div data-ai-panel="success" class="{% if ai_state not in ['success', 'stale'] %}growth-ai-hidden{% endif %}">
                 <div class="growth-ai-result">
                 <p class="growth-ai-ready growth-ai-hidden" data-ai-role="ready">AI 성장 해석이 준비됐어요!</p>
                 <div class="growth-ai-priority" data-ai-role="priority-card">
@@ -157,12 +164,6 @@ AI 해석과 검증을 차례대로 진행하고 있어요.</p>
                 </div>
             </div>
 
-            <div data-ai-panel="stale" class="{% if ai_state != 'stale' %}growth-ai-hidden{% endif %}">
-                <p style="white-space: pre-line;" data-ai-role="stale-message">{{ ai.message if ai and ai.message else '성장 데이터가 업데이트됐어요.
-최신 데이터를 기준으로 AI 해석을 다시 만들 수 있습니다.' }}</p>
-                <button type="button" class="btn btn-primary" data-ai-action="generate" data-ai-label="refresh">새로 분석하기</button>
-            </div>
-
             <div data-ai-panel="error" class="growth-ai-status-panel {% if ai_state not in ['error', 'timeout'] %}growth-ai-hidden{% endif %}">
                 <p style="white-space: pre-line;" data-ai-role="error-message">{% if ai_state == 'timeout' %}AI 해석 준비 시간이 조금 길어졌어요.
 다시 시도해주세요.{% else %}이번에는 AI 성장 해석을 준비하지 못했어요.
@@ -172,6 +173,17 @@ AI 해석과 검증을 차례대로 진행하고 있어요.</p>
 
             <div data-ai-panel="quota" class="{% if ai_state != 'quota' %}growth-ai-hidden{% endif %}">
                 <p class="mb-0" style="white-space: pre-line;">오늘 AI 성장 해석 생성 횟수를 모두 사용했어요.
+내일 다시 이용해주세요.</p>
+            </div>
+
+            <div data-ai-panel="cooldown" class="{% if ai_state != 'cooldown' %}growth-ai-hidden{% endif %}">
+                <p class="mb-0" style="white-space: pre-line;">AI 해석 생성이 반복해서 완료되지 않았어요.
+5분 후 다시 시도해주세요.</p>
+            </div>
+
+            <div data-ai-panel="failure_limit" class="{% if ai_state != 'failure_limit' %}growth-ai-hidden{% endif %}">
+                <p class="mb-0" style="white-space: pre-line;">오늘 AI 해석 요청에서 반복적인 오류가 확인되어
+추가 생성을 잠시 제한했어요.
 내일 다시 이용해주세요.</p>
             </div>
         </div>

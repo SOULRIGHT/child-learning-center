@@ -5,7 +5,7 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
 - generator v1 model: `gpt-5.6-luna` (OpenAI Responses API)
 - production winner: 미확정
 - input: `growth_teacher_evidence_v1` only
-- prompt: `growth_teacher_prompt_v6`
+- prompt: `growth_teacher_prompt_v7`
   - v1 → v2: live probe에서 관측된 unknown citation(`plan.status`, `effective_weekdays`)과
     metric label confusion(`reading.activity_days`를 "학습 활동일"로 혼용)을 prompt에서만 보강.
     runtime semantic classifier는 두지 않는다.
@@ -17,6 +17,8 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
   - v5 → v6: live VALIDATOR_REJECT에서 observations/next_actions가
     `learning.math.plan.status` / `learning.ssen.plan.status`를 과목 유추로 생성.
     analogical `.plan.status` 금지. 교사 문장에서 snapshot/스냅샷 금지(페이지 기록).
+  - v6 → v7: 서로 다른 단위의 정량 비교를 한 문장에 병렬 금지 (UNIT_MISMATCH).
+    예: 활동일과 완독 수는 문장을 나눈다.
 - output: `growth_teacher_interpretation_v2`
   - required: `priority_insight`, `interpretation`, `observations`(max 3),
     `next_actions`(max 2, `conditional=true`), `next_check`
@@ -48,9 +50,13 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
   - `action=NONE` → safe, `GUARDRAIL_INTERVENED` → reject, API/timeout/auth error → fail closed
 - B4 Teacher AI Runtime / UX: `generate_teacher_growth_interpretation(...)`
   - user-triggered generation only (`[ AI 성장 해석 만들기 ]`). Growth GET은 API를 호출하지 않음
-  - account/day 30 user-initiated requests (KST, 실패도 1회, cache/조회는 추가 차감 없음. 내부 regeneration 없음)
+  - SUCCESS quota 30/account/KST day. FAILED는 차감 없음. cache/조회/preflight도 차감 없음
+  - failure budget 10/account/KST day (Luna가 시작된 최종 FAILED만). 계정 단위. 센터 전체 kill 없음
+  - consecutive FAILED 3회 → 5분 cooldown. SUCCESS면 consecutive reset
+  - account concurrent PENDING 최대 1 (child 무관). Luna 호출 전 차단
   - cache: same child + packet_hash + runtime_signature + SUCCESS
-  - stale: packet hash mismatch. 과거 해석을 최신처럼 표시하지 않음
+  - stale: packet_hash 또는 runtime_signature mismatch. 이전 SUCCESS 본문은
+    "이전 기록 기준 해석"으로 표시하고 현재 결과로 취급하지 않음
   - total deadline 20s (backend authoritative). frontend abort 21s
   - max 1 Luna generation per user request. validator/parse/provider/safety 실패 시 내부 재생성 없음.
     AWS safety API도 요청당 1회. 사용자 [다시 시도]만 새 generation + 새 20초 deadline.
@@ -62,7 +68,7 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
   - feedback은 DB만 저장. OpenAI/AWS로 전달하지 않음
   - AI failure never breaks deterministic Growth
   - loading presentation: 2.0s × 4 unidirectional stages, min 8s hold when generation started.
-    preflight(disabled/quota/in_progress/cache)는 8s를 강제하지 않음.
+    preflight(disabled/quota/in_progress/cooldown/failure_limit/cache)는 8s를 강제하지 않음.
     4단계 이후 1단계로 돌아가지 않음. fake % / fake completion 없음. timeout 20s 유지.
     mascot slot `data-stage=organize|interpret|verify|safety|waiting`
   - attempt diagnostics: `growth_ai_attempt` (Alembic `c3a8f17b2d01`, additive `d9e1b24c7a03` for existing tables missing `safety_categories`). generation당 최대 1 row (user request당 Luna 1회).

@@ -31,6 +31,8 @@ from features.growth.ai.runtime import (
     ATTEMPT_VALIDATOR,
     ATTEMPT_SAFETY,
     ATTEMPT_SAFETY_ERROR,
+    CODE_COOLDOWN,
+    CODE_FAILURE_LIMIT,
     CODE_GENERATOR,
     CODE_PARSE,
     CODE_SAFETY_BLOCK,
@@ -38,6 +40,8 @@ from features.growth.ai.runtime import (
     CODE_TIMEOUT,
     CODE_VALIDATOR,
     DAILY_QUOTA,
+    FAILURE_BUDGET_PER_DAY,
+    SUCCESS_QUOTA_PER_DAY,
     FEEDBACK_MAX_LEN,
     can_use_teacher_ai,
     current_runtime_parts,
@@ -210,6 +214,28 @@ class GrowthAIRuntimeTests(unittest.TestCase):
             clock=kwargs.get('clock') or FakeClock(),
         )
 
+    def _seed_row(self, *, status, user_id=None, child=None, packet_hash_value=None,
+                  completed_at=None, created_at=None, parsed=None, extra_hash='0'):
+        now = datetime.utcnow()
+        created_at = created_at or now
+        if status != GROWTH_AI_STATUS_PENDING:
+            completed_at = completed_at or created_at
+        signature = runtime_signature(current_runtime_parts())
+        row = GrowthAIGeneration(
+            child_id=(child or self.child).id,
+            requested_by_user_id=user_id or self.teacher.id,
+            packet_hash=packet_hash_value or (('e' * 63) + extra_hash),
+            runtime_signature=signature,
+            as_of=AS_OF,
+            status=status,
+            created_at=created_at,
+            completed_at=completed_at,
+            parsed_output=parsed,
+        )
+        db.session.add(row)
+        db.session.commit()
+        return row
+
     def test_disabled_flag_blocks_generation(self):
         with patch.dict(os.environ, {'GROWTH_AI_ENABLED': ''}, clear=False):
             generator = FakeGenerator()
@@ -248,7 +274,11 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         with patch('features.growth.ai.runtime.build_current_packet', return_value=changed):
             view = load_teacher_ai_view(self.child, as_of=AS_OF, user_id=self.teacher.id)
         self.assertEqual(view['state'], 'stale')
-        self.assertNotIn('interpretation', view)
+        self.assertTrue(view.get('stale'))
+        self.assertIn('interpretation', view)
+        self.assertIn('최근 독서 활동일은 5일입니다.', view['interpretation']['priority_insight'])
+        self.assertEqual(view['message'], '이 해석 이후 기록이 변경됐어요.\n현재 기록과 내용이 다를 수 있습니다.')
+        self.assertNotEqual(view['state'], 'success')
 
     def test_runtime_signature_change_is_cache_miss(self):
         self._generate()
@@ -262,6 +292,17 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self.assertFalse(result.cached)
         self.assertEqual(len(generator.calls), 1)
         self.assertEqual(GrowthAIGeneration.query.filter_by(status=GROWTH_AI_STATUS_SUCCESS).count(), 2)
+
+    def test_runtime_signature_change_is_stale_on_load(self):
+        self._generate()
+        with patch('features.growth.ai.runtime.current_runtime_parts') as parts:
+            base = current_runtime_parts()
+            base['prompt_version'] = 'growth_teacher_prompt_v9'
+            parts.return_value = base
+            view = load_teacher_ai_view(self.child, as_of=AS_OF, user_id=self.teacher.id)
+        self.assertEqual(view['state'], 'stale')
+        self.assertIn('interpretation', view)
+        self.assertIn('최근 독서 활동일은 5일입니다.', view['interpretation']['priority_insight'])
 
     def test_quota_thirty_then_reject(self):
         signature = runtime_signature(current_runtime_parts())
@@ -673,10 +714,12 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self.assertEqual(GrowthAIAttempt.query.count(), 2)
         self.assertTrue(all(row.attempt_count == 1 for row in rows))
 
-    def test_failed_user_request_consumes_quota(self):
-        self._generate(generator=FakeGenerator(errors=[GrowthInterpretationAPIError('openai api request failed')]))
+    def test_failed_user_request_does_not_consume_success_quota(self):
+        failed = self._generate(generator=FakeGenerator(errors=[GrowthInterpretationAPIError('openai api request failed')]))
+        self.assertFalse(failed.ok)
+        self.assertEqual(failed.quota_remaining, SUCCESS_QUOTA_PER_DAY)
         signature = runtime_signature(current_runtime_parts())
-        for i in range(DAILY_QUOTA - 1):
+        for i in range(SUCCESS_QUOTA_PER_DAY - 1):
             db.session.add(GrowthAIGeneration(
                 child_id=self.child.id,
                 requested_by_user_id=self.teacher.id,
@@ -689,7 +732,8 @@ class GrowthAIRuntimeTests(unittest.TestCase):
             ))
         db.session.commit()
         result = self._generate(generator=FakeGenerator())
-        self.assertEqual(result.state, 'quota')
+        self.assertTrue(result.ok)
+        self.assertEqual(result.quota_remaining, 0)
 
     def test_quota_preflight_does_not_start_generation(self):
         signature = runtime_signature(current_runtime_parts())
@@ -709,6 +753,121 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self.assertEqual(result.state, 'quota')
         self.assertFalse(result.started)
         self.assertEqual(GrowthAIAttempt.query.count(), 0)
+
+    def test_failed_generation_increments_failure_budget_not_success_quota(self):
+        result = self._generate(generator=FakeGenerator(errors=[GrowthInterpretationAPIError('openai api request failed')]))
+        self.assertEqual(result.state, 'error')
+        self.assertEqual(result.quota_remaining, SUCCESS_QUOTA_PER_DAY)
+        self.assertEqual(GrowthAIGeneration.query.filter_by(status=GROWTH_AI_STATUS_FAILED).count(), 1)
+        self.assertEqual(GrowthAIGeneration.query.filter_by(status=GROWTH_AI_STATUS_SUCCESS).count(), 0)
+
+    def test_cached_success_increments_neither_quota(self):
+        first = self._generate()
+        remaining = first.quota_remaining
+        second = self._generate()
+        self.assertTrue(second.cached)
+        self.assertEqual(second.quota_remaining, remaining)
+        self.assertEqual(GrowthAIGeneration.query.filter_by(status=GROWTH_AI_STATUS_FAILED).count(), 0)
+
+    def test_quota_preflight_does_not_increase_failure_budget(self):
+        for i in range(SUCCESS_QUOTA_PER_DAY):
+            self._seed_row(
+                status=GROWTH_AI_STATUS_SUCCESS,
+                packet_hash_value=('a' * 63) + str(i % 10),
+            )
+        generator = FakeGenerator()
+        result = self._generate(generator=generator)
+        self.assertEqual(result.state, 'quota')
+        self.assertFalse(result.started)
+        self.assertEqual(generator.calls, [])
+        self.assertEqual(GrowthAIGeneration.query.filter_by(status=GROWTH_AI_STATUS_FAILED).count(), 0)
+
+    def test_consecutive_failures_one_and_two_are_allowed(self):
+        self._generate(generator=FakeGenerator(errors=[GrowthInterpretationAPIError('openai api request failed')]))
+        second = self._generate(generator=FakeGenerator(errors=[GrowthInterpretationAPIError('openai api request failed')]))
+        self.assertEqual(second.state, 'error')
+        ok = self._generate(generator=FakeGenerator())
+        self.assertTrue(ok.ok)
+
+    def test_three_consecutive_failures_start_cooldown(self):
+        for _ in range(3):
+            self._generate(generator=FakeGenerator(errors=[GrowthInterpretationAPIError('openai api request failed')]))
+        generator = FakeGenerator()
+        result = self._generate(generator=generator)
+        self.assertEqual(result.state, 'cooldown')
+        self.assertFalse(result.started)
+        self.assertEqual(result.failure_code, CODE_COOLDOWN)
+        self.assertEqual(
+            result.message,
+            'AI 해석 생성이 반복해서 완료되지 않았어요.\n5분 후 다시 시도해주세요.',
+        )
+        self.assertEqual(generator.calls, [])
+        self.assertEqual(GrowthAIGeneration.query.count(), 3)
+
+    def test_success_resets_consecutive_failure_count(self):
+        for _ in range(2):
+            self._generate(generator=FakeGenerator(errors=[GrowthInterpretationAPIError('openai api request failed')]))
+        self.assertTrue(self._generate().ok)
+        self.packet = _packet(completions=2)
+        for _ in range(2):
+            self._generate(generator=FakeGenerator(errors=[GrowthInterpretationAPIError('openai api request failed')]))
+        ok = self._generate(generator=FakeGenerator())
+        self.assertTrue(ok.ok)
+
+    def test_cooldown_expires_after_five_minutes(self):
+        ago = datetime.utcnow() - timedelta(minutes=6)
+        for i in range(3):
+            self._seed_row(
+                status=GROWTH_AI_STATUS_FAILED,
+                extra_hash=str(i),
+                created_at=ago,
+                completed_at=ago,
+            )
+        result = self._generate(generator=FakeGenerator())
+        self.assertTrue(result.ok)
+
+    def test_daily_failure_budget_blocks_only_that_account(self):
+        ago = datetime.utcnow() - timedelta(minutes=6)
+        for i in range(FAILURE_BUDGET_PER_DAY):
+            self._seed_row(
+                status=GROWTH_AI_STATUS_FAILED,
+                extra_hash=str(i),
+                created_at=ago,
+                completed_at=ago,
+            )
+        generator = FakeGenerator()
+        blocked = self._generate(generator=generator)
+        self.assertEqual(blocked.state, 'failure_limit')
+        self.assertFalse(blocked.started)
+        self.assertEqual(blocked.failure_code, CODE_FAILURE_LIMIT)
+        self.assertEqual(generator.calls, [])
+        other = self._generate(user_id=self.other.id, generator=FakeGenerator())
+        self.assertTrue(other.ok)
+
+    def test_account_concurrent_generation_blocks_before_provider(self):
+        other_child = Child(name='다른아동', grade=3, viewer_slug='aiotherchildslugxxxxx')
+        db.session.add(other_child)
+        db.session.commit()
+        self._seed_row(
+            status=GROWTH_AI_STATUS_PENDING,
+            child=other_child,
+            extra_hash='p',
+        )
+        generator = FakeGenerator()
+        result = self._generate(generator=generator)
+        self.assertEqual(result.state, 'in_progress')
+        self.assertFalse(result.started)
+        self.assertEqual(generator.calls, [])
+
+    def test_public_payload_hides_safeguard_codes(self):
+        for _ in range(3):
+            self._generate(generator=FakeGenerator(errors=[GrowthInterpretationAPIError('openai api request failed')]))
+        payload = public_result_payload(self._generate(generator=FakeGenerator()))
+        blob = json.dumps(payload)
+        self.assertEqual(payload['state'], 'cooldown')
+        self.assertNotIn('failure_code', payload)
+        self.assertNotIn('COOLDOWN', blob)
+        self.assertNotIn('reading.activity_days.current', blob)
 
     def test_v1_runtime_signature_is_not_reused(self):
         old = runtime_signature({

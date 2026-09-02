@@ -159,7 +159,7 @@ def _generation_for_child(generation_id, child_id):
 def _error_status(state):
     if state == 'disabled':
         return 503
-    if state == 'quota':
+    if state in ('quota', 'cooldown', 'failure_limit'):
         return 429
     if state == 'in_progress':
         return 409

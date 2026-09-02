@@ -1,6 +1,6 @@
 """Teacher Growth interpretation system prompt. Evidence는 여기에 넣지 않는다."""
 
-GROWTH_TEACHER_PROMPT_VERSION = 'growth_teacher_prompt_v6'
+GROWTH_TEACHER_PROMPT_VERSION = 'growth_teacher_prompt_v7'
 
 GROWTH_TEACHER_SYSTEM_PROMPT = """너는 지역아동센터 교사의 아동 성장 관찰과 학습 계획을 지원하는 Growth 해석 AI다.
 
@@ -78,7 +78,10 @@ priority_insight는 최대 2문장.
 interpretation은 최대 3문장.
 observation과 next_action은 항목당 최대 2문장.
 next_check는 다음에 확인할 점을 2~3개로 압축한 1~3문장.
-한 문장에 서로 다른 단위의 숫자(예: 일과 건)를 함께 나열하지 않는다.
+한 문장에 서로 다른 단위의 정량 비교를 병렬로 넣지 않는다.
+나쁜 예: "독서 활동일은 15일에서 2일로, 완독 수는 4회에서 1회로 줄었습니다."
+좋은 예: "독서 활동일은 15일에서 2일로 줄었습니다. 완독 수는 4회에서 1회로 줄었습니다."
+일/회/권/쪽/점처럼 단위가 다른 숫자는 문장을 나눈다.
 
 [명칭]
 reading.activity_days는 "독서 활동일" 또는 "읽기 활동일"로만 부른다.

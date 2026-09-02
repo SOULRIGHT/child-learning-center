@@ -33,9 +33,10 @@ MSG_LOADING_ETA = '보통 5~10초 정도 걸려요.'
 MSG_LOADING_WAITING = '성장 해석을 꼼꼼하게 마무리하고 있어요...'
 MSG_LOADING_WAITING_HINT = '거의 다 준비됐어요. 잠시만 기다려주세요.'
 MSG_READY = 'AI 성장 해석이 준비됐어요!'
+MSG_STALE_TITLE = '이전 기록 기준 해석'
 MSG_STALE = (
-    '성장 데이터가 업데이트됐어요.\n'
-    '최신 데이터를 기준으로 AI 해석을 다시 만들 수 있습니다.'
+    '이 해석 이후 기록이 변경됐어요.\n'
+    '현재 기록과 내용이 다를 수 있습니다.'
 )
 MSG_STALE_DURING = (
     '분석 중 성장 데이터가 업데이트됐어요.\n'
@@ -43,6 +44,15 @@ MSG_STALE_DURING = (
 )
 MSG_QUOTA = (
     '오늘 AI 성장 해석 생성 횟수를 모두 사용했어요.\n'
+    '내일 다시 이용해주세요.'
+)
+MSG_COOLDOWN = (
+    'AI 해석 생성이 반복해서 완료되지 않았어요.\n'
+    '5분 후 다시 시도해주세요.'
+)
+MSG_FAILURE_LIMIT = (
+    '오늘 AI 해석 요청에서 반복적인 오류가 확인되어\n'
+    '추가 생성을 잠시 제한했어요.\n'
     '내일 다시 이용해주세요.'
 )
 MSG_ERROR = (
@@ -54,12 +64,13 @@ MSG_TIMEOUT = (
     '다시 시도해주세요.'
 )
 MSG_IN_PROGRESS = (
-    '이미 같은 해석을 준비하고 있어요.\n'
+    '이미 AI 해석을 준비하고 있어요.\n'
     '잠시만 기다려주세요.'
 )
 BTN_GENERATE = 'AI 성장 해석 만들기'
 BTN_RETRY = '다시 시도'
 BTN_REFRESH = '새로 분석하기'
+BTN_REFRESH_CURRENT = '현재 기록으로 다시 분석'
 BTN_REFRESH_AGAIN = '다시 분석하기'
 CARD_TITLE = 'AI 성장 해석'
 PRIORITY_TITLE = '가장 먼저 볼 변화'

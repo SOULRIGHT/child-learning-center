@@ -303,9 +303,14 @@ class GrowthAIRouteTests(unittest.TestCase):
         db.session.commit()
         self._login(self.teacher)
         body = self.client.get(self._url()).get_data(as_text=True)
-        self.assertIn('성장 데이터가 업데이트됐어요', body)
-        self.assertIn('새로 분석하기', body)
+        self.assertIn('이 해석 이후 기록이 변경됐어요.', body)
+        self.assertIn('현재 기록과 내용이 다를 수 있습니다.', body)
+        self.assertIn('이전 기록 기준 해석', body)
+        self.assertIn('현재 기록으로 다시 분석', body)
+        self.assertIn('최근 독서 활동일은 5일입니다.', body)
+        self.assertIn('data-ai-state="stale"', body)
         self.assertNotIn('data-ai-state="success"', body)
+        self.assertNotIn('reading.activity_days.current', body)
 
     def test_generate_json_success_and_feedback(self):
         self._login(self.teacher)

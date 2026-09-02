@@ -27,8 +27,10 @@ from features.growth.ai.bedrock_safety import (
     PROVIDER_NAME as SAFETY_PROVIDER_NAME,
 )
 from features.growth.ai.copy import (
+    MSG_COOLDOWN,
     MSG_DISABLED,
     MSG_ERROR,
+    MSG_FAILURE_LIMIT,
     MSG_IN_PROGRESS,
     MSG_QUOTA,
     MSG_STALE,
@@ -59,7 +61,11 @@ from features.growth.metrics import metrics_bundle
 from features.growth.windows import resolve_as_of
 
 GROWTH_AI_ENABLED_ENV = 'GROWTH_AI_ENABLED'
-DAILY_QUOTA = 30
+SUCCESS_QUOTA_PER_DAY = 30
+DAILY_QUOTA = SUCCESS_QUOTA_PER_DAY
+FAILURE_BUDGET_PER_DAY = 10
+CONSECUTIVE_FAILURE_THRESHOLD = 3
+FAILURE_COOLDOWN_MINUTES = 5
 DEADLINE_S = 20.0
 FRONTEND_TIMEOUT_MS = 21000
 MIN_CALL_S = 0.5
@@ -70,6 +76,8 @@ TEACHER_AI_ROLES = frozenset({'돌봄선생님', '센터장', '개발자', '일�
 CODE_DISABLED = 'DISABLED'
 CODE_QUOTA = 'QUOTA_EXCEEDED'
 CODE_IN_PROGRESS = 'IN_PROGRESS'
+CODE_COOLDOWN = 'COOLDOWN'
+CODE_FAILURE_LIMIT = 'FAILURE_LIMIT'
 CODE_TIMEOUT = 'TIMEOUT'
 CODE_GENERATOR = 'GENERATOR_ERROR'
 CODE_VALIDATOR = 'VALIDATOR_REJECT'
@@ -177,15 +185,14 @@ def load_teacher_ai_view(child, as_of=None, bundle=None, user_id=None):
         view = _success_view(cached, packet, cached=True, enabled=True)
         view['quota_remaining'] = _quota_remaining(user_id)
         return view
-    stale = _latest_success_any_hash(child.id, signature)
-    if stale is not None and stale.packet_hash != digest:
-        return {
-            'state': 'stale',
-            'enabled': True,
-            'message': MSG_STALE,
-            'timeout_ms': FRONTEND_TIMEOUT_MS,
-            'quota_remaining': _quota_remaining(user_id),
-        }
+    previous = _latest_success_for_child(child.id)
+    if previous is not None:
+        view = _success_view(previous, packet, cached=False, enabled=True)
+        view['state'] = 'stale'
+        view['stale'] = True
+        view['message'] = MSG_STALE
+        view['quota_remaining'] = _quota_remaining(user_id)
+        return view
     return {
         'state': 'idle',
         'enabled': True,
@@ -224,27 +231,9 @@ def generate_teacher_growth_interpretation(
             quota_remaining=_quota_remaining(user_id),
             started=False,
         )
-    pending = _active_pending(child.id, digest, signature)
-    if pending is not None:
-        return TeacherAIResult(
-            ok=False,
-            state='in_progress',
-            message=MSG_IN_PROGRESS,
-            generation_id=pending.id,
-            failure_code=CODE_IN_PROGRESS,
-            quota_remaining=_quota_remaining(user_id),
-            started=False,
-        )
-    used = _quota_used(user_id)
-    if used >= DAILY_QUOTA:
-        return TeacherAIResult(
-            ok=False,
-            state='quota',
-            message=MSG_QUOTA,
-            failure_code=CODE_QUOTA,
-            quota_remaining=0,
-            started=False,
-        )
+    blocked = _usage_preflight(user_id)
+    if blocked is not None:
+        return blocked
     row = GrowthAIGeneration(
         child_id=child.id,
         requested_by_user_id=user_id,
@@ -669,11 +658,10 @@ def _latest_success(child_id, digest, signature):
     )
 
 
-def _latest_success_any_hash(child_id, signature):
+def _latest_success_for_child(child_id):
     return (
         GrowthAIGeneration.query.filter_by(
             child_id=child_id,
-            runtime_signature=signature,
             status=GROWTH_AI_STATUS_SUCCESS,
         )
         .order_by(GrowthAIGeneration.completed_at.desc(), GrowthAIGeneration.id.desc())
@@ -681,22 +669,63 @@ def _latest_success_any_hash(child_id, signature):
     )
 
 
-def _active_pending(child_id, digest, signature):
+def _usage_preflight(user_id):
+    """Luna 호출 전 계정 단위 차단. started=False, failure budget 미증가."""
+    pending = _account_active_pending(user_id)
+    if pending is not None:
+        return TeacherAIResult(
+            ok=False,
+            state='in_progress',
+            message=MSG_IN_PROGRESS,
+            generation_id=pending.id,
+            failure_code=CODE_IN_PROGRESS,
+            quota_remaining=_quota_remaining(user_id),
+            started=False,
+        )
+    if _in_failure_cooldown(user_id):
+        return TeacherAIResult(
+            ok=False,
+            state='cooldown',
+            message=MSG_COOLDOWN,
+            failure_code=CODE_COOLDOWN,
+            quota_remaining=_quota_remaining(user_id),
+            started=False,
+        )
+    if _failure_budget_used(user_id) >= FAILURE_BUDGET_PER_DAY:
+        return TeacherAIResult(
+            ok=False,
+            state='failure_limit',
+            message=MSG_FAILURE_LIMIT,
+            failure_code=CODE_FAILURE_LIMIT,
+            quota_remaining=_quota_remaining(user_id),
+            started=False,
+        )
+    if _success_quota_used(user_id) >= SUCCESS_QUOTA_PER_DAY:
+        return TeacherAIResult(
+            ok=False,
+            state='quota',
+            message=MSG_QUOTA,
+            failure_code=CODE_QUOTA,
+            quota_remaining=0,
+            started=False,
+        )
+    return None
+
+
+def _account_active_pending(user_id):
     cutoff = datetime.utcnow() - timedelta(seconds=PENDING_STALE_S)
     stale_rows = GrowthAIGeneration.query.filter(
-        GrowthAIGeneration.child_id == child_id,
-        GrowthAIGeneration.packet_hash == digest,
-        GrowthAIGeneration.runtime_signature == signature,
+        GrowthAIGeneration.requested_by_user_id == user_id,
         GrowthAIGeneration.status == GROWTH_AI_STATUS_PENDING,
         GrowthAIGeneration.created_at < cutoff,
     ).all()
     for row in stale_rows:
         _fail(row, CODE_TIMEOUT)
+    if user_id is None:
+        return None
     return (
         GrowthAIGeneration.query.filter_by(
-            child_id=child_id,
-            packet_hash=digest,
-            runtime_signature=signature,
+            requested_by_user_id=user_id,
             status=GROWTH_AI_STATUS_PENDING,
         )
         .order_by(GrowthAIGeneration.created_at.desc())
@@ -704,19 +733,62 @@ def _active_pending(child_id, digest, signature):
     )
 
 
-def _quota_used(user_id):
+def _day_start_filter(user_id):
     start = _kst_day_start_utc_naive()
-    return GrowthAIGeneration.query.filter(
+    return (
         GrowthAIGeneration.requested_by_user_id == user_id,
         GrowthAIGeneration.created_at >= start,
+    )
+
+
+def _success_quota_used(user_id):
+    if user_id is None:
+        return 0
+    return GrowthAIGeneration.query.filter(
+        *_day_start_filter(user_id),
+        GrowthAIGeneration.status == GROWTH_AI_STATUS_SUCCESS,
     ).count()
+
+
+def _failure_budget_used(user_id):
+    if user_id is None:
+        return 0
+    return GrowthAIGeneration.query.filter(
+        *_day_start_filter(user_id),
+        GrowthAIGeneration.status == GROWTH_AI_STATUS_FAILED,
+    ).count()
+
+
+def _in_failure_cooldown(user_id):
+    if user_id is None:
+        return False
+    rows = (
+        GrowthAIGeneration.query.filter(
+            GrowthAIGeneration.requested_by_user_id == user_id,
+            GrowthAIGeneration.status.in_((GROWTH_AI_STATUS_SUCCESS, GROWTH_AI_STATUS_FAILED)),
+        )
+        .order_by(GrowthAIGeneration.completed_at.desc(), GrowthAIGeneration.id.desc())
+        .limit(CONSECUTIVE_FAILURE_THRESHOLD)
+        .all()
+    )
+    if len(rows) < CONSECUTIVE_FAILURE_THRESHOLD:
+        return False
+    if any(row.status != GROWTH_AI_STATUS_FAILED for row in rows):
+        return False
+    latest = rows[0].completed_at or rows[0].created_at
+    if latest is None:
+        return False
+    return datetime.utcnow() < latest + timedelta(minutes=FAILURE_COOLDOWN_MINUTES)
+
+
+def _quota_used(user_id):
+    return _success_quota_used(user_id)
 
 
 def _quota_remaining(user_id):
     if user_id is None:
         return None
-    used = _quota_used(user_id)
-    remaining = DAILY_QUOTA - used
+    remaining = SUCCESS_QUOTA_PER_DAY - _success_quota_used(user_id)
     return remaining if remaining > 0 else 0
 
 

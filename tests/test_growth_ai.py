@@ -101,7 +101,7 @@ def _walk_schema_objects(node, found=None):
 
 class GrowthAIPromptTests(unittest.TestCase):
     def test_prompt_version(self):
-        self.assertEqual(GROWTH_TEACHER_PROMPT_VERSION, 'growth_teacher_prompt_v6')
+        self.assertEqual(GROWTH_TEACHER_PROMPT_VERSION, 'growth_teacher_prompt_v7')
 
     def test_critical_policies_are_present(self):
         text = GROWTH_TEACHER_SYSTEM_PROMPT
@@ -142,6 +142,9 @@ class GrowthAIPromptTests(unittest.TestCase):
         self.assertIn('스냅샷', text)
         self.assertIn('다음 비교 시점에 현재 페이지를 다시 기록해 주세요', text)
         self.assertNotIn('다음 교재 snapshot 기록', text)
+        self.assertIn('서로 다른 단위의 정량 비교', text)
+        self.assertIn('독서 활동일은 15일에서 2일로, 완독 수는 4회에서 1회로', text)
+        self.assertIn('독서 활동일은 15일에서 2일로 줄었습니다. 완독 수는 4회에서 1회로 줄었습니다.', text)
         self.assertNotIn('review_text', text)
         self.assertNotIn('SENTINEL_CHILD_NAME', text)
         self.assertNotIn('{packet', text)

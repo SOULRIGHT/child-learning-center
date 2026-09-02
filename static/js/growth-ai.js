@@ -24,13 +24,16 @@
         return document.querySelector('[data-ai-panel="' + name + '"]');
     }
 
-    function showState(state) {
+    function showState(state, payload) {
         const card = document.getElementById('growth-ai-card');
         if (card) card.setAttribute('data-ai-state', state);
+        const visible = [];
+        if (state === 'timeout') visible.push('error');
+        else visible.push(state);
+        if (state === 'stale' && payload && payload.interpretation) visible.push('success');
         document.querySelectorAll('[data-ai-panel]').forEach(function (el) {
-            const match = el.getAttribute('data-ai-panel') === state
-                || (state === 'timeout' && el.getAttribute('data-ai-panel') === 'error');
-            el.classList.toggle('growth-ai-hidden', !match);
+            const name = el.getAttribute('data-ai-panel');
+            el.classList.toggle('growth-ai-hidden', visible.indexOf(name) < 0);
         });
     }
 
@@ -243,7 +246,7 @@
         }
         const ready = document.querySelector('[data-ai-role="ready"]');
         if (ready) ready.classList.toggle('growth-ai-hidden', !freshlyReady);
-        showState('success');
+        showState('success', payload);
     }
 
     function isPreflight(payload) {
@@ -251,6 +254,7 @@
         if (payload.started === true) return false;
         const state = payload.state;
         return state === 'disabled' || state === 'quota' || state === 'in_progress'
+            || state === 'cooldown' || state === 'failure_limit'
             || (state === 'success' && payload.cached === true);
     }
 
@@ -331,7 +335,8 @@
                 return;
             }
             const state = (payload && payload.state) || 'error';
-            if (state === 'quota' || state === 'stale' || state === 'disabled' || state === 'in_progress') {
+            if (state === 'quota' || state === 'stale' || state === 'disabled' || state === 'in_progress'
+                || state === 'cooldown' || state === 'failure_limit') {
                 if (state === 'stale' && payload.message) {
                     const msg = document.querySelector('[data-ai-role="stale-message"]');
                     if (msg) msg.textContent = payload.message;
@@ -340,15 +345,15 @@
                     const message = (payload && payload.message) || '';
                     const parts = message.split('\n');
                     setWaitingCopy(
-                        parts[0] || '이미 같은 해석을 준비하고 있어요.',
+                        parts[0] || '이미 AI 해석을 준비하고 있어요.',
                         parts[1] || '잠시만 기다려주세요.'
                     );
-                    showState('loading');
+                    showState('loading', payload);
                     applyFocus(STAGE_COUNT - 1);
                     setWaitingVisible(true);
                     return;
                 }
-                showState(state);
+                showState(state, payload);
                 return;
             }
             const errorNode = document.querySelector('[data-ai-role="error-message"]');
