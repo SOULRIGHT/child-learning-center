@@ -12,6 +12,8 @@ from features.growth.point_composition import (
 from features.growth.windows import current_window, previous_window
 from features.points.events import (
     CATEGORY_ACTIVITY_MATERIAL,
+    CATEGORY_EXTRA_LEARNING,
+    CATEGORY_HELP_CONTRIBUTION,
     CATEGORY_PRAISE,
     CATEGORY_STATIONERY,
     CATEGORY_TEXTBOOK_COMPLETE,
@@ -183,6 +185,9 @@ class PointCompositionPureTests(unittest.TestCase):
         self.assertEqual(summary['manual']['earn_count'], 0)
         self.assertEqual(summary['textbook']['count'], 0)
         self.assertEqual(summary['praise']['count'], 0)
+        self.assertEqual(summary['help']['count'], 0)
+        self.assertEqual(summary['extra_learning']['count'], 0)
+        self.assertEqual(summary['extra_learning']['by_subject'], {})
 
     def test_current_previous_date_boundaries(self):
         events = (
@@ -228,6 +233,8 @@ class PointCompositionPureTests(unittest.TestCase):
         category_like = (
             summary['textbook']['points']
             + summary['praise']['points']
+            + summary['help']['points']
+            + summary['extra_learning']['points']
             + summary['material']['points']
             + summary['stationery']['points']
             + summary['unclassified']['earn_points']
@@ -236,6 +243,29 @@ class PointCompositionPureTests(unittest.TestCase):
         self.assertEqual(summary['net_points'], 3400)
         self.assertEqual(category_like, 3000)
         self.assertNotEqual(category_like, summary['net_points'])
+
+    def test_help_and_extra_learning_composition(self):
+        summary = _window_sum((
+            _subject(AS_OF, 'korean', 200),
+            _manual(AS_OF, 100, category=CATEGORY_HELP_CONTRIBUTION),
+            _manual(AS_OF, 700, category=CATEGORY_HELP_CONTRIBUTION),
+            _manual(AS_OF, 200, category=CATEGORY_EXTRA_LEARNING, subject_key='math'),
+            _manual(AS_OF, 1000, category=CATEGORY_EXTRA_LEARNING, subject_key=None),
+        ))
+        self.assertEqual(summary['net_points'], 2200)
+        self.assertEqual(summary['total_earn_points'], 2200)
+        self.assertEqual(summary['total_spend_points'], 0)
+        self.assertEqual(summary['subjects']['korean']['points'], 200)
+        self.assertEqual(summary['manual']['earn_points'], 2000)
+        self.assertEqual(summary['manual']['earn_count'], 4)
+        self.assertEqual(summary['help']['points'], 800)
+        self.assertEqual(summary['help']['count'], 2)
+        self.assertEqual(summary['extra_learning']['points'], 1200)
+        self.assertEqual(summary['extra_learning']['count'], 2)
+        self.assertEqual(summary['extra_learning']['by_subject']['math'], {'points': 200, 'count': 1})
+        self.assertNotIn(None, summary['extra_learning']['by_subject'])
+        self.assertEqual(summary['unclassified']['earn_count'], 0)
+        self.assertEqual(summary['praise']['count'], 0)
 
     def test_english_piano_are_regular_subjects(self):
         summary = _window_sum((

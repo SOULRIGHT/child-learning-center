@@ -16,6 +16,8 @@ from features.growth.windows import (
 )
 from features.points.events import (
     CATEGORY_ACTIVITY_MATERIAL,
+    CATEGORY_EXTRA_LEARNING,
+    CATEGORY_HELP_CONTRIBUTION,
     CATEGORY_PRAISE,
     CATEGORY_STATIONERY,
     CATEGORY_TEXTBOOK_COMPLETE,
@@ -70,6 +72,11 @@ def _summarize(events):
     textbook_by_subject = defaultdict(lambda: {'points': 0, 'count': 0})
     praise_points = 0
     praise_count = 0
+    help_points = 0
+    help_count = 0
+    extra_learning_points = 0
+    extra_learning_count = 0
+    extra_learning_by_subject = defaultdict(lambda: {'points': 0, 'count': 0})
     material_points = 0
     material_count = 0
     material_by_item = defaultdict(lambda: {'points': 0, 'count': 0})
@@ -119,6 +126,17 @@ def _summarize(events):
         elif category == CATEGORY_PRAISE:
             praise_points += amount
             praise_count += 1
+        elif category == CATEGORY_HELP_CONTRIBUTION:
+            help_points += amount
+            help_count += 1
+        elif category == CATEGORY_EXTRA_LEARNING:
+            extra_learning_points += amount
+            extra_learning_count += 1
+            subject_key = event.subject_key
+            if subject_key:
+                row = extra_learning_by_subject[subject_key]
+                row['points'] += amount
+                row['count'] += 1
         elif category == CATEGORY_ACTIVITY_MATERIAL:
             material_points += amount
             material_count += 1
@@ -169,6 +187,15 @@ def _summarize(events):
         'praise': {
             'points': praise_points,
             'count': praise_count,
+        },
+        'help': {
+            'points': help_points,
+            'count': help_count,
+        },
+        'extra_learning': {
+            'points': extra_learning_points,
+            'count': extra_learning_count,
+            'by_subject': dict(extra_learning_by_subject),
         },
         'material': {
             'points': material_points,

@@ -1,8 +1,8 @@
 # Point / Reward Data Contract
 
 - Last updated: 2026-09-03
-- Implementation baseline: PointEvent `e57d4b7`; composition this commit
-- Test baseline: 885 tests OK
+- Implementation baseline: PointEvent `e57d4b7`; composition `0d2d744`; activity categories this commit
+- Test baseline: 891 tests OK
 - Status: **CURRENT**
 
 이 문서는 **현재 코드와 DB 구조**를 설명한다.
@@ -647,7 +647,7 @@ exact alias는 `compact_lookup` 키로 저장. 아래는 **코드에 나열된 �
 | 수학교재완료, 수학 교재 완료, 교재완료(수학), 교재완료수학 | TEXTBOOK_COMPLETE | math | | |
 | 쎈교재완료, 쎈 교재 완료, 교재완료(쎈), 교재완료쎈 | TEXTBOOK_COMPLETE | ssen | | |
 | 영어교재완료, 영어 교재 완료, 교재완료(영어), 교재완료영어, **영어교재** | TEXTBOOK_COMPLETE | english | | |
-| 칭찬, 칭찬점수, 칭찬 점수, 선생님 칭찬, 오늘 잘함, 오늘잘함 | PRAISE | | | |
+| 칭찬, 칭찬점수, 칭찬 점수, 선생님 칭찬, 선생님 칭찬점수, 오늘 잘함, 오늘잘함 | PRAISE | | | |
 | 프린트 | ACTIVITY_MATERIAL | | print | |
 | 클레이, 아이클레이 | ACTIVITY_MATERIAL | | clay | |
 | 비즈 | ACTIVITY_MATERIAL | | beads | |
@@ -655,8 +655,17 @@ exact alias는 `compact_lookup` 키로 저장. 아래는 **코드에 나열된 �
 | 지우개 | STATIONERY | | eraser | |
 | 필통 | STATIONERY | | pencil_case | |
 | 학용품 구입, 학용품구입, 문구류 구입, 문구류구입 | STATIONERY | | **None** | 세부 품목 없음 |
+| 선생님 도움, 선생님도움, 정리 도움, 정리도움, 친구 도움, 친구도움, 새친구 도움, 새친구도움, 학습도우미, 받아쓰기 도움, 받아쓰기도움, 받아쓰기도우미, 받아쓰기 도우미 | HELP_CONTRIBUTION | | | 성격/태도 추론 아님 |
+| 추가학습, 추가 학습 | EXTRA_LEARNING | | | |
+| 국어 추가학습, 국어추가학습, 국어 추가 학습 | EXTRA_LEARNING | korean | | |
+| 수학 추가학습, 수학추가학습, 수학 추가 학습 | EXTRA_LEARNING | math | | |
+| 쎈 추가학습, 쎈추가학습, 쎈 추가 학습 | EXTRA_LEARNING | ssen | | |
+| 영어 추가학습, 영어추가학습, 영어 추가 학습 | EXTRA_LEARNING | english | | |
+| 추가 문제, 추가문제, 문제 더 풀기, 문제더풀기, 교재 더 풀기, 교재더풀기 | EXTRA_LEARNING | | | |
 
-**명시적으로 PRAISE가 아님:** `선생님 도움`, `정리 도움` → UNCLASSIFIED (`test_help_labels_are_not_praise`).
+**PRAISE vs HELP:** `선생님 칭찬` / `선생님 칭찬점수` → PRAISE. `선생님 도움` / `정리 도움` / `친구 도움` → HELP_CONTRIBUTION. 칭찬이 아님.
+
+**추가점수 단독은 EXTRA_LEARNING이 아님:** `추가점수`, `추가 점수` → UNCLASSIFIED. 금액(+100/+500/+3000)으로 추론하지 않는다.
 
 keyword (exact 실패 후, haystack compact/normalized):
 
@@ -664,6 +673,8 @@ keyword (exact 실패 후, haystack compact/normalized):
 |---|---|
 | compact에 `교재완료` 또는 normalized에 `교재 완료` | TEXTBOOK_COMPLETE + 과목 토큰 0~1개 (`국어/수학/쎈/영어`). 과목 2개면 UNCLASSIFIED |
 | compact에 `칭찬` 또는 `오늘잘함` / normalized `오늘 잘함` | PRAISE |
+| compact에 `도움` 또는 `도우미` | HELP_CONTRIBUTION |
+| compact에 `추가학습` \| `추가문제` \| `문제더풀기` \| `교재더풀기` | EXTRA_LEARNING + 과목 토큰 0~1개. 과목 2개면 UNCLASSIFIED. **`추가점수`는 여기 없음** |
 | compact에 아이클레이\|클레이\|프린트\|비즈 중 **item_key 하나** | ACTIVITY_MATERIAL |
 | compact에 연필\|지우개\|필통 중 **하나** | STATIONERY |
 | 위 카테고리 hit가 0개 또는 2개 이상 | UNCLASSIFIED |
@@ -680,7 +691,9 @@ lookup blob: `subject`, `reason`, `subject+' '+reason` 각각의 compact. exact�
 | category | 정의 |
 |---|---|
 | `TEXTBOOK_COMPLETE` | 교재 완료로 확정된 수동 이벤트. `subject_key`가 있으면 과목까지 확정 |
-| `PRAISE` | 칭찬류로 확정 |
+| `PRAISE` | 칭찬류로 확정. 도움 활동이 아님 |
+| `HELP_CONTRIBUTION` | 교사/친구/센터 활동을 돕거나 정리·도우미 역할로 받은 보상. **성격/배려/사회성 추론 금지.** 금액은 교사 판단 |
+| `EXTRA_LEARNING` | 기본 학습량을 넘어 문제/교재/학습을 추가로 수행한 보상. 과목 1개가 보이면 `subject_key` 보존. **`추가점수` 단독은 해당 없음** |
 | `ACTIVITY_MATERIAL` | 프린트/클레이/비즈류 |
 | `STATIONERY` | 연필/지우개/필통 또는 학용품·문구 구입 (item_key 없을 수 있음) |
 | `UNCLASSIFIED` | **오류가 아니다.** 현재 규칙으로 의미를 안전하게 확정할 수 없는 **정상 상태**. 금액은 회계에 남긴다 |
@@ -693,8 +706,9 @@ daily_subject의 `category`는 None. 과목 학습 점수를 TEXTBOOK_COMPLETE�
 
 **item_key:** `print`, `clay`, `beads`, `pencil`, `eraser`, `pencil_case`. 학용품/문구 generic은 `None`.
 
-**subject_key (교재완료 mapping):** `korean`, `math`, `ssen`, `english`.  
-(피아노/독서는 교재완료 alias에 없음. 과목 컬럼 쪽 `reading`/`piano`는 daily_subject.)
+**subject_key (교재완료·추가학습 mapping):** `korean`, `math`, `ssen`, `english`.  
+(피아노/독서는 교재완료/추가학습 alias에 없음. 과목 컬럼 쪽 `reading`/`piano`는 daily_subject.)
+HELP_CONTRIBUTION은 `subject_key=None`. EXTRA_LEARNING은 과목 토큰이 없으면 `None`.
 
 **daily_subject subject_key:** fetch 키 그대로 (`advanced_math`, `writing` 포함).
 
@@ -1034,14 +1048,14 @@ Data Contract 검토 없이 하지 말 것.
 
 ## Test contract
 
-baseline commit: **`e57d4b7`** (PointEvent). composition 이후 full suite **885 OK**.
+baseline commit: **`e57d4b7`** (PointEvent). composition `0d2d744` 이후 885. activity categories 이후 full suite **891 OK**.
 
-### `tests/test_point_events.py` — 25 OK
+### `tests/test_point_events.py` — 30 OK
 
 | 그룹 | 테스트 |
 |---|---|
 | 과목 | `test_zero_subject_creates_no_event`, `test_positive_subject`, `test_negative_subject_is_preserved`, `test_multiple_subjects` |
-| 수동 | `test_manual_positive_and_negative`, `test_multiple_manual_events_same_day`, `test_zero_manual_creates_no_event`, `test_unknown_is_unclassified`, `test_help_labels_are_not_praise`, `test_conflict_is_unclassified`, `test_raw_text_is_not_rewritten`, `test_activity_date_not_created_at`, `test_manual_sum_fallback`, `test_textbook_keeps_stored_amount`, `test_amount_does_not_decide_category`, `test_keyword_examples`, `test_stationery_generic_has_no_item_key`, `test_preset_key_is_hint_not_amount` |
+| 수동 | `test_manual_positive_and_negative`, `test_multiple_manual_events_same_day`, `test_zero_manual_creates_no_event`, `test_unknown_is_unclassified`, `test_help_labels_are_not_praise`, `test_teacher_praise_score_is_praise_not_help`, `test_extra_learning_examples`, `test_extra_score_alone_is_unclassified`, `test_help_amount_does_not_change_category`, `test_extra_learning_amount_does_not_change_category`, `test_conflict_is_unclassified`, `test_raw_text_is_not_rewritten`, `test_activity_date_not_created_at`, `test_manual_sum_fallback`, `test_textbook_keeps_stored_amount`, `test_amount_does_not_decide_category`, `test_keyword_examples`, `test_stationery_generic_has_no_item_key`, `test_preset_key_is_hint_not_amount` |
 | 독서 미러 +300 | `test_reading_subject_plus_completion_mirror_is_300`, `test_mirror_is_kept_in_manual_sum`, `test_fetch_reading_plus_mirror_stays_300_even_if_reward_event_exists` |
 | 회계 | `test_balanced_subjects_and_manual`, `test_mismatch_does_not_invent_residual` |
 | 다기관 경계 | `test_injected_classifier_changes_category_without_projector_change`, `test_project_module_does_not_import_current_mapping` |
@@ -1058,6 +1072,7 @@ baseline commit: **`e57d4b7`** (PointEvent). composition 이후 full suite **885
 - `test_textbook_and_print_composition`
 - `test_reading_plus_mirror_net_300_excludes_mirror_from_manual`
 - `test_praise_two_events`
+- `test_help_and_extra_learning_composition`
 - `test_unclassified_earn_and_spend`
 - `test_textbook_by_subject_math_and_ssen`
 - `test_stationery_without_item_key_stays_generic`
@@ -1118,6 +1133,8 @@ Growth 연결 (`features/growth/metrics.py`):
 | `manual.earn_points/count` `spend_points/count` | `manual` 중 **mirror 제외** |
 | `textbook.points/count/by_subject` | non-mirror `TEXTBOOK_COMPLETE`. `subject_key=None`은 total에만 |
 | `praise.points/count` | non-mirror `PRAISE` |
+| `help.points/count` | non-mirror `HELP_CONTRIBUTION` |
+| `extra_learning.points/count/by_subject` | non-mirror `EXTRA_LEARNING`. `subject_key=None`은 total에만 |
 | `material.points/count/by_item` | non-mirror `ACTIVITY_MATERIAL`. `item_key=None`은 total에만 |
 | `stationery.points/count/by_item` | non-mirror `STATIONERY` |
 | `unclassified.earn_*/spend_*` | non-mirror `UNCLASSIFIED` |
@@ -1169,6 +1186,15 @@ Rule Engine / 센터 설정 UI / 새 ledger table은 **없음**.
 ---
 
 ## Change Log
+
+### 2026-09-03 (activity categories)
+
+- `HELP_CONTRIBUTION`, `EXTRA_LEARNING` category 추가
+- 선생님/정리/친구 도움류 → HELP. 선생님 칭찬점수 → PRAISE
+- 추가학습/추가 문제/더 풀기 → EXTRA_LEARNING. 과목 1개면 subject_key
+- `추가점수` / `추가 점수` 단독은 UNCLASSIFIED. 금액으로 category 추론 금지
+- composition에 `help`, `extra_learning` breakdown. net/accounting 불변
+- Evidence / Luna / UI 미연결
 
 ### 2026-09-03 (composition)
 

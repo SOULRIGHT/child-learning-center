@@ -9,6 +9,8 @@ from datetime import date, datetime
 
 from features.points.events import (
     CATEGORY_ACTIVITY_MATERIAL,
+    CATEGORY_EXTRA_LEARNING,
+    CATEGORY_HELP_CONTRIBUTION,
     CATEGORY_PRAISE,
     CATEGORY_STATIONERY,
     CATEGORY_TEXTBOOK_COMPLETE,
@@ -124,20 +126,67 @@ class PointEventManualTests(unittest.TestCase):
 
     def test_unknown_is_unclassified(self):
         events = _project(_record(manual_items=[
-            {'subject': '선생님 도움', 'reason': '정리 도움', 'points': 100},
+            {'subject': '기타지급', 'reason': '메모없음', 'points': 100},
         ]))
         self.assertEqual(events[0].category, CATEGORY_UNCLASSIFIED)
 
     def test_help_labels_are_not_praise(self):
-        for subject in ('선생님 도움', '정리 도움'):
+        for subject in ('선생님 도움', '정리 도움', '친구 도움'):
             events = _project(_record(manual_items=[{'subject': subject, 'points': 50}]))
+            self.assertEqual(events[0].category, CATEGORY_HELP_CONTRIBUTION, subject)
+            self.assertNotEqual(events[0].category, CATEGORY_PRAISE, subject)
+
+    def test_teacher_praise_score_is_praise_not_help(self):
+        events = _project(_record(manual_items=[
+            {'subject': '선생님 칭찬점수', 'points': 100},
+        ]))
+        self.assertEqual(events[0].category, CATEGORY_PRAISE)
+        self.assertNotEqual(events[0].category, CATEGORY_HELP_CONTRIBUTION)
+
+    def test_extra_learning_examples(self):
+        extra = _project(_record(manual_items=[{'subject': '추가학습', 'points': 200}]))[0]
+        self.assertEqual(extra.category, CATEGORY_EXTRA_LEARNING)
+        self.assertIsNone(extra.subject_key)
+        math_extra = _project(_record(manual_items=[
+            {'subject': '수학 추가학습', 'points': 200},
+        ]))[0]
+        self.assertEqual(math_extra.category, CATEGORY_EXTRA_LEARNING)
+        self.assertEqual(math_extra.subject_key, 'math')
+        more_problems = _project(_record(manual_items=[
+            {'subject': '문제 더 풀기', 'points': 100},
+        ]))[0]
+        self.assertEqual(more_problems.category, CATEGORY_EXTRA_LEARNING)
+
+    def test_extra_score_alone_is_unclassified(self):
+        for subject in ('추가점수', '추가 점수'):
+            events = _project(_record(manual_items=[{'subject': subject, 'points': 500}]))
             self.assertEqual(events[0].category, CATEGORY_UNCLASSIFIED, subject)
+
+    def test_help_amount_does_not_change_category(self):
+        for points in (100, 700):
+            events = _project(_record(manual_items=[
+                {'subject': '선생님 도움', 'points': points},
+            ]))
+            self.assertEqual(events[0].category, CATEGORY_HELP_CONTRIBUTION)
+            self.assertEqual(events[0].amount, points)
+
+    def test_extra_learning_amount_does_not_change_category(self):
+        for points in (200, 1000):
+            events = _project(_record(manual_items=[
+                {'subject': '추가학습', 'points': points},
+            ]))
+            self.assertEqual(events[0].category, CATEGORY_EXTRA_LEARNING)
+            self.assertEqual(events[0].amount, points)
 
     def test_conflict_is_unclassified(self):
         events = _project(_record(manual_items=[
             {'subject': '국어교재완료', 'reason': '프린트', 'points': 1000},
         ]))
         self.assertEqual(events[0].category, CATEGORY_UNCLASSIFIED)
+        praise_and_help = _project(_record(manual_items=[
+            {'subject': '칭찬 도움', 'points': 100},
+        ]))
+        self.assertEqual(praise_and_help[0].category, CATEGORY_UNCLASSIFIED)
 
     def test_raw_text_is_not_rewritten(self):
         raw_subject = '  국어 교재 완료  '

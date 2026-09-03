@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from features.points.events import (
     CATEGORY_ACTIVITY_MATERIAL,
+    CATEGORY_EXTRA_LEARNING,
+    CATEGORY_HELP_CONTRIBUTION,
     CATEGORY_PRAISE,
     CATEGORY_STATIONERY,
     CATEGORY_TEXTBOOK_COMPLETE,
@@ -83,8 +85,44 @@ def _alias_map():
         _classification(CATEGORY_TEXTBOOK_COMPLETE, subject_key='english'),
     )
     add(
-        ('칭찬', '칭찬점수', '칭찬 점수', '선생님 칭찬', '오늘 잘함', '오늘잘함'),
+        (
+            '칭찬', '칭찬점수', '칭찬 점수', '선생님 칭찬', '선생님 칭찬점수',
+            '오늘 잘함', '오늘잘함',
+        ),
         _classification(CATEGORY_PRAISE),
+    )
+    add(
+        (
+            '선생님 도움', '선생님도움', '정리 도움', '정리도움',
+            '친구 도움', '친구도움', '새친구 도움', '새친구도움',
+            '학습도우미', '받아쓰기 도움', '받아쓰기도움',
+            '받아쓰기도우미', '받아쓰기 도우미',
+        ),
+        _classification(CATEGORY_HELP_CONTRIBUTION),
+    )
+    add(
+        ('추가학습', '추가 학습'),
+        _classification(CATEGORY_EXTRA_LEARNING),
+    )
+    add(
+        ('국어 추가학습', '국어추가학습', '국어 추가 학습'),
+        _classification(CATEGORY_EXTRA_LEARNING, subject_key='korean'),
+    )
+    add(
+        ('수학 추가학습', '수학추가학습', '수학 추가 학습'),
+        _classification(CATEGORY_EXTRA_LEARNING, subject_key='math'),
+    )
+    add(
+        ('쎈 추가학습', '쎈추가학습', '쎈 추가 학습'),
+        _classification(CATEGORY_EXTRA_LEARNING, subject_key='ssen'),
+    )
+    add(
+        ('영어 추가학습', '영어추가학습', '영어 추가 학습'),
+        _classification(CATEGORY_EXTRA_LEARNING, subject_key='english'),
+    )
+    add(
+        ('추가 문제', '추가문제', '문제 더 풀기', '문제더풀기', '교재 더 풀기', '교재더풀기'),
+        _classification(CATEGORY_EXTRA_LEARNING),
     )
     add(('프린트',), _classification(CATEGORY_ACTIVITY_MATERIAL, item_key='print'))
     add(('클레이', '아이클레이'), _classification(CATEGORY_ACTIVITY_MATERIAL, item_key='clay'))
@@ -183,6 +221,13 @@ def _keyword(blobs):
         hits.append(_classification(CATEGORY_TEXTBOOK_COMPLETE, subject_key=subject_key))
     if _looks_praise(compact, normalized):
         hits.append(_classification(CATEGORY_PRAISE))
+    if _looks_help(compact):
+        hits.append(_classification(CATEGORY_HELP_CONTRIBUTION))
+    if _looks_extra_learning(compact):
+        extra_subject = _one_textbook_subject(compact)
+        if extra_subject is _CONFLICT:
+            return UNCLASSIFIED
+        hits.append(_classification(CATEGORY_EXTRA_LEARNING, subject_key=extra_subject))
 
     material = _one_token(_MATERIAL_TOKENS, compact)
     if material is _CONFLICT:
@@ -209,6 +254,21 @@ def _looks_praise(compact, normalized):
     if '칭찬' in compact:
         return True
     return '오늘잘함' in compact or '오늘 잘함' in normalized
+
+
+def _looks_help(compact):
+    """도움/도우미 활동. 칭찬과 구분. 성격 추론이 아니다."""
+    return '도움' in compact or '도우미' in compact
+
+
+def _looks_extra_learning(compact):
+    """기본량 초과 학습. '추가점수'/'추가 점수' 단독은 여기 넣지 않는다."""
+    return (
+        '추가학습' in compact
+        or '추가문제' in compact
+        or '문제더풀기' in compact
+        or '교재더풀기' in compact
+    )
 
 
 def _one_textbook_subject(compact):
