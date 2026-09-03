@@ -283,6 +283,7 @@ class PointCompositionPureTests(unittest.TestCase):
         self.assertNotIn('classify_manual', source)
         self.assertNotIn('from feature_models', source)
         self.assertNotIn('import feature_models', source)
+        self.assertNotIn('features.points.semantic', source)
 
 
 class PointCompositionCanonicalTests(unittest.TestCase):

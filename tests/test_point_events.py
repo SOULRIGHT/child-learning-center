@@ -352,14 +352,22 @@ class PointEventClassifierBoundaryTests(unittest.TestCase):
         self.assertEqual(current_events[0].amount, fake_events[0].amount)
 
     def test_project_module_does_not_import_current_mapping(self):
-        for name in list(sys.modules):
-            if name.startswith('features.points'):
+        snapshot = {
+            name: module for name, module in sys.modules.items()
+            if name.startswith('features.points')
+        }
+        try:
+            for name in list(snapshot):
                 sys.modules.pop(name, None)
-        project_mod = importlib.import_module('features.points.project')
-        self.assertNotIn('features.points.mapping.current', sys.modules)
-        source = inspect.getsource(project_mod)
-        self.assertNotIn('mapping.current', source)
-        self.assertNotIn('features.points.mapping', source)
+            project_mod = importlib.import_module('features.points.project')
+            self.assertNotIn('features.points.mapping.current', sys.modules)
+            source = inspect.getsource(project_mod)
+            self.assertNotIn('mapping.current', source)
+            self.assertNotIn('features.points.mapping', source)
+            self.assertNotIn('features.points.semantic', source)
+            self.assertNotIn('feature_models', source)
+        finally:
+            sys.modules.update(snapshot)
 
 
 class PointEventFetchRegressionTests(unittest.TestCase):

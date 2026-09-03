@@ -241,6 +241,23 @@ class ManualPointPreset(db.Model):
         return f'<ManualPointPreset {self.key} {self.default_points}>'
 
 
+class PointSemanticMapping(db.Model):
+    """수동 label → category 의미 mapping. 금액/원장/개인정보가 아니다."""
+    __tablename__ = 'point_semantic_mapping'
+
+    id = db.Column(db.Integer, primary_key=True)
+    normalized_label = db.Column(db.String(255), nullable=False, unique=True)
+    category = db.Column(db.String(64), nullable=False)
+    subject_key = db.Column(db.String(64), nullable=True)
+    item_key = db.Column(db.String(64), nullable=True)
+    source = db.Column(db.String(32), nullable=False, default='semantic_llm')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<PointSemanticMapping {self.normalized_label} {self.category}>'
+
+
 class LearningSubject(db.Model):
     """학습진도 과목 마스터. DailyPoints 과목 컬럼 및 면제권 과목 목록과 별개다."""
     __tablename__ = 'learning_subject'

@@ -1,8 +1,8 @@
 # Point / Reward Data Contract
 
 - Last updated: 2026-09-03
-- Implementation baseline: PointEvent `e57d4b7`; composition `0d2d744`; activity categories this commit
-- Test baseline: 891 tests OK
+- Implementation baseline: PointEvent `e57d4b7`; composition `0d2d744`; activity categories `f1f030f`; semantic mapping this commit
+- Test baseline: 904 tests OK
 - Status: **CURRENT**
 
 이 문서는 **현재 코드와 DB 구조**를 설명한다.
@@ -52,6 +52,7 @@ Point composition metrics는 `features/growth/point_composition.py` → `metrics
 | **projection** | 원장을 복사·이관하지 않고, 읽기 결과를 분석용 객체로 변환하는 것. |
 | **normalization** | 수동 텍스트/presetKey → category/item_key/subject_key. 원문 DB 값을 바꾸지 않음. |
 | **current-center mapping** | `features/points/mapping/current.py`. 현재 센터 alias. product projector가 import하지 않음. |
+| **semantic mapping** | `point_semantic_mapping` 테이블 + `features/points/semantic.py`. 저장된 label→category. 금액이 아님. LLM 호출은 아직 없음. |
 | **classifier** | `classify_manual(item) -> ManualClassification`. projector에 주입하는 callable. |
 | **source_kind** | PointEvent가 어디서 왔는지. v1: `daily_subject` \| `manual` 만. |
 | **provenance** | 더 좁은 출처. `daily_column` \| `manual_json` \| `manual_sum`. |
@@ -728,6 +729,36 @@ category만 남기고 item/subject를 버리면 “교재완료 +3000”이 어�
 
 금액 분기 없음.
 
+런타임 센터 projection (`project_current_center_events`):
+
+1. 위 deterministic `classify_manual` 먼저.
+2. 결과가 확정 category면 **그대로** (semantic이 덮지 않음).
+3. 결과가 UNCLASSIFIED일 때만 `get_semantic_mapping(compact_lookup(subject))`.
+4. 허용 taxonomy의 저장값이 있으면 그 category/subject_key/item_key.
+5. 없거나 잘못된 저장값이면 UNCLASSIFIED.
+
+---
+
+## Semantic mapping (CURRENT)
+
+테이블: `point_semantic_mapping` (`PointSemanticMapping`). Alembic `e6b4d19a8c22`.
+
+저장 컬럼: `id`, `normalized_label` (unique), `category`, `subject_key`, `item_key`, `source`, `created_at`, `updated_at`.
+
+**저장하지 않음:** child_id, user_id, created_by, raw_reason, 아동 이름.
+
+`normalized_label`은 `features/points/text.py` `compact_lookup`과 같다. (`공부 더 함` = `공부더함`)
+
+source v1: `semantic_llm` \| `manual_override`.
+
+허용 category: TEXTBOOK_COMPLETE, PRAISE, HELP_CONTRIBUTION, EXTRA_LEARNING, ACTIVITY_MATERIAL, STATIONERY, UNCLASSIFIED. 그 외 저장값이 있어도 projection은 UNCLASSIFIED.
+
+API (`features/points/semantic.py`): `get_semantic_mapping`, `upsert_semantic_mapping` (같은 normalized_label이면 update), `unmapped_manual_label_counts` (후보 unique label. 외부 API 없음).
+
+semantic mapping은 **의미만** 바꾼다. amount / activity_date / source_kind / net / earn/spend / reading mirror 회계는 바꾸지 않는다.
+
+**FUTURE/NEXT (미구현):** 하루 1회 LLM batch가 unmapped label을 읽어 mapping row를 채운다. LLM이 PointEvent amount나 daily total을 정하지 않는다.
+
 ---
 
 ## text normalization contract
@@ -1048,7 +1079,7 @@ Data Contract 검토 없이 하지 말 것.
 
 ## Test contract
 
-baseline commit: **`e57d4b7`** (PointEvent). composition `0d2d744` 이후 885. activity categories 이후 full suite **891 OK**.
+baseline commit: **`e57d4b7`** (PointEvent). composition `0d2d744` 이후 885. activity categories `f1f030f` 이후 891. semantic mapping 이후 full suite **904 OK**.
 
 ### `tests/test_point_events.py` — 30 OK
 
@@ -1081,6 +1112,19 @@ baseline commit: **`e57d4b7`** (PointEvent). composition `0d2d744` 이후 885. a
 - `test_output_has_no_raw_text_fields`
 - `test_period_total_matches_composition_net_current_and_previous`
 - `test_reading_mirror_and_reward_event_stay_300`
+
+### `tests/test_point_semantic_mapping.py`
+
+- `test_deterministic_wins_over_semantic`
+- `test_semantic_applies_when_deterministic_unclassified`
+- `test_missing_semantic_mapping_stays_unclassified`
+- `test_help_mapping_applies`
+- `test_subject_key_mapping_applies`
+- `test_invalid_stored_category_falls_back`
+- `test_upsert_same_normalized_label_does_not_duplicate`
+- `test_semantic_does_not_change_amount_or_net`
+- `test_unmapped_label_helper_skips_known_and_deterministic`
+- `test_table_has_no_pii_columns`
 
 ### 기존 regression (문서 작성 시점 묶음 122 OK에 포함됐던 축)
 
@@ -1186,6 +1230,14 @@ Rule Engine / 센터 설정 UI / 새 ledger table은 **없음**.
 ---
 
 ## Change Log
+
+### 2026-09-03 (semantic mapping)
+
+- `point_semantic_mapping` 테이블 + lookup/upsert
+- runtime 우선순위: deterministic → stored semantic → UNCLASSIFIED
+- semantic은 category만. amount/net/mirror 불변
+- unmapped unique-label helper (LLM 미호출)
+- Evidence / Luna / scheduler / 외부 API 미연결
 
 ### 2026-09-03 (activity categories)
 

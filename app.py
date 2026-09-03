@@ -6168,6 +6168,7 @@ from feature_models import (  # noqa: E402
     ReadingDay,
     ReadingRewardEvent,
     ManualPointPreset,
+    PointSemanticMapping,
     LearningSubject,
     LearningProgressEntry,
     LearningWorkbookPlan,
