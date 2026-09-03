@@ -72,3 +72,6 @@ firebase_env_example.txt
 # Local generated backups
 /backups/daily/*
 /backups/realtime/*
+
+# Local database backups
+*.dump
