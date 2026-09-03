@@ -31,14 +31,16 @@ def _seed_default_subjects(conn):
     if 'learning_subject' not in inspector.get_table_names():
         return
     for key, name, sort_order in DEFAULT_SUBJECTS:
+        # PostgreSQL boolean 컬럼에 raw integer 1을 넣으면 실패한다.
+        # Python bool bind parameter는 SQLite/PostgreSQL 모두에서 올바르게 동작한다.
         conn.execute(
             sa.text(
                 "INSERT INTO learning_subject "
                 "(key, name, is_active, sort_order) "
-                "SELECT :key, :name, 1, :sort_order "
+                "SELECT :key, :name, :is_active, :sort_order "
                 "WHERE NOT EXISTS (SELECT 1 FROM learning_subject WHERE key = :key)"
             ),
-            {'key': key, 'name': name, 'sort_order': sort_order},
+            {'key': key, 'name': name, 'is_active': True, 'sort_order': sort_order},
         )
 
 

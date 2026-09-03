@@ -535,6 +535,55 @@ class LearningProgressTests(unittest.TestCase):
         self.assertEqual(by_key['ssen'][3], 7)
         self.assertEqual(len(rows), 3)
 
+    def test_corrective_seed_binds_python_bool_for_is_active(self):
+        """PostgreSQL boolean 호환: seed SQL이 raw integer 대신 bool bind를 쓴다."""
+        from unittest.mock import MagicMock, patch
+
+        import sqlalchemy as sa_real
+
+        migration_path = Path(__file__).resolve().parents[1] / (
+            'migrations/versions/e5b2c81d4a70_ensure_default_learning_subjects.py'
+        )
+        spec = importlib.util.spec_from_file_location('subject_seed_bool_migration', migration_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        calls = []
+        conn = MagicMock()
+        conn.execute.side_effect = (
+            lambda clause, params=None: calls.append((str(clause), params))
+        )
+        fake_sa = MagicMock()
+        fake_sa.text = sa_real.text
+        fake_sa.inspect.return_value.get_table_names.return_value = ['learning_subject']
+        with patch.object(module, 'sa', fake_sa):
+            module._seed_default_subjects(conn)
+
+        self.assertEqual(len(calls), 3)
+        for sql, params in calls:
+            self.assertIn(':is_active', sql)
+            # boolean 컬럼 위치에 raw integer literal이 없어야 한다.
+            self.assertNotRegex(sql, r'SELECT :key, :name, \d')
+            self.assertIsInstance(params['is_active'], bool)
+            self.assertTrue(params['is_active'])
+
+    def test_seed_migrations_have_no_raw_integer_boolean_literals(self):
+        """boolean 컬럼에 1/0 literal을 SELECT/INSERT하는 seed SQL이 없어야 한다."""
+        import re
+
+        versions_dir = Path(__file__).resolve().parents[1] / 'migrations' / 'versions'
+        seed_files = sorted(versions_dir.glob('*.py'))
+        self.assertTrue(seed_files)
+        pattern = re.compile(
+            r'is_active[^)]*\)\s*"\s*"?\s*(?:SELECT|VALUES)[^"\n]*[^:\w][01]\s*,'
+        )
+        for path in seed_files:
+            source = path.read_text(encoding='utf-8')
+            self.assertIsNone(
+                pattern.search(source),
+                msg=f'raw boolean literal in {path.name}',
+            )
+
     def test_latest_migration_chain_has_default_subjects(self):
         progress_path = Path(__file__).resolve().parents[1] / (
             'migrations/versions/a9c4e81f6b30_create_learning_progress.py'
