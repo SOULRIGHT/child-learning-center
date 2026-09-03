@@ -1,8 +1,8 @@
 # Point / Reward Data Contract
 
 - Last updated: 2026-09-03
-- Implementation baseline: PointEvent `e57d4b7`; composition `0d2d744`; activity categories `f1f030f`; semantic mapping this commit
-- Test baseline: 904 tests OK
+- Implementation baseline: PointEvent `e57d4b7`; composition `0d2d744`; activity categories `f1f030f`; semantic mapping `e56710f`; semantic classifier this commit
+- Test baseline: 927 tests OK
 - Status: **CURRENT**
 
 이 문서는 **현재 코드와 DB 구조**를 설명한다.
@@ -52,7 +52,8 @@ Point composition metrics는 `features/growth/point_composition.py` → `metrics
 | **projection** | 원장을 복사·이관하지 않고, 읽기 결과를 분석용 객체로 변환하는 것. |
 | **normalization** | 수동 텍스트/presetKey → category/item_key/subject_key. 원문 DB 값을 바꾸지 않음. |
 | **current-center mapping** | `features/points/mapping/current.py`. 현재 센터 alias. product projector가 import하지 않음. |
-| **semantic mapping** | `point_semantic_mapping` 테이블 + `features/points/semantic.py`. 저장된 label→category. 금액이 아님. LLM 호출은 아직 없음. |
+| **semantic mapping** | `point_semantic_mapping` 테이블 + `features/points/semantic.py`. 저장된 label→category. 금액이 아님. |
+| **semantic classifier** | `features/points/semantic_classifier.py`. unmapped unique label 1-batch LLM. valid 결과만 upsert. amount/net을 정하지 않음. Luna와 분리. scheduler 없음. |
 | **classifier** | `classify_manual(item) -> ManualClassification`. projector에 주입하는 callable. |
 | **source_kind** | PointEvent가 어디서 왔는지. v1: `daily_subject` \| `manual` 만. |
 | **provenance** | 더 좁은 출처. `daily_column` \| `manual_json` \| `manual_sum`. |
@@ -757,7 +758,23 @@ API (`features/points/semantic.py`): `get_semantic_mapping`, `upsert_semantic_ma
 
 semantic mapping은 **의미만** 바꾼다. amount / activity_date / source_kind / net / earn/spend / reading mirror 회계는 바꾸지 않는다.
 
-**FUTURE/NEXT (미구현):** 하루 1회 LLM batch가 unmapped label을 읽어 mapping row를 채운다. LLM이 PointEvent amount나 daily total을 정하지 않는다.
+### Semantic batch classifier (CURRENT)
+
+파일: `features/points/semantic_classifier.py`. Growth Luna prompt / quota / generation row와 **분리**.
+
+흐름: `unmapped_manual_label_counts` → unique label 배열 1 batch → structured output 검증 → valid row만 `upsert_semantic_mapping`.
+
+LLM payload는 `{"labels": ["공부더함", ...]}` 만. child/user/created_by/raw reason/amount/날짜/count 없음.
+
+LLM이 **UNCLASSIFIED**로 준 결과도 저장한다. 같은 애매한 label을 매일 다시 보내지 않기 위함.
+
+모델: 환경변수 `POINT_SEMANTIC_MODEL`. 없으면 `GROWTH_AI_MODEL`. 코드에 모델 문자열 하드코딩 없음. API key는 기존 `OPENAI_API_KEY`.
+
+수동 실행: `python scripts/debug/point_semantic_classify.py` (scheduler 아님).
+
+v1 evaluation (blind test, 일반 정확도 보장이 아님): N=100, accuracy=86%, 그 테스트에서 잘못된 확정 category = 0. 나머지 오류는 UNCLASSIFIED fallback.
+
+**NOT YET:** scheduler / cron / GitHub Actions / 매일 자동 실행.
 
 ---
 
@@ -1079,7 +1096,7 @@ Data Contract 검토 없이 하지 말 것.
 
 ## Test contract
 
-baseline commit: **`e57d4b7`** (PointEvent). composition `0d2d744` 이후 885. activity categories `f1f030f` 이후 891. semantic mapping 이후 full suite **904 OK**.
+baseline commit: **`e57d4b7`** (PointEvent). composition `0d2d744` 이후 885. activity categories `f1f030f` 이후 891. semantic mapping `e56710f` 이후 904. semantic classifier 이후 full suite **927 OK**.
 
 ### `tests/test_point_events.py` — 30 OK
 
@@ -1125,6 +1142,20 @@ baseline commit: **`e57d4b7`** (PointEvent). composition `0d2d744` 이후 885. a
 - `test_semantic_does_not_change_amount_or_net`
 - `test_unmapped_label_helper_skips_known_and_deterministic`
 - `test_table_has_no_pii_columns`
+
+### `tests/test_point_semantic_classifier.py`
+
+외부 API mock. 실제 유료 호출 없음.
+
+- `test_empty_labels_do_not_call_llm` / `test_no_candidates_skips_llm`
+- `test_multiple_labels_one_batch`
+- `test_unclassified_is_stored_and_excluded_next_time`
+- `test_invalid_category_not_stored` / `test_unknown_label_is_dropped`
+- `test_duplicate_identical_output_keeps_one` / `test_duplicate_conflicting_output_is_dropped`
+- `test_api_exception_does_not_change_existing`
+- `test_payload_contains_only_labels` / `test_existing_semantic_and_deterministic_excluded_from_payload`
+- `test_subject_key_validation`
+- `test_accounting_unchanged_after_semantic_store`
 
 ### 기존 regression (문서 작성 시점 묶음 122 OK에 포함됐던 축)
 
@@ -1230,6 +1261,14 @@ Rule Engine / 센터 설정 UI / 새 ledger table은 **없음**.
 ---
 
 ## Change Log
+
+### 2026-09-03 (semantic classifier)
+
+- unmapped unique label 1-batch LLM classifier
+- structured output 검증 후 PointSemanticMapping upsert
+- UNCLASSIFIED도 저장. amount/net 불변
+- Growth Luna prompt/quota와 분리. scheduler 없음
+- v1 evaluation: N=100, 86%, wrong-category 0 (UNCLASSIFIED fallback)
 
 ### 2026-09-03 (semantic mapping)
 
