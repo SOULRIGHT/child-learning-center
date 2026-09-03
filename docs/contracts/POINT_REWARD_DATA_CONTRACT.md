@@ -1,8 +1,8 @@
 # Point / Reward Data Contract
 
 - Last updated: 2026-09-03
-- Implementation baseline: `e57d4b7` (`feat: add point event normalization`)
-- Test baseline: 869 tests OK
+- Implementation baseline: PointEvent `e57d4b7`; composition this commit
+- Test baseline: 885 tests OK
 - Status: **CURRENT**
 
 이 문서는 **현재 코드와 DB 구조**를 설명한다.
@@ -11,7 +11,9 @@
 
 코드와 이 문서가 다르면 **코드가 정본**이다. 관련 Growth 운영 데이터 정본의 다른 축은 `docs/growth-data-contract.md`다. 본 파일은 Point / Reward 원장, Reading reward mirror, PointEvent projection, 센터 mapping 경계, 합산/디버깅 기준을 잠근다.
 
-PointEvent는 `e57d4b7` 기준으로 **Growth metrics / Evidence Packet / AI prompt에 아직 연결되지 않았다.**
+PointEvent projection은 `e57d4b7`에 있다.
+Point composition metrics는 `features/growth/point_composition.py` → `metrics_bundle['point_composition']`에 있다.
+**Evidence Packet / AI prompt / UI에는 아직 연결되지 않았다.**
 
 ---
 
@@ -55,8 +57,8 @@ PointEvent는 `e57d4b7` 기준으로 **Growth metrics / Evidence Packet / AI pro
 | **provenance** | 더 좁은 출처. `daily_column` \| `manual_json` \| `manual_sum`. |
 | **EARN / SPEND** | `amount > 0` / `amount < 0`. 저장 field가 아님. property `PointEvent.direction`. |
 | **UNCLASSIFIED** | 의미를 안전하게 확정할 수 없음. 오류가 아니라 정상 fallback. 금액은 그대로 둔다. |
-| **Growth metrics** | `features/growth/metrics.py` 등 deterministic 집계. `e57d4b7`에서 PointEvent를 호출하지 않음. |
-| **Evidence Packet** | `build_teacher_evidence_packet()` → `growth_teacher_evidence_v1`. PointEvent 미포함. |
+| **Growth metrics** | `features/growth/metrics.py` 등 deterministic 집계. `point_composition`은 내부 payload. Evidence에는 안 실림. |
+| **Evidence Packet** | `build_teacher_evidence_packet()` → `growth_teacher_evidence_v1`. PointEvent raw / composition breakdown **미포함**. |
 | **activity_date** | 활동이 일어난 달력일. DailyPoints는 `date`. PointEvent는 `activity_date`. |
 | **created_at** | row/JSON 기록 시각(UTC). 활동일 아님. Growth window·PointEvent 날짜로 쓰지 않음. |
 
@@ -86,11 +88,13 @@ project_point_events(records, *, classify_manual=…)   Growth (기존, 미변�
         ▼                                              ▼
 PointEvent[]  (runtime, DB 없음)                      points_metrics / reward_metrics
         │                                              │
-        ▼                                              ▼
-[아직 Growth composition에 미연결]                     Evidence Packet
-                                                       │
-                                                       ▼
-                                                       Luna (버튼 generation만)
+        ▼                                              ├─ Evidence Packet (composition 미포함)
+point_composition                                      │
+  summarize_point_events /                             ▼
+  point_composition_from_events                        Luna (버튼 generation만)
+        │
+        ▼
+metrics_bundle['point_composition']   ← 내부 deterministic만. AI 미전달
 ```
 
 독서 보상 (별도 쓰기 경로, `features/reading/rewards.py`):
@@ -808,7 +812,7 @@ normalized/compact는 classification용 파생값. DB 컬럼을 업데이트하�
 
 ---
 
-## 현재 Growth point evidence (PointEvent 미연결)
+## 현재 Growth point evidence (composition은 packet 미연결)
 
 확인: `features/growth` 전역에 `PointEvent` / `project_point_events` import **없음**.
 
@@ -848,7 +852,8 @@ delta: `_period_pair`가 current−previous 형태의 필드를 만듦 (`points.
 
 ## 현재 Growth에서 손실되는 정보
 
-canonical fetch에는 있으나 packet에는 없음.
+canonical fetch에는 있으나 **teacher Evidence Packet에는** 없음.
+`metrics_bundle['point_composition']`에는 subject/manual/category 구성이 내부적으로 계산된다. packet/AI에는 아직 복사되지 않는다.
 
 | 정보 | 살아 있는 곳 | 사라지는 곳 |
 |---|---|---|
@@ -1029,7 +1034,7 @@ Data Contract 검토 없이 하지 말 것.
 
 ## Test contract
 
-baseline commit: **`e57d4b7`**. full suite **869 OK**. live OpenAI/AWS 호출 없음.
+baseline commit: **`e57d4b7`** (PointEvent). composition 이후 full suite **885 OK**.
 
 ### `tests/test_point_events.py` — 25 OK
 
@@ -1047,6 +1052,21 @@ baseline commit: **`e57d4b7`**. full suite **869 OK**. live OpenAI/AWS 호출 �
 - `test_amount_does_not_decide_category`
 - `test_project_module_does_not_import_current_mapping`
 
+### `tests/test_point_composition.py`
+
+- `test_subject_korean_math_net_300`
+- `test_textbook_and_print_composition`
+- `test_reading_plus_mirror_net_300_excludes_mirror_from_manual`
+- `test_praise_two_events`
+- `test_unclassified_earn_and_spend`
+- `test_textbook_by_subject_math_and_ssen`
+- `test_stationery_without_item_key_stays_generic`
+- `test_empty_window_is_zero`
+- `test_current_previous_date_boundaries`
+- `test_output_has_no_raw_text_fields`
+- `test_period_total_matches_composition_net_current_and_previous`
+- `test_reading_mirror_and_reward_event_stay_300`
+
 ### 기존 regression (문서 작성 시점 묶음 122 OK에 포함됐던 축)
 
 `tests/test_growth_data_contract.py` invariant 이름:
@@ -1062,30 +1082,68 @@ baseline commit: **`e57d4b7`**. full suite **869 OK**. live OpenAI/AWS 호출 �
 
 ---
 
-## FUTURE — 아직 구현 안 됨
+## Point composition metrics (CURRENT)
 
-다음에 해당하지 않는 본문 서술은 CURRENT가 아니다.
+파일: `features/growth/point_composition.py`.
+
+순수 집계. `PointEvent` iterable만 받는다. `mapping/current.py`를 import하지 않는다.
+`ReadingRewardEvent` 테이블을 조회하거나 금액을 다시 더하지 않는다.
+
+함수:
+
+- `summarize_point_events(events, *, start_date, end_date)` — inclusive `activity_date` 창
+- `point_composition_from_events(events, *, as_of=None, window_days=30)` — 기존 `current_window` / `previous_window`
+
+창 정의는 `features/growth/windows.py`와 동일. `created_at` 사용 금지. current `end` = `as_of` 이므로 미래일은 제외.
+
+Growth 연결 (`features/growth/metrics.py`):
+
+1. `_canonical_daily_point_records` → `_records_as_of`
+2. `features.points.project_current_center_events` (classifier 주입은 **points 패키지**에서만)
+3. `point_composition_from_events`
+4. `metrics_bundle['point_composition']`
+
+`features/growth/*`는 `mapping/current.py`를 직접 import하지 않는다.
+
+### 창 결과 키
+
+`current` / `previous` 각각:
+
+| 키 | 의미 |
+|---|---|
+| `net_points` | 창 안 **모든** PointEvent `amount` 합 (mirror 포함). canonical `points.period`와 같아야 함 |
+| `total_earn_points` | `amount > 0` 합 |
+| `total_spend_points` | `amount < 0` 합. **부호 있는 음수** (예: `-900`). 절대값 필드를 따로 두지 않음 |
+| `subjects.{key}.points` / `active_days` | `source_kind=daily_subject`. 0이 아닌 이벤트가 있는 서로 다른 `activity_date` 수 |
+| `manual.earn_points/count` `spend_points/count` | `manual` 중 **mirror 제외** |
+| `textbook.points/count/by_subject` | non-mirror `TEXTBOOK_COMPLETE`. `subject_key=None`은 total에만 |
+| `praise.points/count` | non-mirror `PRAISE` |
+| `material.points/count/by_item` | non-mirror `ACTIVITY_MATERIAL`. `item_key=None`은 total에만 |
+| `stationery.points/count/by_item` | non-mirror `STATIONERY` |
+| `unclassified.earn_*/spend_*` | non-mirror `UNCLASSIFIED` |
+
+정본: `net_points = Σ PointEvent.amount`.
+category 합 = net 이 **아님** (daily_subject + UNCLASSIFIED + mirror 때문에).
+
+결과 dict에 `raw_subject` / `raw_reason` 없음.
+
+delta는 v1에 넣지 않음 (Evidence 단계).
+
+빈 창: `net_points=0`, `subjects={}`, 카테고리 count 0. insufficient 판정은 이 함수가 하지 않음.
+
+테스트: `tests/test_point_composition.py`.
+
+---
+
+## FUTURE — Evidence / Luna (아직 구현 안 됨)
 
 ```
-PointEvent[]
-  → 30d point composition metrics     # 없음
-  → Evidence Packet aggregate         # PointEvent 미연결
+metrics_bundle['point_composition']
+  → Evidence Packet aggregate     # 없음
   → Luna
 ```
 
-후보 metric (미구현):
-
-- subject earned points / days
-- total earn / total spend
-- manual earn/spend (미러 제외)
-- textbook complete points/count/subjects
-- praise points/count
-- material / stationery
-- unclassified
-- English/Piano actual records
-
-구현됐다고 쓰지 말 것. composition을 넣을 때 `T = S + M`을 재정의하지 말 것. `ReadingRewardEvent` overlay를 period에 더하지 말 것.
-
+구현됐다고 쓰지 말 것. packet에 composition을 넣을 때 raw text를 넣지 말 것. `ReadingRewardEvent` overlay를 period/`net_points`에 더하지 말 것.
 ---
 
 ## FUTURE — 다기관화
@@ -1111,6 +1169,17 @@ Rule Engine / 센터 설정 UI / 새 ledger table은 **없음**.
 ---
 
 ## Change Log
+
+### 2026-09-03 (composition)
+
+- PointEvent[] → current/previous composition metrics 구현
+- `features/growth/point_composition.py` 순수 집계
+- `metrics_bundle['point_composition']` 내부 연결. Evidence/AI 미연결
+- net = 모든 PointEvent 합 (mirror 포함). manual/category는 mirror 제외
+- `points.period` == `composition.net_points` regression
+- total_spend_points는 signed 음수
+- raw_subject/raw_reason 결과 제외
+- full suite 885 OK
 
 ### 2026-09-03
 

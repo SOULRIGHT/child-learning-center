@@ -397,6 +397,22 @@ def points_metrics(child_id, as_of=None, window_days=30):
     return payload
 
 
+def point_composition_metrics(child_id, as_of=None, window_days=30):
+    """canonical DailyPoints → PointEvent → window composition.
+
+    Evidence Packet / prompt는 이 payload를 읽지 않는다.
+    current-center mapping은 features.points 경계에서만 주입한다.
+    """
+    from features.growth.point_composition import point_composition_from_events
+    from features.points import project_current_center_events
+    as_of = resolve_as_of(as_of)
+    records = _records_as_of(_canonical_daily_point_records(child_id), as_of)
+    events = project_current_center_events(records)
+    return point_composition_from_events(
+        events, as_of=as_of, window_days=window_days,
+    )
+
+
 def metrics_bundle(child_id, as_of=None, window_days=30):
     """reading/progress/points/learning/recent_window_bests 스냅샷을 한 묶음으로 모은다."""
     from features.growth.learning_metrics import learning_metrics
@@ -425,4 +441,7 @@ def metrics_bundle(child_id, as_of=None, window_days=30):
             learning_payload=learning,
         ),
         'rewards': reward_metrics(child_id, as_of=as_of, window_days=window_days),
+        'point_composition': point_composition_metrics(
+            child_id, as_of=as_of, window_days=window_days,
+        ),
     }
