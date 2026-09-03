@@ -1,8 +1,8 @@
 # Point / Reward Data Contract
 
-- Last updated: 2026-09-03
-- Implementation baseline: PointEvent `e57d4b7`; composition `0d2d744`; activity categories `f1f030f`; semantic mapping `e56710f`; semantic classifier this commit
-- Test baseline: 927 tests OK
+- Last updated: 2026-09-04
+- Implementation baseline: PointEvent `e57d4b7`; composition `0d2d744`; activity categories `f1f030f`; semantic mapping `e56710f`; semantic classifier `11310d3`; semantic scheduler this commit
+- Test baseline: 949 tests OK
 - Status: **CURRENT**
 
 이 문서는 **현재 코드와 DB 구조**를 설명한다.
@@ -53,7 +53,8 @@ Point composition metrics는 `features/growth/point_composition.py` → `metrics
 | **normalization** | 수동 텍스트/presetKey → category/item_key/subject_key. 원문 DB 값을 바꾸지 않음. |
 | **current-center mapping** | `features/points/mapping/current.py`. 현재 센터 alias. product projector가 import하지 않음. |
 | **semantic mapping** | `point_semantic_mapping` 테이블 + `features/points/semantic.py`. 저장된 label→category. 금액이 아님. |
-| **semantic classifier** | `features/points/semantic_classifier.py`. unmapped unique label 1-batch LLM. valid 결과만 upsert. amount/net을 정하지 않음. Luna와 분리. scheduler 없음. |
+| **semantic classifier** | `features/points/semantic_classifier.py`. unmapped unique label 1-batch LLM. valid 결과만 upsert. amount/net을 정하지 않음. Luna와 분리. 한 실행 최대 100 label. |
+| **semantic scheduler** | GitHub Actions daily trigger + 보호된 `POST /internal/point-semantic-classify` (`features/points/routes.py`). semantic enrichment layer. 실패해도 point accounting 불변. |
 | **classifier** | `classify_manual(item) -> ManualClassification`. projector에 주입하는 callable. |
 | **source_kind** | PointEvent가 어디서 왔는지. v1: `daily_subject` \| `manual` 만. |
 | **provenance** | 더 좁은 출처. `daily_column` \| `manual_json` \| `manual_sum`. |
@@ -774,7 +775,32 @@ LLM이 **UNCLASSIFIED**로 준 결과도 저장한다. 같은 애매한 label을
 
 v1 evaluation (blind test, 일반 정확도 보장이 아님): N=100, accuracy=86%, 그 테스트에서 잘못된 확정 category = 0. 나머지 오류는 UNCLASSIFIED fallback.
 
-**NOT YET:** scheduler / cron / GitHub Actions / 매일 자동 실행.
+### Semantic batch scheduler (CURRENT)
+
+이 scheduler는 **semantic enrichment layer**다. 실패해도 point accounting(amount / activity_date / source_kind / canonical total / net / earn·spend / ReadingRewardEvent 회계)은 영향받지 않는다.
+
+구조:
+
+```
+GitHub Actions (매일 03:22 Asia/Seoul + workflow_dispatch)
+  → authenticated HTTPS POST
+  → POST /internal/point-semantic-classify  (features/points/routes.py)
+  → classify_and_store_unmapped_labels(...)
+  → Supabase / OpenAI
+  → PointSemanticMapping
+```
+
+- workflow: `.github/workflows/point-semantic-daily.yml`. checkout / Python setup / third-party action 없음. curl만.
+- GitHub Actions는 DB/OpenAI에 직접 접근하지 않는다. GitHub이 가진 민감정보는 batch 호출 token 하나뿐 (Secret `POINT_SEMANTIC_BATCH_TOKEN`, Variable `POINT_SEMANTIC_BATCH_URL`). DATABASE_URL / Supabase / OPENAI_API_KEY / Firebase는 GitHub에 없다.
+- endpoint 인증: Render env `POINT_SEMANTIC_BATCH_TOKEN` + `Authorization: Bearer` header. timing-safe 비교 (`hmac.compare_digest`). env token 미설정이면 503 거부. session/Flask-Login과 분리.
+- 한 실행 최대 **100** unique label (`MAX_LABELS_PER_RUN`, `semantic_classifier.py`에서만 정의). 초과분은 다음 실행 candidate로 유지.
+- endpoint request당 OpenAI 호출 최대 1회. candidate 0이면 호출 0회 + 200.
+- 응답은 aggregate만: `status`, `candidate_count`, `classified_count`, `stored_count`, `failed_count`, `remaining_count`. raw label / child / user / token / model response 없음.
+- classifier 실패 시 non-2xx (502). 기존 mapping 불변. 저장 안 된 candidate는 다음 실행에서 재시도.
+- retry는 GitHub workflow에서만: 1차 실패 → 5분 대기 → 2차 실패 → 15분 대기 → 3차 실패 → workflow FAILED. 각 호출 timeout 120초. endpoint/classifier 내부 retry 없음 (`max_retries=0` 유지).
+- 중복 실행 방지: workflow `concurrency: group: point-semantic-daily, cancel-in-progress: false`. `permissions: {}`.
+- 실패 알림: 3회 모두 실패하면 workflow FAILED 상태로 종료. GitHub notification 설정으로 수신. 별도 email provider 없음.
+- **주의**: scheduled workflow는 GitHub **default branch**의 workflow 파일만 실제 schedule 실행된다.
 
 ---
 
@@ -1096,7 +1122,7 @@ Data Contract 검토 없이 하지 말 것.
 
 ## Test contract
 
-baseline commit: **`e57d4b7`** (PointEvent). composition `0d2d744` 이후 885. activity categories `f1f030f` 이후 891. semantic mapping `e56710f` 이후 904. semantic classifier 이후 full suite **927 OK**.
+baseline commit: **`e57d4b7`** (PointEvent). composition `0d2d744` 이후 885. activity categories `f1f030f` 이후 891. semantic mapping `e56710f` 이후 904. semantic classifier `11310d3` 이후 927. semantic scheduler 이후 full suite **949 OK**.
 
 ### `tests/test_point_events.py` — 30 OK
 
@@ -1156,6 +1182,15 @@ baseline commit: **`e57d4b7`** (PointEvent). composition `0d2d744` 이후 885. a
 - `test_payload_contains_only_labels` / `test_existing_semantic_and_deterministic_excluded_from_payload`
 - `test_subject_key_validation`
 - `test_accounting_unchanged_after_semantic_store`
+
+### `tests/test_point_semantic_schedule.py`
+
+외부 호출 없음 (endpoint mock + workflow 정적 검증).
+
+- max 100: `test_more_than_max_candidates_only_first_100_in_one_llm_call`, `test_under_limit_sends_all_candidates`
+- 인증: `test_post_with_valid_token_runs_service_once`, `test_get_is_rejected`, `test_missing_authorization_rejected`, `test_non_bearer_scheme_rejected`, `test_wrong_token_rejected`, `test_missing_server_token_env_rejected`, `test_query_string_token_is_not_accepted`
+- 동작: `test_zero_candidates_returns_ok_without_llm`, `test_service_failure_returns_non_2xx`, `test_response_contains_only_aggregates`, `test_endpoint_run_does_not_change_accounting`
+- workflow 정적: schedule/timezone, `workflow_dispatch`, `permissions: {}`, concurrency, retry 3회 (5분/15분), curl flags, secret/variable 참조, token 미출력, third-party action 없음
 
 ### 기존 regression (문서 작성 시점 묶음 122 OK에 포함됐던 축)
 
@@ -1261,6 +1296,14 @@ Rule Engine / 센터 설정 UI / 새 ledger table은 **없음**.
 ---
 
 ## Change Log
+
+### 2026-09-04 (semantic scheduler)
+
+- GitHub Actions daily trigger (03:22 Asia/Seoul + workflow_dispatch)
+- 보호된 `POST /internal/point-semantic-classify` (Bearer token, timing-safe)
+- 한 실행 최대 100 unique label. request당 LLM 최대 1회. candidate 0 → 호출 0회
+- GitHub retry 총 3회 (5분/15분 backoff). GitHub에 DB/OpenAI secret 없음
+- semantic enrichment layer: 실패해도 point accounting 불변
 
 ### 2026-09-03 (semantic classifier)
 

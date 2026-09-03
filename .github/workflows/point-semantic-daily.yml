@@ -1,0 +1,70 @@
+# Daily semantic point classification trigger.
+#
+# GitHub Actions는 보호된 Render endpoint를 POST로 호출만 한다.
+# DB / Supabase / OpenAI에는 직접 접근하지 않는다.
+#
+# 필요 설정:
+#   Repository Variable  POINT_SEMANTIC_BATCH_URL
+#     예: https://<render-domain>/internal/point-semantic-classify
+#   Repository Secret    POINT_SEMANTIC_BATCH_TOKEN
+#
+# scheduled workflow는 default branch의 최신 커밋에서만 실행된다.
+name: point-semantic-daily
+
+on:
+  schedule:
+    - cron: '22 3 * * *'
+      timezone: 'Asia/Seoul'
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: point-semantic-daily
+  cancel-in-progress: false
+
+jobs:
+  call-batch-endpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Call protected batch endpoint (max 3 attempts)
+        env:
+          BATCH_URL: ${{ vars.POINT_SEMANTIC_BATCH_URL }}
+          BATCH_TOKEN: ${{ secrets.POINT_SEMANTIC_BATCH_TOKEN }}
+        run: |
+          set -u
+
+          if [ -z "${BATCH_URL}" ] || [ -z "${BATCH_TOKEN}" ]; then
+            echo "required repository variable or secret is missing"
+            exit 1
+          fi
+
+          call_endpoint() {
+            curl --fail-with-body --silent --show-error \
+              --max-time 120 \
+              --request POST \
+              --header "Authorization: Bearer ${BATCH_TOKEN}" \
+              "${BATCH_URL}"
+          }
+
+          if call_endpoint; then
+            echo "attempt 1 succeeded"
+            exit 0
+          fi
+          echo "attempt 1 failed; retrying in 5 minutes"
+          sleep 300
+
+          if call_endpoint; then
+            echo "attempt 2 succeeded"
+            exit 0
+          fi
+          echo "attempt 2 failed; retrying in 15 minutes"
+          sleep 900
+
+          if call_endpoint; then
+            echo "attempt 3 succeeded"
+            exit 0
+          fi
+          echo "attempt 3 failed; giving up"
+          exit 1

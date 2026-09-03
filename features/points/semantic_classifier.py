@@ -26,6 +26,10 @@ MODEL_ENV = 'POINT_SEMANTIC_MODEL'
 GROWTH_MODEL_ENV = 'GROWTH_AI_MODEL'
 PROVIDER_NAME = 'openai'
 
+# v1 정책: 한 실행(=한 batch)당 신규 unique label 최대 100개.
+# 초과분은 저장되지 않았으므로 다음 실행에서 다시 candidate가 된다.
+MAX_LABELS_PER_RUN = 100
+
 _SUBJECT_KEYS_TEXT = ', '.join(sorted(ALLOWED_SUBJECT_KEYS))
 _ITEM_KEYS_TEXT = ', '.join(sorted(ALLOWED_ITEM_KEYS))
 
@@ -142,14 +146,24 @@ def classify_unmapped_labels(labels, *, client=None, model=None, api_key=None):
     return validate_classifier_mappings(payload['labels'], parsed)
 
 
-def classify_and_store_unmapped_labels(records, *, client=None, model=None, api_key=None):
-    """candidate 조회 → 1 batch → validate → upsert. scheduler 아님."""
+def classify_and_store_unmapped_labels(
+    records,
+    *,
+    client=None,
+    model=None,
+    api_key=None,
+    max_labels=MAX_LABELS_PER_RUN,
+):
+    """candidate 조회 → 최대 max_labels개 1 batch → validate → upsert."""
     from extensions import db
 
     candidates = unmapped_manual_label_counts(records)
-    labels = [row['label'] for row in candidates]
+    all_labels = [row['label'] for row in candidates]
+    limit = len(all_labels) if max_labels is None else max(0, int(max_labels))
+    labels = all_labels[:limit]
     summary = {
-        'candidate_count': len(labels),
+        'candidate_count': len(all_labels),
+        'remaining_count': len(all_labels) - len(labels),
         'classified_count': 0,
         'stored_count': 0,
         'failed_count': 0,
