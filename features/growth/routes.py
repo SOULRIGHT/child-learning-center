@@ -1,5 +1,5 @@
 """교사용 개인 Growth 대시보드. viewer/NFC/기존 onepage는 건드리지 않는다."""
-from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from features.dates import (
@@ -20,6 +20,8 @@ from features.growth.ai.runtime import (
 )
 from features.growth.service import build_growth_view_model
 from features.reading.access import get_child
+from features.reading.ai.copy import MSG_CONFIRM, MSG_ERROR as READING_AI_MSG_ERROR
+from features.reading.ai.runtime import generate_reading_analysis, public_result_payload as reading_ai_payload
 
 growth_bp = Blueprint('growth', __name__)
 
@@ -83,6 +85,34 @@ def generate_ai(child_id):
     )
     status = 200 if result.ok else _error_status(result.state)
     return jsonify(public_result_payload(result)), status
+
+
+@growth_bp.route('/children/<int:child_id>/growth/reading-ai', methods=['POST'])
+@login_required
+def generate_reading_ai(child_id):
+    blocked = _forbid_ai_user()
+    if blocked:
+        return blocked
+    child = get_child(child_id)
+    if child is None:
+        abort(404)
+    as_of, _ = _resolve_teacher_as_of()
+    confirmed = _reading_ai_confirmed()
+    wants_json = _wants_json()
+    result = generate_reading_analysis(
+        child_id=child.id,
+        user_id=current_user.id,
+        as_of=as_of,
+        confirmed=confirmed,
+    )
+    if wants_json:
+        status = 200 if result.ok else _reading_ai_error_status(result)
+        return jsonify(reading_ai_payload(result)), status
+    if not confirmed:
+        flash(MSG_CONFIRM, 'warning')
+    elif not result.ok:
+        flash(result.message or READING_AI_MSG_ERROR, 'warning')
+    return redirect(url_for('growth.teacher', child_id=child.id))
 
 
 @growth_bp.route('/children/<int:child_id>/growth/ai/feedback', methods=['POST'])
@@ -163,4 +193,30 @@ def _error_status(state):
         return 429
     if state == 'in_progress':
         return 409
+    return 200
+
+
+def _reading_ai_confirmed():
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        value = payload.get('reading_reviewed')
+        if value in (True, 1, '1', 'on', 'true', 'yes'):
+            return True
+        return payload.get('confirmed') in (True, 1, '1', 'on', 'true', 'yes')
+    value = request.form.get('reading_reviewed') or request.form.get('confirmed')
+    return value in {'1', 'on', 'true', 'yes'}
+
+
+def _wants_json():
+    if request.is_json:
+        return True
+    accept = (request.headers.get('Accept') or '')
+    return 'application/json' in accept and 'text/html' not in accept
+
+
+def _reading_ai_error_status(result):
+    if result.state == 'confirm':
+        return 400
+    if result.state == 'unavailable' and result.failure_code == 'DISABLED':
+        return 503
     return 200

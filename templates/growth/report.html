@@ -633,6 +633,87 @@
                     </div>
                 </div>
             </div>
+            <div class="col-12">
+                <div class="card growth-panel growth-panel-reading" data-testid="growth-reading-analysis">
+                    <div class="card-body">
+                        <h6 class="mb-3">독서 원문 분석 자료</h6>
+                        {% set analysis = reading.analysis %}
+                        {% if analysis %}
+                        <div class="mb-3" data-testid="growth-reading-sufficiency" data-sufficiency="{{ analysis.sufficiency }}">
+                            <div class="growth-muted">원문 표본</div>
+                            <div>최근 {{ analysis.recent_count }}건 · 이전 {{ analysis.previous_count }}건</div>
+                            <div class="growth-muted">
+                                {% if analysis.sufficiency == 'major' %}주요 변화 분석 가능
+                                {% elif analysis.sufficiency == 'limited' %}제한적 분석
+                                {% else %}기간 변화 결론을 내릴 기록이 부족합니다
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="growth-muted">원문 있는 기록</div>
+                            <div>{{ analysis.text_record_count }}건</div>
+                            {% if analysis.character_count and analysis.character_count.recent_median is not none %}
+                            <div class="growth-muted mt-2">최근 원문 글자 수 중앙값 {{ analysis.character_count.recent_median }} · 문장 수 중앙값 {{ analysis.sentence_count.recent_median }}</div>
+                            {% endif %}
+                            {% if analysis.completion_duration_median is not none %}
+                            <div class="growth-muted">완독 기간 중앙값 {{ analysis.completion_duration_median }}일</div>
+                            {% endif %}
+                        </div>
+                        <div class="mb-3" data-testid="growth-reading-recent">
+                            <div class="growth-muted">최근 독서 기록</div>
+                            {% if analysis.recent_records %}
+                            <ul class="mb-0">
+                                {% for item in analysis.recent_records[:5] %}
+                                <li>{{ item.date }} · {{ item.book_title or '제목 없음' }} · {{ item.status }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                            <div class="text-muted">원문이 있는 최근 기록이 없습니다.</div>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <div class="text-muted">독서 원문 분석 자료를 계산하지 못했습니다.</div>
+                        {% endif %}
+                        <div data-testid="growth-reading-ai" data-ai-state="{{ reading.ai.state if reading.ai else 'unavailable' }}">
+                            <div class="growth-muted">독서 원문 분석</div>
+                            {% if reading.ai and reading.ai.state == 'current' %}
+                            <div>현재 분석</div>
+                            {% elif reading.ai and reading.ai.state == 'limited' %}
+                            <div>제한적 분석</div>
+                            {% elif reading.ai and reading.ai.stale %}
+                            <div>이전 분석입니다. 다시 분석이 필요합니다.</div>
+                            {% elif reading.ai and reading.ai.state == 'insufficient' %}
+                            <div>데이터 부족</div>
+                            {% elif reading.ai and reading.ai.state == 'none' %}
+                            <div>아직 분석 없음</div>
+                            {% else %}
+                            <div>원문 분석을 표시할 수 없습니다.</div>
+                            {% endif %}
+                            {% if reading.ai and reading.ai.message %}
+                            <div class="growth-muted">{{ reading.ai.message }}</div>
+                            {% endif %}
+                            {% if reading.ai and reading.ai.output and reading.ai.output.observations %}
+                            <ul class="mt-2 mb-2">
+                                {% for item in reading.ai.output.observations %}
+                                <li>{{ item.observation }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
+                            {% if not is_viewer_mode and reading.ai and reading.ai.enabled %}
+                            <form method="post" action="{{ url_for('growth.generate_reading_ai', child_id=child.id) }}" class="mt-3" data-testid="reading-ai-form">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" value="1" id="reading-reviewed" name="reading_reviewed" data-testid="reading-ai-confirm" required>
+                                    <label class="form-check-label" for="reading-reviewed">현재 선택된 독서 기록을 검토했습니다</label>
+                                </div>
+                                <button type="submit" class="btn btn-outline-success" data-testid="reading-ai-analyze">
+                                    {% if reading.ai.stale %}다시 분석{% else %}독서 원문 분석{% endif %}
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 

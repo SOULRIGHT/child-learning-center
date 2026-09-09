@@ -6192,6 +6192,7 @@ from feature_models import (  # noqa: E402
     GrowthAIGeneration,
     GrowthAIAttempt,
     GrowthAIFeedback,
+    ReadingAnalysisResult,
 )
 from features.books.routes import books_bp  # noqa: E402
 from features.reading.routes import reading_bp  # noqa: E402

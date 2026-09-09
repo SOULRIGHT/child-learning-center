@@ -125,6 +125,7 @@ def _seed(db, as_of: date) -> dict:
     from features.progress.service import ensure_default_subjects
     from features.study.calendar import save_subject_study_weekdays
     from features.study.holidays import korean_public_holidays
+    from viewer_slug_utils import generate_viewer_slug
 
     teacher = User(
         username='qa_teacher',
@@ -136,7 +137,7 @@ def _seed(db, as_of: date) -> dict:
     child = Child(
         name='QA아동',
         grade=3,
-        viewer_slug='qaqaqaqaqaqaqaqaqaqaqaqa',
+        viewer_slug=generate_viewer_slug(),
         created_at=datetime(2020, 1, 1),
     )
     db.session.add_all([teacher, child])
@@ -183,26 +184,26 @@ def _seed(db, as_of: date) -> dict:
     sparse = Child(
         name='QA데이터부족아동',
         grade=3,
-        viewer_slug='qasparseqasparseqasparseqa',
+        viewer_slug=generate_viewer_slug(),
         created_at=datetime(2020, 1, 1),
     )
     ready = Child(
         name='QA또래기준아동',
         grade=4,
-        viewer_slug='qareadyqareadyqareadyqar',
+        viewer_slug=generate_viewer_slug(),
         created_at=datetime(2020, 1, 1),
     )
     lonely = Child(
         name='QA또래없음아동',
         grade=6,
-        viewer_slug='qaloneqaloneqaloneqalone',
+        viewer_slug=generate_viewer_slug(),
         created_at=datetime(2020, 1, 1),
     )
     peers = [
         Child(
             name=f'QA또래{index}',
             grade=4,
-            viewer_slug=f'qapeer{index:018d}',
+            viewer_slug=generate_viewer_slug(),
             created_at=datetime(2020, 1, 1),
         )
         for index in range(1, 4)
@@ -231,6 +232,7 @@ def _seed(db, as_of: date) -> dict:
     return {
         'teacher_id': teacher.id,
         'child_id': child.id,
+        'viewer_slug': child.viewer_slug,
         'sparse_child_id': sparse.id,
         'peer_ready_child_id': ready.id,
         'lonely_child_id': lonely.id,

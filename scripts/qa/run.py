@@ -28,7 +28,7 @@ from tests.helpers import (  # noqa: E402
 )
 
 QA_SECRET = 'clc-step0-test-secret'
-USAGE = 'Usage: python scripts/qa/run.py step3|step4|step5'
+USAGE = 'Usage: python scripts/qa/run.py step3|step4|step5|step6'
 
 
 def _pick_port() -> int:
@@ -95,6 +95,7 @@ def _print_report(suite: str, results: list[tuple[str, str]], error: str | None,
         'step3': 'STEP 3 BROWSER QA',
         'step4': 'STEP 4 BROWSER QA',
         'step5': 'STEP 5 BROWSER QA',
+        'step6': 'STEP 6 BROWSER QA',
     }.get(suite, f'{suite.upper()} BROWSER QA')
     print(title)
     for name, status in results:
@@ -151,6 +152,8 @@ def _run_browser(suite: str, base_url: str, state: dict, artifacts_dir: Path) ->
         from smoke_step4 import run_authenticated_steps  # noqa: WPS433
     elif suite == 'step5':
         from smoke_step5 import run_authenticated_steps  # noqa: WPS433
+    elif suite == 'step6':
+        from smoke_step6 import run_authenticated_steps  # noqa: WPS433
     else:
         raise RuntimeError(f'Unsupported QA suite: {suite}')
 
@@ -222,7 +225,7 @@ def _run_browser(suite: str, base_url: str, state: dict, artifacts_dir: Path) ->
 
 
 def run_suite(suite: str) -> int:
-    if suite not in ('step3', 'step4', 'step5'):
+    if suite not in ('step3', 'step4', 'step5', 'step6'):
         print(USAGE)
         return 2
     if HELPERS_ROOT != PROJECT_ROOT:
@@ -312,7 +315,7 @@ def run_step3() -> int:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2 or argv[1] not in ('step3', 'step4', 'step5'):
+    if len(argv) != 2 or argv[1] not in ('step3', 'step4', 'step5', 'step6'):
         print(USAGE)
         return 2
     return run_suite(argv[1])

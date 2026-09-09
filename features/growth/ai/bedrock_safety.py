@@ -13,6 +13,7 @@ ACTION_NONE = 'NONE'
 ACTION_INTERVENED = 'GUARDRAIL_INTERVENED'
 ACTION_ERROR = 'ERROR'
 SOURCE_OUTPUT = 'OUTPUT'
+SOURCE_INPUT = 'INPUT'
 
 
 class AwsBedrockGuardrailSafetyProvider(SafetyProvider):
@@ -30,13 +31,20 @@ class AwsBedrockGuardrailSafetyProvider(SafetyProvider):
         self._region = region
 
     def check_response(self, text, timeout_s=None) -> SafetyDecision:
+        return self._check(text, source=SOURCE_OUTPUT, timeout_s=timeout_s, empty_reason='empty output is not safety-checked')
+
+    def check_input(self, text, timeout_s=None) -> SafetyDecision:
+        """INPUT gate only. 응답 outputs의 익명화/재작성 텍스트는 쓰지 않는다."""
+        return self._check(text, source=SOURCE_INPUT, timeout_s=timeout_s, empty_reason='empty input is not safety-checked')
+
+    def _check(self, text, *, source, timeout_s, empty_reason) -> SafetyDecision:
         payload = _visible_text(text)
         if not payload:
             return SafetyDecision(
                 safe=False,
                 provider=PROVIDER_NAME,
                 action=ACTION_ERROR,
-                reason='empty output is not safety-checked',
+                reason=empty_reason,
             )
         guardrail_id, guardrail_version = self._require_guardrail()
         client = self._client or self._build_client(timeout_s=timeout_s)
@@ -45,7 +53,7 @@ class AwsBedrockGuardrailSafetyProvider(SafetyProvider):
             response = client.apply_guardrail(
                 guardrailIdentifier=guardrail_id,
                 guardrailVersion=guardrail_version,
-                source=SOURCE_OUTPUT,
+                source=source,
                 content=[{'text': {'text': payload}}],
             )
         except Exception:

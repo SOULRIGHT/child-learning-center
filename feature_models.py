@@ -828,3 +828,45 @@ class GrowthAIFeedback(db.Model):
 
     def __repr__(self):
         return f'<GrowthAIFeedback {self.id} gen={self.generation_id}>'
+
+
+READING_AI_STATUS_SUCCESS = 'SUCCESS'
+READING_AI_STATUS_FAILED = 'FAILED'
+
+
+class ReadingAnalysisResult(db.Model):
+    """독서 전용 AI 결과. review_text / prompt / Guardrail raw 는 저장하지 않는다."""
+    __tablename__ = 'reading_analysis_result'
+    __table_args__ = (
+        Index(
+            'ix_reading_analysis_child_fingerprint',
+            'child_id',
+            'fingerprint',
+        ),
+        Index('ix_reading_analysis_child_created', 'child_id', 'created_at'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    child_id = db.Column(db.Integer, db.ForeignKey('child.id'), nullable=False, index=True)
+    requested_by_user_id = db.Column(
+        db.Integer, db.ForeignKey('user.id'), nullable=False, index=True,
+    )
+    fingerprint = db.Column(db.String(64), nullable=False, index=True)
+    as_of = db.Column(db.Date, nullable=False)
+    status = db.Column(db.String(16), nullable=False)
+    sufficiency = db.Column(db.String(32), nullable=True)
+    parsed_output = db.Column(db.JSON, nullable=True)
+    facts_snapshot = db.Column(db.JSON, nullable=True)
+    failure_code = db.Column(db.String(64), nullable=True)
+    generator_provider = db.Column(db.String(32), nullable=True)
+    model = db.Column(db.String(64), nullable=True)
+    prompt_version = db.Column(db.String(64), nullable=True)
+    analyzer_version = db.Column(db.String(64), nullable=True)
+    output_schema_version = db.Column(db.String(64), nullable=True)
+    validator_version = db.Column(db.String(64), nullable=True)
+    safety_provider = db.Column(db.String(64), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self):
+        return f'<ReadingAnalysisResult {self.id} {self.status}>'

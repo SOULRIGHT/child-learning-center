@@ -430,6 +430,31 @@ def _reading_section(payload):
     }
 
 
+def _attach_reading_analysis(reading_view, child_id, as_of):
+    """8+8 facts + reading AI view. bundle/evidence packet에는 넣지 않는다."""
+    reading_view['analysis'] = None
+    reading_view['ai'] = None
+    try:
+        from features.reading.analysis import build_public_facts
+        reading_view['analysis'] = build_public_facts(child_id, as_of=as_of)
+    except Exception:
+        reading_view['analysis'] = None
+    try:
+        from features.reading.ai.runtime import load_reading_ai_view
+        reading_view['ai'] = load_reading_ai_view(child_id, as_of=as_of)
+        if reading_view['analysis'] is None and reading_view['ai']:
+            reading_view['analysis'] = reading_view['ai'].get('facts')
+    except Exception:
+        from features.reading.ai.copy import MSG_UNAVAILABLE
+        reading_view['ai'] = {
+            'state': 'unavailable',
+            'enabled': False,
+            'message': MSG_UNAVAILABLE,
+            'stale': False,
+            'output': None,
+        }
+
+
 def _progress_section(payload):
     current = payload.get('current') or {}
     previous = payload.get('previous') or {}
@@ -684,6 +709,7 @@ def build_growth_view_model(child, *, as_of=None, is_viewer_mode=False):
     points = bundle.get('points') or {}
     learning = bundle.get('learning') or {}
     reading_view = _reading_section(reading)
+    _attach_reading_analysis(reading_view, child.id, as_of)
     progress_view = _progress_section(progress)
     points_view = _points_section(points)
     window_days = reading.get('window_days') or 30
