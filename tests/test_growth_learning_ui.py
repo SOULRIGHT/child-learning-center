@@ -268,9 +268,9 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertEqual(card['peer']['median_display'], '124p')
         self.assertEqual(card['peer']['gap_display'], '중앙값 대비 -12p')
         html = self._learning_html()
-        self.assertIn('중앙값 124p', html)
-        self.assertIn('비교 1명', html)
-        self.assertIn('중앙값 대비 -12p', html)
+        self.assertNotIn('동학년 동일 교재', html)
+        self.assertNotIn('중앙값 124p', html)
+        self.assertNotIn('중앙값 대비 -12p', html)
         self.assertNotIn('뒤처짐', html)
         self.assertNotIn('우수', html)
         self.assertNotIn('부진', html)
@@ -295,7 +295,7 @@ class GrowthLearningUiTests(unittest.TestCase):
         even = self._math_card()
         self.assertEqual(even['peer']['n'], 4)
         self.assertEqual(even['peer']['median_display'], '112.5p')
-        self.assertIn('112.5p', self._learning_html())
+        self.assertNotIn('112.5p', self._learning_html())
 
         db.session.query(LearningProgressEntry).filter(
             LearningProgressEntry.child_id != self.child.id
@@ -312,7 +312,6 @@ class GrowthLearningUiTests(unittest.TestCase):
         self._progress(date(2026, 10, 1), page=51)
         stale = self._math_card()
         self.assertEqual(stale['peer']['unavailable_label'], PEER_STALE_LABEL)
-        self.assertIn(PEER_STALE_LABEL, self._learning_html())
         self.assertNotIn('중앙값 0p', self._learning_html())
 
     def test_plan_statuses_and_exact_estimated(self):

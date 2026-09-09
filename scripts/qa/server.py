@@ -56,6 +56,68 @@ def _pick_non_study_day(as_of: date, holiday_days: set[date]) -> date:
     raise RuntimeError('Could not pick a non-study day in the current month.')
 
 
+def _weekday_dates(start: date, end: date, weekday: int):
+    cursor = start
+    while cursor <= end:
+        if cursor.weekday() == weekday:
+            yield cursor
+        cursor += timedelta(days=1)
+
+
+def _seed_peer_ready_child(db, child, subject, as_of: date, teacher_id: int, *, coverage_end: int, points: int):
+    from app import DailyPoints
+    from feature_models import ACTOR_TEACHER, STUDY_STATUS_EXPLICIT_NOT_STUDIED, STUDY_STATUS_STUDIED
+    from features.study.constants import INPUT_CHANNEL_TEACHER, RECORD_VERIFICATION_OBSERVED
+    from features.study.records import create_study_session
+
+    window_start = as_of - timedelta(days=29)
+    days = list(_weekday_dates(window_start, as_of, as_of.weekday()))
+    if not days:
+        raise RuntimeError('QA seed has no expected weekday in the current window.')
+    for index, day in enumerate(days):
+        if index == 0:
+            create_study_session(
+                child_id=child.id,
+                learning_subject_id=subject.id,
+                study_date=day,
+                study_status=STUDY_STATUS_STUDIED,
+                start_page=1,
+                end_page=coverage_end,
+                recorded_by_user_id=teacher_id,
+                record_verification=RECORD_VERIFICATION_OBSERVED,
+                actor_type=ACTOR_TEACHER,
+                input_channel=INPUT_CHANNEL_TEACHER,
+            )
+        else:
+            create_study_session(
+                child_id=child.id,
+                learning_subject_id=subject.id,
+                study_date=day,
+                study_status=STUDY_STATUS_EXPLICIT_NOT_STUDIED,
+                recorded_by_user_id=teacher_id,
+                record_verification=RECORD_VERIFICATION_OBSERVED,
+                actor_type=ACTOR_TEACHER,
+                input_channel=INPUT_CHANNEL_TEACHER,
+            )
+    db.session.add(DailyPoints(
+        child_id=child.id,
+        date=as_of,
+        korean_points=points,
+        math_points=0,
+        ssen_points=0,
+        reading_points=0,
+        piano_points=0,
+        english_points=0,
+        advanced_math_points=0,
+        writing_points=0,
+        manual_points=0,
+        manual_history='[]',
+        total_points=points,
+        created_by=teacher_id,
+    ))
+    db.session.commit()
+
+
 def _seed(db, as_of: date) -> dict:
     from app import Child, User
     from feature_models import CenterSystemHolidaySeed, LearningSubject
@@ -92,7 +154,7 @@ def _seed(db, as_of: date) -> dict:
     for subject in subjects:
         days = [weekday] if subject.id == expected.id else [other_day]
         save_subject_study_weekdays(subject.id, days)
-        create_workbook_plan(
+        plan = create_workbook_plan(
             grade=3,
             learning_subject_id=subject.id,
             textbook_title=f'QA {subject.name} 교재',
@@ -101,6 +163,9 @@ def _seed(db, as_of: date) -> dict:
             start_date=as_of - timedelta(days=30),
             target_completion_date=as_of + timedelta(days=120),
         )
+        plan.exclusion_ranges_json = []
+        plan.exclusion_ranges_text = ''
+    db.session.commit()
 
     # Prevent GET /settings/non-study-days from seeding holidays that could
     # exclude as_of. Holiday algorithm is out of browser QA scope.
@@ -121,13 +186,54 @@ def _seed(db, as_of: date) -> dict:
         viewer_slug='qasparseqasparseqasparseqa',
         created_at=datetime(2020, 1, 1),
     )
-    db.session.add(sparse)
+    ready = Child(
+        name='QA또래기준아동',
+        grade=4,
+        viewer_slug='qareadyqareadyqareadyqar',
+        created_at=datetime(2020, 1, 1),
+    )
+    lonely = Child(
+        name='QA또래없음아동',
+        grade=6,
+        viewer_slug='qaloneqaloneqaloneqalone',
+        created_at=datetime(2020, 1, 1),
+    )
+    peers = [
+        Child(
+            name=f'QA또래{index}',
+            grade=4,
+            viewer_slug=f'qapeer{index:018d}',
+            created_at=datetime(2020, 1, 1),
+        )
+        for index in range(1, 4)
+    ]
+    db.session.add_all([sparse, ready, lonely, *peers])
     db.session.commit()
+
+    for subject in subjects:
+        plan = create_workbook_plan(
+            grade=4,
+            learning_subject_id=subject.id,
+            textbook_title=f'QA4 {subject.name} 교재',
+            start_page=1,
+            end_page=100,
+            start_date=as_of - timedelta(days=30),
+            target_completion_date=as_of + timedelta(days=120),
+        )
+        plan.exclusion_ranges_json = []
+        plan.exclusion_ranges_text = ''
+    db.session.commit()
+
+    _seed_peer_ready_child(db, ready, expected, as_of, teacher.id, coverage_end=20, points=125)
+    for peer, pages, points in zip(peers, (10, 30, 50), (100, 110, 140)):
+        _seed_peer_ready_child(db, peer, expected, as_of, teacher.id, coverage_end=pages, points=points)
 
     return {
         'teacher_id': teacher.id,
         'child_id': child.id,
         'sparse_child_id': sparse.id,
+        'peer_ready_child_id': ready.id,
+        'lonely_child_id': lonely.id,
         'subject_id': expected.id,
         'subject_key': expected.key,
         'as_of': as_of.isoformat(),

@@ -2,12 +2,20 @@
 from __future__ import annotations
 
 from features.growth.learning_metrics import MAX_PROGRESS_SNAPSHOT_AGE_DAYS
+from features.growth.windows import DEFAULT_WINDOW_DAYS
 from features.planning.service import (
     WEEKDAY_SOURCE_CENTER_DEFAULT,
     WEEKDAY_SOURCE_CHILD_OVERRIDE,
 )
 from features.planning.workload import WORKLOAD_KIND_ESTIMATED, WORKLOAD_KIND_EXACT
 from features.study.coverage import learning_progress_summary
+from features.study.peer import (
+    DISPLAY_LIMITED,
+    DISPLAY_NONE,
+    DISPLAY_PRIMARY,
+    DISPLAY_REFERENCE,
+    peer_learning_summary,
+)
 
 OBSERVED_STUDY_DAYS_LABEL = '관측 학습일'
 OBSERVED_STUDY_DAYS_HINT = '포인트 기록일을 기준으로 한 학습 활동일입니다.'
@@ -15,6 +23,12 @@ INSUFFICIENT_LABEL = '비교 자료 부족'
 PERIOD_INSUFFICIENT_LABEL = '기간 비교 자료 부족'
 PEER_NONE_LABEL = '비교 자료 없음'
 PEER_STALE_LABEL = '최근 비교 자료 부족'
+PEER_REFERENCE_LABEL = '비교 자료가 적어 주요 비교는 표시하지 않습니다.'
+PERFORMANCE_PEER_LABEL = '학습 수행률'
+COVERAGE_PEER_LABEL = '관측 기반 진도 또래'
+POINTS_PEER_LABEL = '분석기간 총 포인트'
+SAME_GRADE_MEDIAN_LABEL = '같은 학년 또래 중앙값'
+SAME_BOOK_MEDIAN_LABEL = '같은 교재 또래 중앙값'
 NO_SNAPSHOT_LABEL = '진도 기록 없음'
 OBSERVED_PROGRESS_LABEL = '관측 기반 진도'
 OBSERVED_PROGRESS_HINT = '학습 기록 기준입니다. 교재 시작부터 모든 페이지가 기록되어 있다고 가정하지 않습니다.'
@@ -68,14 +82,24 @@ def build_learning_section(payload, *, child_id=None, as_of=None):
     }
     subjects = payload.get('subjects') or {}
     observed_by_key = {}
+    peer_by_key = {}
     if child_id is not None:
         summary = learning_progress_summary(child_id, as_of=as_of)
         for row in summary.get('subjects') or []:
             observed_by_key[row.get('subject_key')] = row
+        window_days = payload.get('window_days') or DEFAULT_WINDOW_DAYS
+        learning_peer = peer_learning_summary(child_id, as_of=as_of, window_days=window_days)
+        for row in learning_peer.get('subjects') or []:
+            peer_by_key[row.get('subject_key')] = row
     return {
         'observed_study_days': _observed_study_days_view(payload.get('observed_study_days') or {}),
         'subjects': [
-            _subject_card(item, windows, observed=observed_by_key.get(item.get('subject_key')))
+            _subject_card(
+                item,
+                windows,
+                observed=observed_by_key.get(item.get('subject_key')),
+                canonical_peer=peer_by_key.get(item.get('subject_key')),
+            )
             for item in subjects.values()
         ],
     }
@@ -109,12 +133,13 @@ def _observed_summary(current, previous):
     return ' · '.join(parts)
 
 
-def _subject_card(payload, windows, observed=None):
+def _subject_card(payload, windows, observed=None, canonical_peer=None):
     snapshot = payload.get('current_snapshot') or {}
     has_snapshot = snapshot.get('available') is True
     page_advance = _page_advance_view(payload.get('page_advance') or {})
     peer = _peer_view(payload.get('peer') or {}, has_snapshot=has_snapshot)
     plan = _plan_view(payload.get('plan') or {}, has_snapshot=has_snapshot)
+    canonical = canonical_peer or {}
     recorded_on = snapshot.get('recorded_on') if has_snapshot else None
     page = snapshot.get('page') if has_snapshot else None
     return {
@@ -132,6 +157,20 @@ def _subject_card(payload, windows, observed=None):
         'peer': peer,
         'plan': plan,
         'observed_progress': _observed_progress_view(observed),
+        'performance_peer': canonical_peer_view(
+            canonical.get('performance'),
+            child_label='내 기록',
+            median_label=SAME_GRADE_MEDIAN_LABEL,
+            format_value=_percent_text,
+            block_label=PERFORMANCE_PEER_LABEL,
+        ),
+        'coverage_peer': canonical_peer_view(
+            canonical.get('coverage'),
+            child_label='내 기록',
+            median_label=SAME_BOOK_MEDIAN_LABEL,
+            format_value=_percent_text,
+            block_label=COVERAGE_PEER_LABEL,
+        ),
         'evidence_rows': _evidence_rows(
             snapshot=snapshot,
             page_advance=payload.get('page_advance') or {},
@@ -385,13 +424,7 @@ def _evidence_rows(*, snapshot, page_advance, peer, plan, windows, has_snapshot)
         ('이전 기간 시작 기록', _snapshot_ref(previous_adv.get('baseline'))),
         ('이전 기간 최근 기록', _snapshot_ref(previous_adv.get('endpoint'))),
     ]
-    if peer.get('available') is True:
-        rows.extend((
-            ('비교 아동', f"{int(peer.get('peer_n') or 0)}명"),
-            ('동학년 동일 교재 중앙값', _pages_text(peer.get('peer_median'))),
-            ('기록 현재성', FRESHNESS_NOTE),
-        ))
-    elif peer.get('status') in PEER_STALE_STATUSES:
+    if has_snapshot:
         rows.append(('기록 현재성', FRESHNESS_NOTE))
     target = plan.get('target_completion_date')
     if target is not None:
@@ -439,6 +472,51 @@ def _window_text(window):
     start_text = start.isoformat() if hasattr(start, 'isoformat') else start
     end_text = end.isoformat() if hasattr(end, 'isoformat') else end
     return f'{start_text} ~ {end_text}'
+
+
+def canonical_peer_view(payload, *, child_label, median_label, format_value, block_label):
+    payload = payload or {}
+    tier = payload.get('display_tier') or DISPLAY_NONE
+    child_display = format_value(payload.get('child_value'))
+    show_median = tier in (DISPLAY_PRIMARY, DISPLAY_LIMITED)
+    if show_median:
+        status_label = None
+    elif tier == DISPLAY_REFERENCE:
+        status_label = PEER_REFERENCE_LABEL
+    else:
+        status_label = PEER_NONE_LABEL
+    sample = payload.get('peer_sample_count')
+    return {
+        'label': block_label,
+        'child_label': child_label,
+        'median_label': median_label,
+        'display_tier': tier,
+        'available': payload.get('available') is True,
+        'reason': payload.get('reason'),
+        'show_median': show_median,
+        'child_display': child_display,
+        'median_display': format_value(payload.get('peer_median')) if show_median else None,
+        'n_display': (
+            f'비교 {int(sample)}명' if show_median and sample is not None else None
+        ),
+        'status_label': status_label,
+        'metric': payload.get('metric'),
+    }
+
+
+def _percent_text(value):
+    if value is None:
+        return None
+    return f'{int(round(float(value) * 100))}%'
+
+
+def _points_text(value):
+    if value is None:
+        return None
+    number = float(value)
+    if number.is_integer():
+        return f'{int(number)}점'
+    return f'{round(number, 1):.1f}점'
 
 
 def _days_text(value):

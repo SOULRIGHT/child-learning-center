@@ -716,19 +716,6 @@
                         {% endif %}
                     </div>
 
-                    <div class="growth-learn-block">
-                        <div class="growth-learn-label">동학년 동일 교재</div>
-                        {% if card.peer.available %}
-                        <div class="growth-learn-secondary">중앙값 {{ card.peer.median_display }}</div>
-                        <div class="growth-muted">현재 {{ card.peer.current_page_display }} · {{ card.peer.n_display }}</div>
-                        {% if card.peer.gap_display %}
-                        <div class="growth-learn-secondary">{{ card.peer.gap_display }}</div>
-                        {% endif %}
-                        {% else %}
-                        <div class="growth-muted">{{ card.peer.unavailable_label }}</div>
-                        {% endif %}
-                    </div>
-
                     {% if card.evidence_rows %}
                     <details class="mt-3">
                         <summary>분석 근거 보기</summary>
@@ -770,6 +757,34 @@
                         <div class="growth-learn-secondary">목표 대비 {{ card.observed_progress.vs_target_label }}</div>
                     </div>
                     {% endif %}
+                    {% if card.performance_peer %}
+                    <div class="growth-learn-block" data-testid="canonical-peer-performance-{{ card.key }}" data-display-tier="{{ card.performance_peer.display_tier }}">
+                        <div class="growth-learn-label">{{ card.performance_peer.label }}</div>
+                        {% if card.performance_peer.child_display %}
+                        <div>{{ card.performance_peer.child_label }} {{ card.performance_peer.child_display }}</div>
+                        {% endif %}
+                        {% if card.performance_peer.show_median %}
+                        <div class="growth-learn-secondary">{{ card.performance_peer.median_label }} {{ card.performance_peer.median_display }}</div>
+                        <div class="growth-muted">{{ card.performance_peer.n_display }}</div>
+                        {% else %}
+                        <div class="growth-muted">{{ card.performance_peer.status_label }}</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% if card.coverage_peer %}
+                    <div class="growth-learn-block" data-testid="canonical-peer-coverage-{{ card.key }}" data-display-tier="{{ card.coverage_peer.display_tier }}">
+                        <div class="growth-learn-label">{{ card.coverage_peer.label }}</div>
+                        {% if card.coverage_peer.child_display %}
+                        <div>{{ card.coverage_peer.child_label }} {{ card.coverage_peer.child_display }}</div>
+                        {% endif %}
+                        {% if card.coverage_peer.show_median %}
+                        <div class="growth-learn-secondary">{{ card.coverage_peer.median_label }} {{ card.coverage_peer.median_display }}</div>
+                        <div class="growth-muted">{{ card.coverage_peer.n_display }}</div>
+                        {% else %}
+                        <div class="growth-muted">{{ card.coverage_peer.status_label }}</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}
@@ -796,6 +811,22 @@
                         </div>
                         {% else %}
                         <div class="growth-muted mt-2">비교 자료 부족</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="card growth-panel growth-panel-points">
+                    <div class="card-body" data-testid="canonical-peer-points" data-display-tier="{{ points.peer.display_tier if points.peer else 'none' }}">
+                        <div class="growth-learn-label">{{ points.peer.label if points.peer else '분석기간 총 포인트' }}</div>
+                        {% if points.peer and points.peer.child_display %}
+                        <div>{{ points.peer.child_label }} {{ points.peer.child_display }}</div>
+                        {% endif %}
+                        {% if points.peer and points.peer.show_median %}
+                        <div class="growth-learn-secondary">{{ points.peer.median_label }} {{ points.peer.median_display }}</div>
+                        <div class="growth-muted">{{ points.peer.n_display }}</div>
+                        {% else %}
+                        <div class="growth-muted">{{ points.peer.status_label if points.peer else '비교 자료 없음' }}</div>
                         {% endif %}
                     </div>
                 </div>

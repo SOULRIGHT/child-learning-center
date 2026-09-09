@@ -3,8 +3,15 @@ from __future__ import annotations
 
 from features.growth.copy import headline_for
 from features.growth.insights import generate_insight_candidates, top_candidates
-from features.growth.learning_view import build_learning_section
+from features.growth.learning_view import (
+    POINTS_PEER_LABEL,
+    SAME_GRADE_MEDIAN_LABEL,
+    build_learning_section,
+    canonical_peer_view,
+    _points_text,
+)
 from features.growth.metrics import metrics_bundle
+from features.growth.peer import period_points_peer
 from features.growth.windows import resolve_as_of
 from feature_models import PROGRAM_TYPE_CHALLENGE, PROGRAM_TYPE_GENERAL, PROGRAM_TYPE_RECOMMENDED
 from features.subjects import PROGRESS_SUBJECT_KEYS, subject_name
@@ -679,6 +686,14 @@ def build_growth_view_model(child, *, as_of=None, is_viewer_mode=False):
     reading_view = _reading_section(reading)
     progress_view = _progress_section(progress)
     points_view = _points_section(points)
+    window_days = reading.get('window_days') or 30
+    points_view['peer'] = canonical_peer_view(
+        period_points_peer(child.id, as_of=as_of, window_days=window_days),
+        child_label='내 기록',
+        median_label=SAME_GRADE_MEDIAN_LABEL,
+        format_value=_points_text,
+        block_label=POINTS_PEER_LABEL,
+    )
     learning_view = build_learning_section(learning, child_id=child.id, as_of=as_of)
     return {
         'child': child,
