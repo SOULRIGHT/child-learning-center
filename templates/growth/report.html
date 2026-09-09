@@ -743,6 +743,33 @@
                     {% else %}
                     <div class="text-muted">{{ card.empty_label }}</div>
                     {% endif %}
+                    {% if card.observed_progress %}
+                    <div class="growth-learn-block" data-testid="observed-progress-{{ card.key }}" data-vs-target="{{ card.observed_progress.vs_target }}">
+                        <div class="growth-learn-label">{{ card.observed_progress.label }}</div>
+                        <div>{{ card.observed_progress.pages_display }}</div>
+                        {% if card.observed_progress.ratio_available %}
+                        <div class="growth-learn-secondary">{{ card.observed_progress.ratio_display }}</div>
+                        {% else %}
+                        <div class="growth-muted">진도율 {{ card.observed_progress.ratio_display }}</div>
+                        {% endif %}
+                        {% if card.observed_progress.latest_display %}
+                        <div class="growth-muted">{{ card.observed_progress.latest_display }}</div>
+                        {% endif %}
+                        <div class="growth-muted">{{ card.observed_progress.hint }}</div>
+                        <div class="mt-2">완료예상</div>
+                        {% if card.observed_progress.forecast_available %}
+                        <div data-testid="observed-forecast-range">{{ card.observed_progress.forecast_display }}</div>
+                        {% else %}
+                        <div data-testid="observed-forecast-unavailable">
+                            {{ card.observed_progress.forecast_display }}
+                            {% if card.observed_progress.forecast_reason_label %}
+                            · {{ card.observed_progress.forecast_reason_label }}
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        <div class="growth-learn-secondary">목표 대비 {{ card.observed_progress.vs_target_label }}</div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}

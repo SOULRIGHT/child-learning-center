@@ -1,5 +1,5 @@
 # Lightweight Browser QA. Does not run the unittest suite.
-# Usage: .\scripts\qa.ps1 step3
+# Usage: .\scripts\qa.ps1 step3|step4
 param(
     [Parameter(Position = 0)]
     [string]$Suite
@@ -13,8 +13,8 @@ $env:PYTHONIOENCODING = 'utf-8'
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Root = Split-Path -Parent $ScriptDir
 
-if ($Suite -ne 'step3') {
-    Write-Host 'Usage: .\scripts\qa.ps1 step3'
+if ($Suite -ne 'step3' -and $Suite -ne 'step4') {
+    Write-Host 'Usage: .\scripts\qa.ps1 step3|step4'
     exit 2
 }
 
@@ -60,5 +60,5 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-& $Python (Join-Path $Root 'scripts\qa\run.py') step3
+& $Python (Join-Path $Root 'scripts\qa\run.py') $Suite
 exit $LASTEXITCODE

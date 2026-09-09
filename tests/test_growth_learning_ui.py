@@ -494,6 +494,21 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertNotIn(self.child.name, payload)
         self.assertNotIn('학습화면아동', self._learning_html())
 
+    def test_observed_progress_labeled_and_na_without_sessions(self):
+        html = self._learning_html()
+        self.assertIn('관측 기반 진도', html)
+        self.assertIn('학습 기록 기준', html)
+        self.assertNotIn('전체 진도', html)
+        math_html = html.split('data-learning-subject="math"', 1)[1]
+        self.assertIn('data-testid="observed-progress-math"', math_html)
+        self.assertIn('observed-forecast-unavailable', math_html)
+        self.assertNotIn('observed-forecast-range', math_html)
+        card = self._math_card()
+        self.assertEqual(card['observed_progress']['pages_display'], 'N/A')
+        self.assertEqual(card['observed_progress']['forecast_display'], 'N/A')
+        self.assertFalse(card['observed_progress']['forecast_available'])
+        self.assertNotEqual(card['observed_progress']['ratio_display'], '0%')
+
     def test_responsive_subject_grid_classes(self):
         html = self._html()
         self.assertIn('col-12 col-md-6 col-xl-4', html)

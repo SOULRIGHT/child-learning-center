@@ -679,7 +679,7 @@ def build_growth_view_model(child, *, as_of=None, is_viewer_mode=False):
     reading_view = _reading_section(reading)
     progress_view = _progress_section(progress)
     points_view = _points_section(points)
-    learning_view = build_learning_section(learning)
+    learning_view = build_learning_section(learning, child_id=child.id, as_of=as_of)
     return {
         'child': child,
         'is_viewer_mode': bool(is_viewer_mode),

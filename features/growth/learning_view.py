@@ -7,6 +7,7 @@ from features.planning.service import (
     WEEKDAY_SOURCE_CHILD_OVERRIDE,
 )
 from features.planning.workload import WORKLOAD_KIND_ESTIMATED, WORKLOAD_KIND_EXACT
+from features.study.coverage import learning_progress_summary
 
 OBSERVED_STUDY_DAYS_LABEL = '관측 학습일'
 OBSERVED_STUDY_DAYS_HINT = '포인트 기록일을 기준으로 한 학습 활동일입니다.'
@@ -15,7 +16,33 @@ PERIOD_INSUFFICIENT_LABEL = '기간 비교 자료 부족'
 PEER_NONE_LABEL = '비교 자료 없음'
 PEER_STALE_LABEL = '최근 비교 자료 부족'
 NO_SNAPSHOT_LABEL = '진도 기록 없음'
+OBSERVED_PROGRESS_LABEL = '관측 기반 진도'
+OBSERVED_PROGRESS_HINT = '학습 기록 기준입니다. 교재 시작부터 모든 페이지가 기록되어 있다고 가정하지 않습니다.'
+OBSERVED_POSITION_NOTE = '참고 위치'
+FORECAST_UNAVAILABLE_LABEL = 'N/A'
 FRESHNESS_NOTE = f'최근 {MAX_PROGRESS_SNAPSHOT_AGE_DAYS}일 이내 기록 기준'
+
+FORECAST_REASON_LABELS = {
+    'no_plan': '교재 계획 없음',
+    'no_studied_sessions': '학습 기록 없음',
+    'exclusions_unconfirmed': '제외 페이지 미확정',
+    'insufficient_sessions': '학습 횟수 부족',
+    'unstable_or_non_positive_pace': '진행 속도 불안정',
+    'already_observed_complete': '관측상 배정 페이지 완료',
+    'plan_switch_before_completion': '다음 교재 시작 전 완료 예상 불가',
+    'insufficient_future_schedule': '남은 예정 학습일 부족',
+    'no_future_study_days': '예정 학습일 없음',
+}
+
+VS_TARGET_LABELS = {
+    'unavailable': '비교 불가',
+    'already_observed_complete': '관측상 완료',
+    'target_passed_not_observed_complete': '목표일 경과',
+    'overlaps_target': '목표일과 겹침',
+    'on_or_ahead': '목표일 이내',
+    'slight_delay': '목표일보다 약간 늦음',
+    'delay_2w_plus': '목표일보다 2주 이상 늦음',
+}
 
 WEEKDAY_SOURCE_LABELS = {
     WEEKDAY_SOURCE_CENTER_DEFAULT: '센터 기본 일정 기준',
@@ -33,17 +60,22 @@ PLAN_STATUS_NO_REMAINING_DAYS = 'no_remaining_planned_days'
 PEER_STALE_STATUSES = frozenset(('stale_target',))
 
 
-def build_learning_section(payload):
+def build_learning_section(payload, *, child_id=None, as_of=None):
     payload = payload or {}
     windows = {
         'current': payload.get('current_window') or {},
         'previous': payload.get('previous_window') or {},
     }
     subjects = payload.get('subjects') or {}
+    observed_by_key = {}
+    if child_id is not None:
+        summary = learning_progress_summary(child_id, as_of=as_of)
+        for row in summary.get('subjects') or []:
+            observed_by_key[row.get('subject_key')] = row
     return {
         'observed_study_days': _observed_study_days_view(payload.get('observed_study_days') or {}),
         'subjects': [
-            _subject_card(item, windows)
+            _subject_card(item, windows, observed=observed_by_key.get(item.get('subject_key')))
             for item in subjects.values()
         ],
     }
@@ -77,7 +109,7 @@ def _observed_summary(current, previous):
     return ' · '.join(parts)
 
 
-def _subject_card(payload, windows):
+def _subject_card(payload, windows, observed=None):
     snapshot = payload.get('current_snapshot') or {}
     has_snapshot = snapshot.get('available') is True
     page_advance = _page_advance_view(payload.get('page_advance') or {})
@@ -99,6 +131,7 @@ def _subject_card(payload, windows):
         'page_advance': page_advance,
         'peer': peer,
         'plan': plan,
+        'observed_progress': _observed_progress_view(observed),
         'evidence_rows': _evidence_rows(
             snapshot=snapshot,
             page_advance=payload.get('page_advance') or {},
@@ -108,6 +141,62 @@ def _subject_card(payload, windows):
             has_snapshot=has_snapshot,
         ),
     }
+
+
+def _observed_progress_view(payload):
+    payload = payload or {}
+    progress = payload.get('progress') or {}
+    forecast = payload.get('forecast') or {}
+    status = payload.get('status') or 'no_plan'
+    vs_target = payload.get('vs_target') or forecast.get('vs_target') or 'unavailable'
+    ratio = progress.get('coverage_ratio')
+    covered = progress.get('assigned_covered_page_count')
+    denom = progress.get('assigned_denominator')
+    observed_count = progress.get('observed_page_count')
+    latest = progress.get('latest_observed_end_page')
+    ratio_available = ratio is not None and covered is not None and denom is not None
+    if ratio_available:
+        percent = int(round(float(ratio) * 100))
+        pages_display = f'{int(covered)} / {int(denom)}페이지'
+        ratio_display = f'학습 기록 기준 {percent}%'
+    elif observed_count is not None:
+        pages_display = f'관측 {int(observed_count)}페이지'
+        ratio_display = FORECAST_UNAVAILABLE_LABEL
+    else:
+        pages_display = FORECAST_UNAVAILABLE_LABEL
+        ratio_display = FORECAST_UNAVAILABLE_LABEL
+    forecast_available = forecast.get('available') is True
+    earliest = forecast.get('earliest_date')
+    latest_date = forecast.get('latest_date')
+    reason = forecast.get('reason') or (status if status != 'exact' else None)
+    if forecast_available and earliest is not None and latest_date is not None:
+        forecast_display = f'{_iso_date(earliest)} ~ {_iso_date(latest_date)}'
+        forecast_reason_label = None
+    else:
+        forecast_display = FORECAST_UNAVAILABLE_LABEL
+        forecast_reason_label = FORECAST_REASON_LABELS.get(reason, '데이터 부족')
+    return {
+        'label': OBSERVED_PROGRESS_LABEL,
+        'hint': OBSERVED_PROGRESS_HINT,
+        'status': status,
+        'pages_display': pages_display,
+        'ratio_display': ratio_display,
+        'ratio_available': ratio_available,
+        'latest_display': None if latest is None else f'{OBSERVED_POSITION_NOTE} {int(latest)}p',
+        'forecast_available': forecast_available,
+        'forecast_display': forecast_display,
+        'forecast_reason': reason,
+        'forecast_reason_label': forecast_reason_label,
+        'vs_target': vs_target,
+        'vs_target_label': VS_TARGET_LABELS.get(vs_target, VS_TARGET_LABELS['unavailable']),
+        'observed_complete': progress.get('observed_complete'),
+    }
+
+
+def _iso_date(value):
+    if value is None:
+        return None
+    return value.isoformat() if hasattr(value, 'isoformat') else str(value)
 
 
 def _page_advance_view(payload):

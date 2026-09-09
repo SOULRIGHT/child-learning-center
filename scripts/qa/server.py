@@ -115,10 +115,21 @@ def _seed(db, as_of: date) -> dict:
         holiday_days = set()
     non_study_day = _pick_non_study_day(as_of, holiday_days)
 
+    sparse = Child(
+        name='QA데이터부족아동',
+        grade=3,
+        viewer_slug='qasparseqasparseqasparseqa',
+        created_at=datetime(2020, 1, 1),
+    )
+    db.session.add(sparse)
+    db.session.commit()
+
     return {
         'teacher_id': teacher.id,
         'child_id': child.id,
+        'sparse_child_id': sparse.id,
         'subject_id': expected.id,
+        'subject_key': expected.key,
         'as_of': as_of.isoformat(),
         'non_study_day': non_study_day.isoformat(),
         'non_study_year': non_study_day.year,

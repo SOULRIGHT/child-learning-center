@@ -74,11 +74,13 @@ def is_excluded_day(day):
     return CenterNonStudyDay.query.filter_by(day=day).first() is not None
 
 
-def normal_study_day(child_id, subject_id, day):
-    """해당 아동·과목의 정상학습일 여부."""
+def study_calendar_allows(child_id, subject_id, day):
+    """과목 예정요일 ∩ 아동 예정요일 ∩ 센터 비학습일.
+
+    미래 cutoff와 교재 존재 여부는 보지 않는다.
+    완료예상 달력은 이 함수와 canonical WorkbookPlan identity를 함께 쓴다.
+    """
     day = _as_date(day)
-    if day > kst_today():
-        return False
     child = get_child(child_id)
     if child is None:
         return False
@@ -90,6 +92,22 @@ def normal_study_day(child_id, subject_id, day):
         return False
     subject = LearningSubject.query.get(int(subject_id))
     if subject is None or not subject.is_active:
+        return False
+    return True
+
+
+def normal_study_day(child_id, subject_id, day):
+    """해당 아동·과목의 정상학습일 여부."""
+    day = _as_date(day)
+    if day > kst_today():
+        return False
+    if not study_calendar_allows(child_id, subject_id, day):
+        return False
+    child = get_child(child_id)
+    if child is None:
+        return False
+    subject = LearningSubject.query.get(int(subject_id))
+    if subject is None:
         return False
     plan = resolve_canonical_workbook_plan(child, subject.id, day)
     if plan is None:

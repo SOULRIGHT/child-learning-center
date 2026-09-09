@@ -1,6 +1,6 @@
 """Browser QA orchestrator. Does not run the unittest suite.
 
-Usage: python scripts/qa/run.py step3
+Usage: python scripts/qa/run.py step3|step4
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from tests.helpers import (  # noqa: E402
 )
 
 QA_SECRET = 'clc-step0-test-secret'
-USAGE = 'Usage: python scripts/qa/run.py step3'
+USAGE = 'Usage: python scripts/qa/run.py step3|step4'
 
 
 def _pick_port() -> int:
@@ -90,8 +90,9 @@ def _assert_local_db_unchanged(before: dict, after: dict, when: str) -> None:
         raise RuntimeError(f'local development DB changed {when}: {before!r} -> {after!r}')
 
 
-def _print_report(results: list[tuple[str, str]], error: str | None, ok: bool) -> int:
-    print('STEP 3 BROWSER QA')
+def _print_report(suite: str, results: list[tuple[str, str]], error: str | None, ok: bool) -> int:
+    title = 'STEP 3 BROWSER QA' if suite == 'step3' else 'STEP 4 BROWSER QA'
+    print(title)
     for name, status in results:
         print(f'{name}: {status}')
     passed = sum(1 for _, status in results if status == 'PASS')
@@ -129,7 +130,7 @@ def _playwright_ready() -> None:
             )
 
 
-def _run_browser(base_url: str, state: dict, artifacts_dir: Path) -> list[tuple[str, str]]:
+def _run_browser(suite: str, base_url: str, state: dict, artifacts_dir: Path) -> list[tuple[str, str]]:
     from playwright.sync_api import sync_playwright
 
     qa_dir = Path(__file__).resolve().parent
@@ -139,13 +140,19 @@ def _run_browser(base_url: str, state: dict, artifacts_dir: Path) -> list[tuple[
         StepFailure,
         login_load,
         mint_session_cookie,
-        run_authenticated_steps,
     )
+    if suite == 'step3':
+        from smoke_step3 import run_authenticated_steps  # noqa: WPS433
+    elif suite == 'step4':
+        from smoke_step4 import run_authenticated_steps  # noqa: WPS433
+    else:
+        raise RuntimeError(f'Unsupported QA suite: {suite}')
 
     results: list[tuple[str, str]] = []
     artifacts_dir.mkdir(parents=True, exist_ok=True)
-    screenshot_path = artifacts_dir / 'step3-failed.png'
-    trace_path = artifacts_dir / 'step3-trace.zip'
+    screenshot_path = artifacts_dir / f'{suite}-failed.png'
+    trace_path = artifacts_dir / f'{suite}-trace.zip'
+    discard = artifacts_dir / f'.{suite}-trace-discard.zip'
     cookie = mint_session_cookie(state['secret_key'], int(state['teacher_id']))
     failed = False
     with sync_playwright() as playwright:
@@ -187,7 +194,6 @@ def _run_browser(base_url: str, state: dict, artifacts_dir: Path) -> list[tuple[
                 if failed:
                     context.tracing.stop(path=str(trace_path))
                 else:
-                    discard = artifacts_dir / '.step3-trace-discard.zip'
                     context.tracing.stop(path=str(discard))
                     if discard.exists():
                         discard.unlink()
@@ -209,7 +215,10 @@ def _run_browser(base_url: str, state: dict, artifacts_dir: Path) -> list[tuple[
     return results
 
 
-def run_step3() -> int:
+def run_suite(suite: str) -> int:
+    if suite not in ('step3', 'step4'):
+        print(USAGE)
+        return 2
     if HELPERS_ROOT != PROJECT_ROOT:
         raise RuntimeError('tests.helpers PROJECT_ROOT mismatch.')
     _playwright_ready()
@@ -263,7 +272,7 @@ def run_step3() -> int:
         state = json.loads(state_path.read_text(encoding='utf-8'))
         if str(state.get('secret_key')) != QA_SECRET:
             raise RuntimeError('QA secret_key mismatch; refusing to mint a session cookie.')
-        results = _run_browser(base_url, state, artifacts_dir)
+        results = _run_browser(suite, base_url, state, artifacts_dir)
         exit_code = 0
     except Exception as exc:
         error_text = str(exc)
@@ -289,14 +298,18 @@ def run_step3() -> int:
             extra = f'QA temp DB was not cleaned up: {qa_db}'
             error_text = f'{error_text}\n{extra}' if error_text else extra
             exit_code = 1
-    return _print_report(results, error_text, exit_code == 0)
+    return _print_report(suite, results, error_text, exit_code == 0)
+
+
+def run_step3() -> int:
+    return run_suite('step3')
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2 or argv[1] != 'step3':
+    if len(argv) != 2 or argv[1] not in ('step3', 'step4'):
         print(USAGE)
         return 2
-    return run_step3()
+    return run_suite(argv[1])
 
 
 if __name__ == '__main__':

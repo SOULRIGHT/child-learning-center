@@ -18,6 +18,12 @@ from features.study.constants import (
     STUDY_STATUS_UNKNOWN,
 )
 from features.study.child_input import save_child_study_form
+from features.study.coverage import (
+    completion_forecast,
+    learning_progress_summary,
+    progress_for_plan,
+    unique_page_coverage,
+)
 from features.study.records import (
     StudyRecordError,
     create_study_session,
@@ -43,6 +49,7 @@ __all__ = [
     'STUDY_STATUS_UNKNOWN',
     'StudyRecordError',
     'assigned_page_count',
+    'completion_forecast',
     'create_study_session',
     'create_teacher_study_session',
     'delete_study_session',
@@ -52,14 +59,17 @@ __all__ = [
     'list_child_study_rows',
     'list_observed_study_sessions',
     'list_recent_study_sessions',
+    'learning_progress_summary',
     'list_teacher_post_entry_rows',
     'mark_sessions_verified',
     'permanently_excluded_ranges',
     'physical_page_bounds',
+    'progress_for_plan',
     'save_center_non_study_day',
     'save_child_study_form',
     'save_subject_study_weekdays',
     'save_teacher_post_entry_form',
     'teacher_study_template_vars',
+    'unique_page_coverage',
     'update_study_session',
 ]
