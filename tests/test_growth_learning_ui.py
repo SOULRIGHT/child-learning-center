@@ -17,7 +17,6 @@ from features.growth.insights import generate_insight_candidates, top_candidates
 from features.growth.learning_view import (  # noqa: E402
     INSUFFICIENT_LABEL,
     NO_SNAPSHOT_LABEL,
-    OBSERVED_STUDY_DAYS_HINT,
     OBSERVED_STUDY_DAYS_LABEL,
     PEER_NONE_LABEL,
     PEER_STALE_LABEL,
@@ -158,15 +157,14 @@ class GrowthLearningUiTests(unittest.TestCase):
         subjects = view['learning']['subjects']
         self.assertEqual([item['key'] for item in subjects], ['korean', 'math', 'ssen'])
         self.assertFalse(subjects[0]['has_snapshot'])
-        self.assertEqual(subjects[0]['empty_label'], NO_SNAPSHOT_LABEL)
+        self.assertIsNone(subjects[0]['empty_label'])
         observed = view['learning']['observed_study_days']
         self.assertEqual(observed['label'], OBSERVED_STUDY_DAYS_LABEL)
         self.assertEqual(observed['summary'], '최근 0일 · 이전 0일')
         self.assertFalse(observed['attendance'])
         html = self._html()
-        self.assertEqual(html.count('관측 학습일'), 1)
-        self.assertEqual(html.count(NO_SNAPSHOT_LABEL), 3)
-        self.assertIn(OBSERVED_STUDY_DAYS_HINT, html)
+        self.assertNotIn(NO_SNAPSHOT_LABEL, html)
+        self.assertNotIn('관측 학습일', html)
         self.assertNotIn('출석일', html)
         self.assertNotIn('출석률', html)
 
@@ -174,15 +172,14 @@ class GrowthLearningUiTests(unittest.TestCase):
         self._progress(date(2026, 12, 10), page=112)
         card = self._math_card()
         self.assertTrue(card['has_snapshot'])
-        self.assertEqual(card['textbook_title'], BOOK)
+        self.assertIsNone(card['textbook_title'])
         self.assertEqual(card['page'], 112)
         self.assertEqual(card['page_display'], '현재 112p')
         self.assertEqual(card['recorded_on_label'], '최근 기록 12/10')
         html = self._learning_html()
-        self.assertIn(BOOK, html)
-        self.assertIn('현재 112p', html)
-        self.assertIn('최근 기록 12/10', html)
-        self.assertIn('2026-12-10', html)
+        self.assertNotIn(BOOK, html)
+        self.assertNotIn('현재 112p', html)
+        self.assertNotIn('최근 기록 12/10', html)
         self.assertNotIn('progress.latest_snapshots', html)
         self.assertEqual(html.count('data-learning-subject="math"'), 1)
 
@@ -194,7 +191,7 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertTrue(card['page_advance']['current_available'])
         self.assertEqual(card['page_advance']['current_display'], '+40p')
         html = self._learning_html()
-        self.assertIn('+40p', html)
+        self.assertNotIn('+40p', html)
         self.assertNotIn('후퇴', html)
         self.assertNotIn('부진', html)
 
@@ -205,7 +202,7 @@ class GrowthLearningUiTests(unittest.TestCase):
         zero = self._math_card()
         self.assertEqual(zero['page_advance']['current_value'], 0)
         self.assertEqual(zero['page_advance']['current_display'], '0p · 변화 없음')
-        self.assertIn('0p · 변화 없음', self._learning_html())
+        self.assertNotIn('0p · 변화 없음', self._learning_html())
 
         db.session.query(LearningProgressEntry).delete()
         db.session.commit()
@@ -215,7 +212,7 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertEqual(negative['page_advance']['current_value'], -5)
         self.assertEqual(negative['page_advance']['current_display'], '기록상 -5p')
         body = self._learning_html()
-        self.assertIn('기록상 -5p', body)
+        self.assertNotIn('기록상 -5p', body)
         self.assertNotIn('감소했다', body)
         self.assertNotIn('후퇴', body)
 
@@ -226,7 +223,7 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertFalse(unavailable['page_advance']['current_available'])
         self.assertEqual(unavailable['page_advance']['unavailable_label'], INSUFFICIENT_LABEL)
         html = self._learning_html()
-        self.assertIn(INSUFFICIENT_LABEL, html)
+        self.assertNotIn(INSUFFICIENT_LABEL, html)
         self.assertNotIn('최근 30일</div>\n                        <div class="growth-learn-value">0p', html)
 
     def test_trend_comparable_and_book_change(self):
@@ -238,8 +235,8 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertEqual(comparable['page_advance']['previous_display'], '이전 +30p')
         self.assertEqual(comparable['page_advance']['delta_display'], '+10p')
         html = self._learning_html()
-        self.assertIn('이전 +30p', html)
-        self.assertIn('기간 대비 +10p', html)
+        self.assertNotIn('이전 +30p', html)
+        self.assertNotIn('기간 대비 +10p', html)
         self.assertNotIn('growth-delta-up', html.split('data-growth-learning', 1)[1])
 
         db.session.query(LearningProgressEntry).delete()
@@ -254,7 +251,6 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertEqual(changed['page_advance']['trend_unavailable_label'], PERIOD_INSUFFICIENT_LABEL)
         self.assertIsNone(changed['page_advance']['delta_display'])
         body = self._learning_html()
-        self.assertIn(PERIOD_INSUFFICIENT_LABEL, body)
         self.assertNotIn('기간 대비', body)
 
     def test_peer_median_n_and_unavailable(self):
@@ -326,9 +322,8 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertFalse(exact['plan']['remaining_display'].startswith('약 '))
         self.assertIsNone(exact['plan']['remaining_note'])
         html = self._learning_html()
-        self.assertIn('목표 12월 20일', html)
+        self.assertNotIn('목표 12월 20일', html)
         self.assertNotIn('제외 페이지 20% 추정', html)
-        self.assertNotIn('(추정)', html.split('data-learning-subject="math"', 1)[1][:1200])
 
         db.session.query(LearningProgressEntry).delete()
         db.session.commit()
@@ -342,8 +337,8 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertEqual(estimated['plan']['remaining_note'], '(제외 페이지 20% 추정)')
         self.assertEqual(estimated['plan']['required_note'], '(추정)')
         body = self._learning_html()
-        self.assertIn('제외 페이지 20% 추정', body)
-        self.assertIn('(추정)', body)
+        self.assertNotIn('제외 페이지 20% 추정', body)
+        self.assertNotIn('(추정)', body)
 
         db.session.query(LearningProgressEntry).delete()
         db.session.commit()
@@ -356,7 +351,7 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertEqual(complete['plan']['headline'], '목표 분량 완료')
         self.assertFalse(complete['plan']['show_required'])
         complete_html = self._learning_html()
-        self.assertIn('목표 분량 완료', complete_html)
+        self.assertNotIn('목표 분량 완료', complete_html)
         self.assertNotIn('0p / 학습일', complete_html)
         self.assertNotIn('0.0p / 학습일', complete_html)
 
@@ -371,8 +366,9 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertIn('1월 5일 시작 예정', upcoming['plan']['headline'])
         self.assertTrue(upcoming['plan']['show_target'])
         self.assertFalse(upcoming['plan']['show_required'])
-        self.assertIn('1월 5일 시작 예정', self._learning_html())
-        self.assertIn('목표 3월 1일', self._learning_html())
+        upcoming_html = self._learning_html()
+        self.assertNotIn('1월 5일 시작 예정', upcoming_html)
+        self.assertNotIn('목표 3월 1일', upcoming_html)
 
         db.session.query(LearningProgressEntry).delete()
         db.session.commit()
@@ -384,8 +380,9 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertEqual(no_plan['plan']['headline'], '등록된 교재 계획 없음')
         self.assertTrue(no_plan['plan']['show_admin_link'])
         no_plan_html = self._learning_html()
-        self.assertIn('등록된 교재 계획 없음', no_plan_html)
-        self.assertIn('/settings/workbook-plans', no_plan_html)
+        self.assertNotIn('등록된 교재 계획 없음', no_plan_html)
+        self.assertIn('교재 계획 없음', no_plan_html)
+        self.assertNotIn('/settings/workbook-plans', no_plan_html)
 
         db.session.query(LearningProgressEntry).delete()
         db.session.commit()
@@ -397,7 +394,7 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertTrue(elapsed['plan']['show_remaining'])
         self.assertFalse(elapsed['plan']['show_required'])
         elapsed_html = self._learning_html()
-        self.assertIn('목표 완료일 경과', elapsed_html)
+        self.assertNotIn('목표 완료일 경과', elapsed_html)
         self.assertNotIn('계획 실패', elapsed_html)
         self.assertNotIn('p / 학습일', elapsed_html)
 
@@ -413,7 +410,7 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertTrue(no_days['plan']['show_remaining'])
         self.assertFalse(no_days['plan']['show_required'])
         no_days_html = self._html(as_of=date(2026, 12, 18))
-        self.assertIn('남은 예정 학습일 없음', no_days_html)
+        self.assertNotIn('남은 예정 학습일 없음', no_days_html)
         self.assertNotIn('0p / 학습일', no_days_html)
         self.assertNotIn('0.0p / 학습일', no_days_html)
 
@@ -433,8 +430,8 @@ class GrowthLearningUiTests(unittest.TestCase):
         self.assertEqual(view['learning']['observed_study_days']['current'], 2)
         self.assertEqual(view['learning']['observed_study_days']['previous'], 1)
         html = self._html()
-        self.assertEqual(html.count('관측 학습일'), 1)
-        self.assertIn('최근 2일 · 이전 1일', html)
+        self.assertEqual(html.count('관측 학습일'), 0)
+        self.assertNotIn('최근 2일 · 이전 1일', html)
         math_html = html.split('data-learning-subject="math"', 1)[1]
         self.assertNotIn('관측 학습일', math_html)
         self.assertNotIn('출석', self._learning_html())
@@ -477,10 +474,11 @@ class GrowthLearningUiTests(unittest.TestCase):
         html = self._html()
         self.assertIn('최근 독서 기록일', html)
         self.assertIn('최근 vs 이전 기간', html)
-        self.assertIn('포인트 비교', html)
+        self.assertIn('최근 vs 이전 기간 포인트', html)
+        self.assertNotIn('>포인트 비교<', html)
         self.assertIn('id="growth-chart-data"', html)
-        self.assertIn('분석 근거 보기', html)
-        self.assertIn('시작 기록', html)
+        self.assertNotIn('분석 근거 보기', self._learning_html())
+        self.assertNotIn('시작 기록', self._learning_html())
         self.assertNotIn('stale_baseline', html)
         self.assertNotIn('center_default', html)
         self.assertNotIn('InsightCandidate', html)

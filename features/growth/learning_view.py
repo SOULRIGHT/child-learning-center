@@ -19,17 +19,28 @@ from features.study.peer import (
 
 OBSERVED_STUDY_DAYS_LABEL = '관측 학습일'
 OBSERVED_STUDY_DAYS_HINT = '포인트 기록일을 기준으로 한 학습 활동일입니다.'
-INSUFFICIENT_LABEL = '비교 자료 부족'
-PERIOD_INSUFFICIENT_LABEL = '기간 비교 자료 부족'
-PEER_NONE_LABEL = '비교 자료 없음'
-PEER_STALE_LABEL = '최근 비교 자료 부족'
-PEER_REFERENCE_LABEL = '비교 자료가 적어 주요 비교는 표시하지 않습니다.'
+INSUFFICIENT_LABEL = '이전 기간 비교 자료 부족'
+PERIOD_INSUFFICIENT_LABEL = '이전 기간 비교 자료 부족'
+PERIOD_COMPARISON_UNAVAILABLE_LABEL = '이전 기간과 비교할 자료가 부족합니다'
+PERIOD_RECORDS_INSUFFICIENT_LABEL = '이전 기간과 비교할 기록이 충분하지 않습니다.'
+PERIOD_POINTS_CHART_TITLE = '최근 vs 이전 기간 포인트'
+PERIOD_POINTS_RECORDS_INSUFFICIENT_LABEL = '이전 기간과 비교할 포인트 기록이 충분하지 않습니다.'
+PEER_NONE_LABEL = '또래 비교 자료 부족'
+PEER_STALE_LABEL = '최근 또래 비교 자료 부족'
+PEER_REFERENCE_LABEL = '또래 비교 자료가 적어 주요 비교는 표시하지 않습니다.'
 PERFORMANCE_PEER_LABEL = '학습 수행률'
 COVERAGE_PEER_LABEL = '관측 기반 진도 또래'
 POINTS_PEER_LABEL = '분석기간 총 포인트'
 SAME_GRADE_MEDIAN_LABEL = '같은 학년 또래 중앙값'
+PERFORMANCE_MEDIAN_LABEL = '같은 학년·같은 과목 또래 중앙값'
 SAME_BOOK_MEDIAN_LABEL = '같은 교재 또래 중앙값'
 NO_SNAPSHOT_LABEL = '진도 기록 없음'
+READING_RECORD_STATUS_LABELS = {
+    'in_progress': '읽는 중',
+    'completed': '완독',
+    'abandoned': '중단',
+}
+READING_RECORD_STATUS_UNKNOWN = '상태 미상'
 OBSERVED_PROGRESS_LABEL = '관측 기반 진도'
 OBSERVED_PROGRESS_HINT = '학습 기록 기준입니다. 교재 시작부터 모든 페이지가 기록되어 있다고 가정하지 않습니다.'
 OBSERVED_POSITION_NOTE = '참고 위치'
@@ -133,6 +144,19 @@ def _observed_summary(current, previous):
     return ' · '.join(parts)
 
 
+def reading_record_status_label(status):
+    if not status:
+        return READING_RECORD_STATUS_UNKNOWN
+    return READING_RECORD_STATUS_LABELS.get(status, READING_RECORD_STATUS_UNKNOWN)
+
+
+def _canonical_textbook_title(observed):
+    progress = (observed or {}).get('progress') or {}
+    plan = progress.get('plan') or {}
+    title = plan.get('textbook_title')
+    return title or None
+
+
 def _subject_card(payload, windows, observed=None, canonical_peer=None):
     snapshot = payload.get('current_snapshot') or {}
     has_snapshot = snapshot.get('available') is True
@@ -146,8 +170,8 @@ def _subject_card(payload, windows, observed=None, canonical_peer=None):
         'key': payload.get('subject_key'),
         'label': payload.get('subject_name'),
         'has_snapshot': has_snapshot,
-        'empty_label': None if has_snapshot else NO_SNAPSHOT_LABEL,
-        'textbook_title': snapshot.get('textbook_title') if has_snapshot else None,
+        'empty_label': None,
+        'textbook_title': _canonical_textbook_title(observed),
         'page': page,
         'page_display': None if page is None else f'현재 { _pages_text(page) }',
         'recorded_on': recorded_on,
@@ -160,7 +184,7 @@ def _subject_card(payload, windows, observed=None, canonical_peer=None):
         'performance_peer': canonical_peer_view(
             canonical.get('performance'),
             child_label='내 기록',
-            median_label=SAME_GRADE_MEDIAN_LABEL,
+            median_label=PERFORMANCE_MEDIAN_LABEL,
             format_value=_percent_text,
             block_label=PERFORMANCE_PEER_LABEL,
         ),
@@ -209,7 +233,7 @@ def _observed_progress_view(payload):
     latest_date = forecast.get('latest_date')
     reason = forecast.get('reason') or (status if status != 'exact' else None)
     if forecast_available and earliest is not None and latest_date is not None:
-        forecast_display = f'{_iso_date(earliest)} ~ {_iso_date(latest_date)}'
+        forecast_display = _forecast_range_display(earliest, latest_date)
         forecast_reason_label = None
     else:
         forecast_display = FORECAST_UNAVAILABLE_LABEL
@@ -218,6 +242,7 @@ def _observed_progress_view(payload):
         'label': OBSERVED_PROGRESS_LABEL,
         'hint': OBSERVED_PROGRESS_HINT,
         'status': status,
+        'textbook_title': (progress.get('plan') or {}).get('textbook_title'),
         'pages_display': pages_display,
         'ratio_display': ratio_display,
         'ratio_available': ratio_available,
@@ -236,6 +261,16 @@ def _iso_date(value):
     if value is None:
         return None
     return value.isoformat() if hasattr(value, 'isoformat') else str(value)
+
+
+def _forecast_range_display(earliest, latest_date):
+    earliest_text = _iso_date(earliest)
+    latest_text = _iso_date(latest_date)
+    if earliest_text is None or latest_text is None:
+        return FORECAST_UNAVAILABLE_LABEL
+    if earliest_text == latest_text:
+        return f'{earliest_text} 예상'
+    return f'{earliest_text} ~ {latest_text} 예상'
 
 
 def _page_advance_view(payload):

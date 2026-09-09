@@ -1,13 +1,24 @@
 """Growth 화면용 view model. 새 분석 규칙을 만들지 않고 Step 1/2 결과를 조립한다."""
 from __future__ import annotations
 
-from features.growth.copy import headline_for
+from features.growth.copy import (
+    LEARNING_PAGE_ADVANCE_RECENT_WINDOW_BEST,
+    PROGRESS_ENTRIES_DECREASE,
+    PROGRESS_ENTRIES_INCREASE,
+    headline_for,
+)
 from features.growth.insights import generate_insight_candidates, top_candidates
 from features.growth.learning_view import (
+    PERIOD_COMPARISON_UNAVAILABLE_LABEL,
+    PERIOD_POINTS_CHART_TITLE,
+    PERIOD_POINTS_RECORDS_INSUFFICIENT_LABEL,
+    PERIOD_RECORDS_INSUFFICIENT_LABEL,
+    PEER_NONE_LABEL,
     POINTS_PEER_LABEL,
     SAME_GRADE_MEDIAN_LABEL,
     build_learning_section,
     canonical_peer_view,
+    reading_record_status_label,
     _points_text,
 )
 from features.growth.metrics import metrics_bundle
@@ -17,6 +28,19 @@ from feature_models import PROGRAM_TYPE_CHALLENGE, PROGRAM_TYPE_GENERAL, PROGRAM
 from features.subjects import PROGRESS_SUBJECT_KEYS, subject_name
 
 INSIGHT_LIMIT = 3
+_HIDDEN_INSIGHT_IDS = frozenset({
+    PROGRESS_ENTRIES_INCREASE,
+    PROGRESS_ENTRIES_DECREASE,
+    LEARNING_PAGE_ADVANCE_RECENT_WINDOW_BEST,
+})
+_HIDDEN_INSIGHT_CATEGORIES = frozenset({
+    'progress_entries',
+    'learning_page_advance',
+})
+_HIDDEN_INSIGHT_METRICS = frozenset({
+    'progress_entry_count',
+    'page_advance',
+})
 
 CATEGORY_LABELS = {
     'reading_activity': '독서 활동',
@@ -118,6 +142,20 @@ def _coverage_comparable(bundle):
         progress.get('progress'),
         points.get('points'),
     ))
+
+
+def public_insight_candidates(candidates):
+    """Growth vNext 화면에 올리지 않을 계약 밖 legacy heuristic을 걸러낸다."""
+    visible = []
+    for item in candidates or []:
+        if getattr(item, 'id', None) in _HIDDEN_INSIGHT_IDS:
+            continue
+        if getattr(item, 'category', None) in _HIDDEN_INSIGHT_CATEGORIES:
+            continue
+        if getattr(item, 'metric_key', None) in _HIDDEN_INSIGHT_METRICS:
+            continue
+        visible.append(item)
+    return visible
 
 
 def _empty_reason(bundle, insights):
@@ -427,6 +465,7 @@ def _reading_section(payload):
         'programs': programs,
         'difficulty': _rating_display(current.get('difficulty_rating')),
         'fun': _rating_display(current.get('fun_rating')),
+        'period_comparison_unavailable_label': PERIOD_COMPARISON_UNAVAILABLE_LABEL,
     }
 
 
@@ -436,14 +475,18 @@ def _attach_reading_analysis(reading_view, child_id, as_of):
     reading_view['ai'] = None
     try:
         from features.reading.analysis import build_public_facts
-        reading_view['analysis'] = build_public_facts(child_id, as_of=as_of)
+        reading_view['analysis'] = _localize_reading_analysis(
+            build_public_facts(child_id, as_of=as_of),
+        )
     except Exception:
         reading_view['analysis'] = None
     try:
         from features.reading.ai.runtime import load_reading_ai_view
         reading_view['ai'] = load_reading_ai_view(child_id, as_of=as_of)
         if reading_view['analysis'] is None and reading_view['ai']:
-            reading_view['analysis'] = reading_view['ai'].get('facts')
+            reading_view['analysis'] = _localize_reading_analysis(
+                reading_view['ai'].get('facts'),
+            )
     except Exception:
         from features.reading.ai.copy import MSG_UNAVAILABLE
         reading_view['ai'] = {
@@ -453,6 +496,26 @@ def _attach_reading_analysis(reading_view, child_id, as_of):
             'stale': False,
             'output': None,
         }
+
+
+def _localize_reading_analysis(analysis):
+    if not isinstance(analysis, dict):
+        return analysis
+    payload = dict(analysis)
+    for key in ('recent_records', 'previous_records'):
+        rows = payload.get(key)
+        if not isinstance(rows, list):
+            continue
+        localized = []
+        for row in rows:
+            if not isinstance(row, dict):
+                localized.append(row)
+                continue
+            item = dict(row)
+            item['status_label'] = reading_record_status_label(item.get('status'))
+            localized.append(item)
+        payload[key] = localized
+    return payload
 
 
 def _progress_section(payload):
@@ -538,6 +601,7 @@ def _points_section(payload):
         'cumulative_display': (
             None if cumulative is None else f'{_format_grouped(cumulative)}점'
         ),
+        'period_comparison_unavailable_label': PERIOD_COMPARISON_UNAVAILABLE_LABEL,
     }
 
 
@@ -584,6 +648,7 @@ def _kpi_item(key, label, current, previous, unit, *, comparable, grouped=False)
         'delta_display': delta_display,
         'change_display': '변화 없음' if delta == 0 else delta_display,
         'tone': _tone_for(delta) if comparison_available else None,
+        'comparison_unavailable_label': PERIOD_COMPARISON_UNAVAILABLE_LABEL,
     }
 
 
@@ -602,13 +667,6 @@ def _kpi_strip(reading, progress, points):
             reading.get('completed_count_previous'),
             '권',
             comparable=reading.get('completed_comparable'),
-        ),
-        _kpi_item(
-            'progress_entries', '최근 학습 진도 기록',
-            progress.get('entry_count_current'),
-            progress.get('entry_count_previous'),
-            '건',
-            comparable=progress.get('comparable'),
         ),
         _kpi_item(
             'period_points', '최근 기간 포인트',
@@ -657,12 +715,6 @@ def _charts(reading, progress, points):
             reading.get('completed_count_current'),
             reading.get('completed_comparable'),
         ),
-        (
-            '학습 진도 기록', '건',
-            progress.get('entry_count_previous'),
-            progress.get('entry_count_current'),
-            progress.get('comparable'),
-        ),
     )
     for label, unit, previous, current, comparable in pairs:
         if comparable is not True:
@@ -702,7 +754,7 @@ def build_growth_view_model(child, *, as_of=None, is_viewer_mode=False):
     as_of = resolve_as_of(as_of)
     bundle = metrics_bundle(child.id, as_of=as_of)
     candidates = generate_insight_candidates(bundle)
-    top = top_candidates(candidates, limit=INSIGHT_LIMIT)
+    top = top_candidates(public_insight_candidates(candidates), limit=INSIGHT_LIMIT)
     insights = [_insight_payload(item) for item in top]
     reading = bundle.get('reading') or {}
     progress = bundle.get('progress') or {}
@@ -737,4 +789,11 @@ def build_growth_view_model(child, *, as_of=None, is_viewer_mode=False):
         'kpis': _kpi_strip(reading_view, progress_view, points_view),
         'charts': _charts(reading_view, progress_view, points_view),
         'bundle': bundle,
+        'ui_labels': {
+            'period_comparison_unavailable': PERIOD_COMPARISON_UNAVAILABLE_LABEL,
+            'period_records_insufficient': PERIOD_RECORDS_INSUFFICIENT_LABEL,
+            'period_points_chart_title': PERIOD_POINTS_CHART_TITLE,
+            'period_points_records_insufficient': PERIOD_POINTS_RECORDS_INSUFFICIENT_LABEL,
+            'peer_none': PEER_NONE_LABEL,
+        },
     }

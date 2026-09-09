@@ -23,7 +23,7 @@ from features.growth.copy import (
     READING_ACTIVITY_INCREASE,
 )
 from features.growth.insights import generate_insight_candidates, top_candidates
-from features.growth.service import INSIGHT_LIMIT, build_growth_view_model
+from features.growth.service import INSIGHT_LIMIT, build_growth_view_model, public_insight_candidates
 from features.progress.service import ensure_default_subjects
 from feature_models import LearningSubject  # noqa: E402
 
@@ -210,11 +210,12 @@ class GrowthServiceTests(unittest.TestCase):
 
         self.assertEqual(
             view['charts']['activity']['labels'],
-            ['독서 기록일', '학습 진도 기록'],
+            ['독서 기록일'],
         )
-        self.assertEqual(view['charts']['activity']['previous'], [1, 1])
-        self.assertEqual(view['charts']['activity']['current'], [1, 1])
+        self.assertEqual(view['charts']['activity']['previous'], [1])
+        self.assertEqual(view['charts']['activity']['current'], [1])
         self.assertNotIn('완독', view['charts']['activity']['labels'])
+        self.assertNotIn('학습 진도 기록', view['charts']['activity']['labels'])
 
     def test_incomparable_points_keep_current_and_do_not_create_chart(self):
         self._points(CURRENT_START, 1200, korean=1200)
@@ -253,8 +254,10 @@ class GrowthServiceTests(unittest.TestCase):
         self.assertEqual(len(view['insights']), 3)
         self.assertEqual(
             [item['id'] for item in view['insights']],
-            [item.id for item in top_candidates(candidates, limit=3)],
+            [item.id for item in top_candidates(public_insight_candidates(candidates), limit=3)],
         )
+        hidden = {'PROGRESS_ENTRIES_INCREASE', 'PROGRESS_ENTRIES_DECREASE', 'LEARNING_PAGE_ADVANCE_RECENT_WINDOW_BEST'}
+        self.assertTrue(hidden.isdisjoint(item['id'] for item in view['insights']))
 
     def test_empty_insufficient_when_not_comparable(self):
         view = build_growth_view_model(self.child, as_of=AS_OF)

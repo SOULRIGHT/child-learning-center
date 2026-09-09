@@ -190,9 +190,63 @@ def _label(evidence_id, ctx):
     if evidence_id == 'points.cumulative_as_of':
         return '현재 기준 누적 포인트'
     if evidence_id.startswith('learning.progress_entry_count'):
-        return _join(period, '학습 진도 기록')
+        return _join(period, '직접 입력 진도 기록')
     if evidence_id.startswith('learning.observed_study_days'):
         return _join(period, '학습 활동일')
+    if '.performance.rate.' in evidence_id:
+        return _join(period, _join(subject, '학습 수행률'))
+    if '.performance.studied_days' in evidence_id:
+        return _join(period, _join(subject, '학습일'))
+    if '.performance.expected_days' in evidence_id:
+        return _join(period, _join(subject, '예정 학습일'))
+    if '.performance.confirmation.' in evidence_id:
+        return _join(period, _join(subject, '확인률'))
+    if '.performance.confirmation_delta_pp' in evidence_id:
+        return _join(subject, '확인률 변화')
+    if '.performance.delta_pp' in evidence_id:
+        return _join(subject, '수행률 변화')
+    if '.progress.coverage_ratio' in evidence_id:
+        return _join(subject, '관측 기반 진도율')
+    if '.progress.observed_page_count' in evidence_id:
+        return _join(subject, '관측 페이지')
+    if '.progress.assigned_covered_page_count' in evidence_id:
+        return _join(subject, '배정 페이지 중 관측')
+    if '.progress.assigned_denominator' in evidence_id:
+        return _join(subject, '배정 학습페이지')
+    if '.progress.latest_observed_end_page' in evidence_id:
+        return _join(subject, '참고 위치')
+    if '.forecast.earliest_date' in evidence_id:
+        return _join(subject, '완료예상 빠른 날짜')
+    if '.forecast.latest_date' in evidence_id:
+        return _join(subject, '완료예상 늦은 날짜')
+    if '.performance_peer.child_value' in evidence_id:
+        return _join(subject, '내 학습 수행률')
+    if '.performance_peer.peer_median' in evidence_id:
+        return _join(subject, '같은 학년·같은 과목 수행률 중앙값')
+    if '.performance_peer.difference' in evidence_id:
+        return _join(subject, '수행률 또래 차이')
+    if '.performance_peer.n' in evidence_id:
+        return _join(subject, '수행률 비교 인원')
+    if '.coverage_peer.child_value' in evidence_id:
+        return _join(subject, '내 관측 기반 진도율')
+    if '.coverage_peer.peer_median' in evidence_id:
+        return _join(subject, '같은 교재 진도율 중앙값')
+    if '.coverage_peer.difference' in evidence_id:
+        return _join(subject, '진도율 또래 차이')
+    if '.coverage_peer.n' in evidence_id:
+        return _join(subject, '진도 비교 인원')
+    if evidence_id.startswith('points.peer.child_value'):
+        return '내 기간 포인트'
+    if evidence_id.startswith('points.peer.peer_median'):
+        return '같은 학년 포인트 중앙값'
+    if evidence_id.startswith('points.peer.difference'):
+        return '포인트 또래 차이'
+    if evidence_id.startswith('points.peer.n'):
+        return '포인트 비교 인원'
+    if evidence_id.startswith('reading.analysis.observation'):
+        return '독서 관찰'
+    if evidence_id.startswith('reading.analysis.limitation'):
+        return '독서 분석 한계'
     if '.snapshot.current_page' in evidence_id:
         return _join(subject, '현재 페이지')
     if '.snapshot.recorded_on' in evidence_id:
@@ -226,7 +280,7 @@ def _label(evidence_id, ctx):
 
 def _value_text(evidence_id, fact, ctx, catalog):
     if fact.get('available') is not True:
-        return '자료 없음'
+        return _unavailable_text(evidence_id, fact)
     value = fact.get('value')
     if 'exemption.usage' in evidence_id and '.peer.n' not in evidence_id:
         try:
@@ -238,7 +292,13 @@ def _value_text(evidence_id, fact, ctx, catalog):
             return f'{int(round(value))}회'
         except (TypeError, ValueError):
             return str(value)
-    if '.peer.median' in evidence_id and not evidence_id.startswith('rewards.'):
+    if _is_ratio_id(evidence_id):
+        return _percent_value(value)
+    if 'delta_pp' in evidence_id:
+        return _pp_value(value)
+    if '.forecast.earliest_date' in evidence_id or '.forecast.latest_date' in evidence_id:
+        return f'{value} 예상' if value else '계산할 수 없음'
+    if '.peer.median' in evidence_id and not evidence_id.startswith('rewards.') and 'coverage_peer' not in evidence_id and 'performance_peer' not in evidence_id:
         median_text = _with_unit(value, 'page')
         n_fact = catalog.get(evidence_id.rsplit('.', 1)[0] + '.n') or {}
         if n_fact.get('available') is True:
@@ -255,6 +315,88 @@ def _value_text(evidence_id, fact, ctx, catalog):
     if isinstance(value, bool):
         return '예' if value else '아니오'
     return str(value)
+
+
+_FORECAST_REASON_LABELS = {
+    'no_plan': '교재 계획 없음',
+    'no_studied_sessions': '학습 기록 없음',
+    'exclusions_unconfirmed': '제외 페이지 미확정',
+    'insufficient_sessions': '학습 횟수 부족',
+    'unstable_or_non_positive_pace': '진행 속도 불안정',
+    'already_observed_complete': '관측상 배정 페이지 완료',
+    'plan_switch_before_completion': '다음 교재 시작 전 완료 예상 불가',
+    'insufficient_future_schedule': '남은 예정 학습일 부족',
+    'no_future_study_days': '예정 학습일 없음',
+}
+
+_PEER_UNAVAILABLE_REASONS = frozenset((
+    'no_peers',
+    'insufficient_peers',
+    'textbook_mismatch',
+    'reference_only',
+    'child_unavailable',
+    'child_confirmation_unavailable',
+    'child_confirmation_excluded',
+    'excluded_from_stats',
+    'none',
+))
+
+
+def _unavailable_text(evidence_id, fact):
+    status = fact.get('status') or ''
+    if status in _FORECAST_REASON_LABELS:
+        return _FORECAST_REASON_LABELS[status]
+    if (
+        'peer' in evidence_id
+        and status in _PEER_UNAVAILABLE_REASONS
+    ) or (
+        ('performance_peer' in evidence_id or 'coverage_peer' in evidence_id or evidence_id.startswith('points.peer.'))
+        and status not in ('insufficient_history',)
+        and fact.get('available') is not True
+        and '.n' not in evidence_id
+    ):
+        if status == 'no_plan':
+            return '교재 계획 없음'
+        return '또래 비교 자료 부족'
+    if status == 'insufficient_history':
+        return '이전 기간 비교 자료 부족'
+    if status == 'unavailable':
+        return '계산할 수 없음'
+    if status == 'no_plan':
+        return '교재 계획 없음'
+    return '자료 없음'
+
+
+def _is_ratio_id(evidence_id):
+    return any(token in evidence_id for token in (
+        '.performance.rate.',
+        '.performance.confirmation.',
+        '.progress.coverage_ratio',
+        '.performance_peer.child_value',
+        '.performance_peer.peer_median',
+        '.performance_peer.difference',
+        '.coverage_peer.child_value',
+        '.coverage_peer.peer_median',
+        '.coverage_peer.difference',
+    ))
+
+
+def _percent_value(value):
+    try:
+        return f'{int(round(float(value) * 100))}%'
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _pp_value(value):
+    try:
+        number = float(value)
+        sign = '+' if number > 0 else ''
+        if number.is_integer():
+            return f'{sign}{int(number)}%p'
+        return f'{sign}{number:g}%p'
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def _with_unit(value, unit):
@@ -458,9 +600,9 @@ def _simple_value(evidence_id, catalog):
     if fact is None:
         return None
     if fact.get('available') is not True:
-        return '자료 없음'
+        return _unavailable_text(evidence_id, fact)
     unit = _unit_for(evidence_id)
-    if unit:
+    if unit and not _is_ratio_id(evidence_id):
         return _with_unit(fact.get('value'), unit)
     return _value_text(evidence_id, fact, fact.get('_ctx') or {}, catalog)
 
@@ -509,6 +651,9 @@ def _compact_reading(ids, catalog):
         rows.append(rec_current)
     if rec_previous:
         rows.append(rec_previous)
+    for evidence_id in ids:
+        if evidence_id.startswith('reading.analysis.observation'):
+            rows.append({'label': '독서 관찰', 'value': _simple_value(evidence_id, catalog)})
     return rows
 
 
@@ -544,29 +689,54 @@ def _compact_learning_activity(ids, catalog):
         rows.append({'label': '최근', 'value': _simple_value(current, catalog)})
     if previous:
         rows.append({'label': '이전', 'value': _simple_value(previous, catalog)})
-    progress = _id_in(ids, 'learning.progress_entry_count.current')
-    if progress:
-        rows.append({'label': '최근 진도 기록', 'value': _simple_value(progress, catalog)})
     return rows
 
 
 def _compact_subject(ids, catalog):
     rows = []
     mapping = (
-        ('현재', '.snapshot.current_page'),
-        ('동일 학년·동일 교재 중앙값', '.peer.median'),
-        ('비교 인원', '.peer.n'),
-        ('최근 진도 변화', '.page_advance.delta'),
+        ('학습 수행률', '.performance.rate.current'),
+        ('관측 기반 진도율', '.progress.coverage_ratio'),
+        ('같은 학년·같은 과목 수행률 중앙값', '.performance_peer.peer_median'),
+        ('같은 교재 진도율 중앙값', '.coverage_peer.peer_median'),
+        ('수행률 비교 인원', '.performance_peer.n'),
+        ('진도 비교 인원', '.coverage_peer.n'),
     )
     for label, token in mapping:
         evidence_id = _id_has(ids, token)
         if not evidence_id:
-            if token == '.page_advance.delta':
-                evidence_id = _id_has(ids, '.page_advance.current')
-            else:
-                continue
+            continue
         rows.append({'label': label, 'value': _simple_value(evidence_id, catalog)})
+    forecast = _compact_forecast(ids, catalog)
+    if forecast:
+        rows.append(forecast)
     return rows
+
+
+def _compact_forecast(ids, catalog):
+    earliest_id = _id_has(ids, '.forecast.earliest_date')
+    latest_id = _id_has(ids, '.forecast.latest_date')
+    if not earliest_id and not latest_id:
+        return None
+    earliest_fact = catalog.get(earliest_id) if earliest_id else None
+    latest_fact = catalog.get(latest_id) if latest_id else None
+    earliest_ok = earliest_fact is not None and earliest_fact.get('available') is True
+    latest_ok = latest_fact is not None and latest_fact.get('available') is True
+    if earliest_ok and latest_ok:
+        earliest = earliest_fact.get('value')
+        latest = latest_fact.get('value')
+        if earliest == latest:
+            return {'label': '완료예상', 'value': f'{earliest} 예상'}
+        return {'label': '완료예상', 'value': f'{earliest} ~ {latest} 예상'}
+    if earliest_ok:
+        return {'label': '완료예상', 'value': f'{earliest_fact.get("value")} 예상'}
+    if latest_ok:
+        return {'label': '완료예상', 'value': f'{latest_fact.get("value")} 예상'}
+    fact = earliest_fact or latest_fact or {}
+    return {
+        'label': '완료예상',
+        'value': _unavailable_text(earliest_id or latest_id, fact),
+    }
 
 
 def _compact_other(ids, catalog):
@@ -577,4 +747,10 @@ def _compact_other(ids, catalog):
         rows.append({'label': '최근', 'value': _simple_value(current, catalog)})
     if previous:
         rows.append({'label': '이전', 'value': _simple_value(previous, catalog)})
+    median = _id_in(ids, 'points.peer.peer_median')
+    if median:
+        rows.append({'label': '같은 학년 포인트 중앙값', 'value': _simple_value(median, catalog)})
+    sample = _id_in(ids, 'points.peer.n')
+    if sample:
+        rows.append({'label': '포인트 비교 인원', 'value': _simple_value(sample, catalog)})
     return rows

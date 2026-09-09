@@ -29,6 +29,7 @@ from features.growth.copy import (
     READING_ACTIVITY_INCREASE,
     fallback_copy,
 )
+from features.growth.learning_view import PERIOD_RECORDS_INSUFFICIENT_LABEL  # noqa: E402
 from features.growth.service import build_growth_view_model
 from features.progress.service import ensure_default_subjects  # noqa: E402
 
@@ -232,7 +233,8 @@ class GrowthRouteTests(unittest.TestCase):
         self._login(self.teacher)
         os.environ[DEV_DATE_CONTROL_ENV] = '1'
         body = self._growth(self.empty.id, as_of=AS_OF.isoformat()).get_data(as_text=True)
-        self.assertIn('아직 비교할 수 있는 기록이 충분하지 않습니다.', body)
+        self.assertIn(PERIOD_RECORDS_INSUFFICIENT_LABEL, body)
+        self.assertNotIn('아직 비교할 수 있는 기록이 충분하지 않습니다.', body)
         self.assertNotIn('card h-100 growth-insight-card', body)
         self.assertIn('과거 누적값 확인 불가', body)
         self.assertIn('평가 기록 없음', body)
@@ -328,11 +330,10 @@ class GrowthRouteTests(unittest.TestCase):
         self._login(self.teacher)
         os.environ[DEV_DATE_CONTROL_ENV] = '1'
         body = self._growth(self.child.id, as_of=AS_OF.isoformat()).get_data(as_text=True)
-        self.assertIn('우등생 국어 3-2', body)
-        self.assertIn('현재 51p', body)
-        self.assertIn('최근 기록 10/1', body)
-        self.assertIn('2026-10-01', body)
-        self.assertIn('진도 기록 없음', body)
+        self.assertNotIn('우등생 국어 3-2', body)
+        self.assertNotIn('현재 51p', body)
+        self.assertNotIn('최근 기록 10/1', body)
+        self.assertNotIn('진도 기록 없음', body)
 
     def test_chart_dataset_matches_view_model(self):
         self._reading_increase(self.child)
@@ -359,9 +360,10 @@ class GrowthRouteTests(unittest.TestCase):
         os.environ[DEV_DATE_CONTROL_ENV] = '1'
         body = self._growth(self.child.id, as_of=AS_OF.isoformat()).get_data(as_text=True)
 
-        self.assertIn('학습 진도 기록 최근 1건', body)
+        self.assertNotIn('학습 진도 기록 최근 1건', body)
         self.assertNotIn('학습 진도 기록 이전 0건 → 최근 1건', body)
-        self.assertIn('비교 자료 부족', body)
+        self.assertNotIn('최근 학습 진도 기록', body)
+        self.assertIn('이전 기간과 비교할 자료가 부족합니다', body)
 
     def test_incomparable_points_show_current_without_comparison_chart(self):
         self._points(self.child, CURRENT_START, 1200)
@@ -373,7 +375,7 @@ class GrowthRouteTests(unittest.TestCase):
         payload = json.loads(match.group(1))
 
         self.assertIn('1,200점', body)
-        self.assertIn('비교 자료 부족', body)
+        self.assertIn('이전 기간과 비교할 자료가 부족합니다', body)
         self.assertNotIn('0점 → 1,200점', body)
         self.assertIsNone(payload['points'])
         self.assertNotIn('id="growthPointsChart"', body)
