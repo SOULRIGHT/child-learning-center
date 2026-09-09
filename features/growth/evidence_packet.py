@@ -19,12 +19,13 @@ from features.growth.insights import (
     generate_insight_candidates,
     top_candidates,
 )
+from features.growth.center_policy import get_current_center_policy_text, normalize_center_policy_text
 from features.growth.learning_metrics import MAX_PROGRESS_SNAPSHOT_AGE_DAYS
 
 # features.growth.service.INSIGHT_LIMIT 과 같아야 한다. service를 import 하지 않는다.
 SELECTED_INSIGHT_LIMIT = 3
 
-SCHEMA_VERSION = 'growth_teacher_evidence_v1'
+SCHEMA_VERSION = 'growth_teacher_evidence_v2'
 AUDIENCE_TEACHER = 'teacher'
 
 STATUS_INSUFFICIENT_HISTORY = 'insufficient_history'
@@ -56,7 +57,9 @@ def build_teacher_evidence_packet(bundle, selected_candidates=None, *, grade=Non
     scope = _scope(reading, learning, recent, selected_ids)
     supporting = {
         'reading': _reading_facts(reading, recent, selected_ids),
-        'points': _points_facts(points, recent, selected_ids),
+        'points': _points_facts(
+            points, recent, selected_ids, bundle.get('point_composition'),
+        ),
         'learning': _learning_facts(
             progress, points, learning, recent, selected_ids, selected,
         ),
@@ -67,6 +70,7 @@ def build_teacher_evidence_packet(bundle, selected_candidates=None, *, grade=Non
         'audience': AUDIENCE_TEACHER,
         'as_of': _iso_date(_as_of(bundle)),
         'scope': scope,
+        'center_context': _center_context(get_current_center_policy_text()),
         'selected_insights': [_insight_entry(item) for item in selected],
         'supporting_facts': supporting,
     }
@@ -80,6 +84,20 @@ def _selected(bundle, selected_candidates):
     if selected_candidates is not None:
         return list(selected_candidates)
     return top_candidates(generate_insight_candidates(bundle), limit=SELECTED_INSIGHT_LIMIT)
+
+
+def _center_context(policy_text):
+    """센터 운영 정책 자연어. 아동 관측 evidence가 아니므로 evidence_id를 붙이지 않는다."""
+    text = normalize_center_policy_text(policy_text)
+    if not text:
+        return {
+            'available': False,
+            'policy_text': None,
+        }
+    return {
+        'available': True,
+        'policy_text': text,
+    }
 
 
 def _as_of(bundle):
@@ -182,7 +200,7 @@ def _rating_pair(reading):
     }
 
 
-def _points_facts(points, recent, selected_ids):
+def _points_facts(points, recent, selected_ids, composition=None):
     comparable = (points.get('comparable') or {}).get('points') is True
     current = points.get('current') or {}
     previous = points.get('previous') or {}
@@ -197,7 +215,131 @@ def _points_facts(points, recent, selected_ids):
     }
     if _RWB_POINTS in selected_ids:
         facts['recent_window'] = _rwb_block('points.rwb.period', recent.get('points') or {})
+    if isinstance(composition, dict) and composition:
+        facts['composition'] = _composition_facts(composition, comparable=comparable)
     return facts
+
+
+def _composition_facts(composition, *, comparable):
+    """bundle['point_composition'] whitelist. 재계산하지 않는다.
+
+    material / stationery / unclassified / count / raw text 는 넣지 않는다.
+    """
+    current = composition.get('current') or {}
+    previous = composition.get('previous') or {}
+    extra_current = current.get('extra_learning') or {}
+    extra_previous = previous.get('extra_learning') or {}
+    return {
+        'totals': {
+            'net_points': _period_pair(
+                'points.composition.totals.net_points',
+                _as_int(current.get('net_points')),
+                _as_int(previous.get('net_points')),
+                comparable=comparable,
+            ),
+            'total_earn_points': _period_pair(
+                'points.composition.totals.total_earn_points',
+                _as_int(current.get('total_earn_points')),
+                _as_int(previous.get('total_earn_points')),
+                comparable=comparable,
+            ),
+            'total_spend_points': _period_pair(
+                'points.composition.totals.total_spend_points',
+                _as_int(current.get('total_spend_points')),
+                _as_int(previous.get('total_spend_points')),
+                comparable=comparable,
+            ),
+        },
+        'subjects': _composition_subjects(
+            current.get('subjects') or {},
+            previous.get('subjects') or {},
+            comparable=comparable,
+        ),
+        'textbook': _composition_category_points(
+            'textbook', current, previous, comparable=comparable,
+        ),
+        'praise': _composition_category_points(
+            'praise', current, previous, comparable=comparable,
+        ),
+        'help': _composition_category_points(
+            'help', current, previous, comparable=comparable,
+        ),
+        'extra_learning': {
+            'points': _period_pair(
+                'points.composition.extra_learning.points',
+                _as_int(extra_current.get('points')),
+                _as_int(extra_previous.get('points')),
+                comparable=comparable,
+            ),
+            'by_subject': _composition_extra_by_subject(
+                extra_current.get('by_subject') or {},
+                extra_previous.get('by_subject') or {},
+                comparable=comparable,
+            ),
+        },
+    }
+
+
+def _composition_subjects(current_subjects, previous_subjects, *, comparable):
+    subjects = {}
+    for key in sorted(set(current_subjects) | set(previous_subjects)):
+        if not isinstance(key, str) or not key:
+            continue
+        current = current_subjects.get(key) or {}
+        previous = previous_subjects.get(key) or {}
+        subjects[key] = {
+            'points': _period_pair(
+                f'points.composition.subjects.{key}.points',
+                _as_int(current.get('points')),
+                _as_int(previous.get('points')),
+                comparable=comparable,
+            ),
+            'active_days': _period_pair(
+                f'points.composition.subjects.{key}.active_days',
+                _as_int(current.get('active_days')),
+                _as_int(previous.get('active_days')),
+                comparable=comparable,
+            ),
+        }
+    return subjects
+
+
+def _composition_category_points(name, current, previous, *, comparable):
+    return {
+        'points': _period_pair(
+            f'points.composition.{name}.points',
+            _as_int((current.get(name) or {}).get('points')),
+            _as_int((previous.get(name) or {}).get('points')),
+            comparable=comparable,
+        ),
+    }
+
+
+def _composition_extra_by_subject(current_by, previous_by, *, comparable):
+    by_subject = {}
+    for key in sorted(set(current_by) | set(previous_by)):
+        if not isinstance(key, str) or not key:
+            continue
+        current = current_by.get(key) or {}
+        previous = previous_by.get(key) or {}
+        by_subject[key] = {
+            'points': _period_pair(
+                f'points.composition.extra_learning.by_subject.{key}.points',
+                _as_int(current.get('points')),
+                _as_int(previous.get('points')),
+                comparable=comparable,
+            ),
+        }
+    return by_subject
+
+
+def _as_int(value):
+    if value is None or isinstance(value, bool):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _cumulative_fact(value):

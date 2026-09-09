@@ -5,6 +5,7 @@ import inspect
 import json
 import unittest
 from datetime import date
+from unittest.mock import patch
 
 from tests.helpers import bootstrap_test_app, local_development_sqlite_path, resolved_engine_sqlite_path
 
@@ -312,13 +313,16 @@ def _recent(**kwargs):
 
 
 def _bundle(**kwargs):
-    return {
+    payload = {
         'reading': kwargs.get('reading', _reading()),
         'progress': kwargs.get('progress', _progress()),
         'points': kwargs.get('points', _points()),
         'learning': kwargs.get('learning', _learning()),
         'recent_window_bests': kwargs.get('recent', _recent()),
     }
+    if 'point_composition' in kwargs:
+        payload['point_composition'] = kwargs['point_composition']
+    return payload
 
 
 def _packet(bundle=None, **kwargs):
@@ -378,6 +382,7 @@ class EvidencePacketContractTests(unittest.TestCase):
                 self.assertIn(evidence_id, registered, evidence_id)
 
     def _assert_contract(self, packet):
+        self.assertEqual(SCHEMA_VERSION, 'growth_teacher_evidence_v2')
         self.assertEqual(packet['schema_version'], SCHEMA_VERSION)
         self.assertEqual(packet['audience'], AUDIENCE_TEACHER)
         self.assertRegex(packet['as_of'], r'^\d{4}-\d{2}-\d{2}$')
@@ -385,6 +390,8 @@ class EvidencePacketContractTests(unittest.TestCase):
         self.assertIn('selected_insights', packet)
         self.assertIn('supporting_facts', packet)
         self.assertEqual(set(packet['supporting_facts']), {'reading', 'points', 'learning', 'rewards'})
+        self.assertIn('center_context', packet)
+        self.assertNotIn('evidence_id', packet['center_context'])
         self._assert_jsonable(packet)
         self._assert_privacy(packet)
         self._assert_ids(packet)
@@ -395,6 +402,8 @@ class EvidencePacketContractTests(unittest.TestCase):
     def test_builder_is_projection_not_provider(self):
         source = inspect.getsource(inspect.getmodule(build_teacher_evidence_packet))
         self.assertNotIn('metrics_bundle(', source)
+        self.assertNotIn('point_composition_from_events', source)
+        self.assertNotIn('from features.growth.point_composition', source)
         self.assertNotIn('.query', source)
         self.assertNotIn('openai', source.lower())
         self.assertNotIn('anthropic', source.lower())
@@ -627,6 +636,296 @@ class EvidencePacketContractTests(unittest.TestCase):
         self.assertNotIn('name', _walk_keys(packet))
 
 
+def _composition_side(
+    *,
+    net=0,
+    earn=0,
+    spend=0,
+    subjects=None,
+    textbook=0,
+    praise=0,
+    help_points=0,
+    extra=0,
+    extra_by_subject=None,
+):
+    return {
+        'net_points': net,
+        'total_earn_points': earn,
+        'total_spend_points': spend,
+        'subjects': subjects or {},
+        'manual': {
+            'earn_points': 999,
+            'earn_count': 9,
+            'spend_points': -999,
+            'spend_count': 9,
+        },
+        'textbook': {'points': textbook, 'count': 7, 'by_subject': {'ssen': {'points': textbook, 'count': 7}}},
+        'praise': {'points': praise, 'count': 3},
+        'help': {'points': help_points, 'count': 2},
+        'extra_learning': {
+            'points': extra,
+            'count': 4,
+            'by_subject': extra_by_subject or {},
+        },
+        'material': {
+            'points': -50,
+            'count': 1,
+            'by_item': {'print': {'points': -50, 'count': 1}},
+        },
+        'stationery': {
+            'points': -300,
+            'count': 1,
+            'by_item': {'pencil': {'points': -300, 'count': 1}},
+        },
+        'unclassified': {
+            'earn_points': 80,
+            'earn_count': 1,
+            'spend_points': 0,
+            'spend_count': 0,
+        },
+        'raw_subject': '원문과목유출금지',
+        'raw_reason': '원문사유유출금지',
+    }
+
+
+def _composition_payload(*, current=None, previous=None):
+    return {
+        'as_of': AS_OF,
+        'window_days': 30,
+        'current_window': dict(CURRENT),
+        'previous_window': dict(PREV),
+        'current': current if current is not None else _composition_side(),
+        'previous': previous if previous is not None else _composition_side(),
+    }
+
+
+class EvidencePacketCompositionTests(unittest.TestCase):
+    def _packet(self, **kwargs):
+        comparable = kwargs.pop('comparable', True)
+        points = kwargs.pop('points', _points(comparable=comparable))
+        composition = kwargs.pop(
+            'point_composition',
+            _composition_payload(
+                current=_composition_side(
+                    net=800,
+                    earn=1100,
+                    spend=-300,
+                    subjects={
+                        'korean': {'points': 200, 'active_days': 4},
+                        'math': {'points': 150, 'active_days': 3},
+                    },
+                    textbook=3000,
+                    praise=100,
+                    help_points=80,
+                    extra=400,
+                    extra_by_subject={
+                        'math': {'points': 300, 'count': 2},
+                        'korean': {'points': 100, 'count': 1},
+                    },
+                ),
+                previous=_composition_side(
+                    net=250,
+                    earn=350,
+                    spend=-100,
+                    subjects={
+                        'korean': {'points': 100, 'active_days': 2},
+                    },
+                    textbook=0,
+                    praise=50,
+                    help_points=0,
+                    extra=0,
+                    extra_by_subject={},
+                ),
+            ),
+        )
+        return _packet(_bundle(points=points, point_composition=composition, **kwargs))
+
+    def test_composition_values_project_without_recalc(self):
+        packet = self._packet()
+        composition = packet['supporting_facts']['points']['composition']
+        totals = composition['totals']
+        self.assertEqual(totals['net_points']['current']['value'], 800)
+        self.assertEqual(totals['net_points']['previous']['value'], 250)
+        self.assertEqual(totals['net_points']['delta']['value'], 550)
+        self.assertTrue(totals['net_points']['comparable'])
+        self.assertEqual(totals['total_earn_points']['current']['value'], 1100)
+        self.assertEqual(totals['total_earn_points']['previous']['value'], 350)
+        self.assertEqual(totals['total_earn_points']['delta']['value'], 750)
+        self.assertEqual(totals['total_spend_points']['current']['value'], -300)
+        self.assertEqual(totals['total_spend_points']['previous']['value'], -100)
+        self.assertEqual(totals['total_spend_points']['delta']['value'], -200)
+
+    def test_subject_points_and_active_days(self):
+        packet = self._packet()
+        subjects = packet['supporting_facts']['points']['composition']['subjects']
+        self.assertEqual(set(subjects), {'korean', 'math'})
+        korean = subjects['korean']
+        self.assertEqual(korean['points']['current']['value'], 200)
+        self.assertEqual(korean['points']['previous']['value'], 100)
+        self.assertEqual(korean['points']['delta']['value'], 100)
+        self.assertEqual(korean['active_days']['current']['value'], 4)
+        self.assertEqual(korean['active_days']['previous']['value'], 2)
+        self.assertEqual(korean['active_days']['delta']['value'], 2)
+        math = subjects['math']
+        self.assertEqual(math['points']['current']['value'], 150)
+        self.assertEqual(math['points']['previous']['value'], 0)
+        self.assertEqual(math['points']['delta']['value'], 150)
+        self.assertEqual(math['active_days']['current']['value'], 3)
+        self.assertEqual(math['active_days']['previous']['value'], 0)
+
+    def test_category_and_extra_learning_by_subject(self):
+        packet = self._packet()
+        composition = packet['supporting_facts']['points']['composition']
+        self.assertEqual(composition['textbook']['points']['current']['value'], 3000)
+        self.assertEqual(composition['textbook']['points']['previous']['value'], 0)
+        self.assertEqual(composition['textbook']['points']['delta']['value'], 3000)
+        self.assertEqual(composition['praise']['points']['current']['value'], 100)
+        self.assertEqual(composition['praise']['points']['previous']['value'], 50)
+        self.assertEqual(composition['praise']['points']['delta']['value'], 50)
+        self.assertEqual(composition['help']['points']['current']['value'], 80)
+        self.assertEqual(composition['help']['points']['previous']['value'], 0)
+        extra = composition['extra_learning']
+        self.assertEqual(extra['points']['current']['value'], 400)
+        self.assertEqual(extra['points']['previous']['value'], 0)
+        self.assertEqual(extra['points']['delta']['value'], 400)
+        by_subject = extra['by_subject']
+        self.assertEqual(set(by_subject), {'korean', 'math'})
+        self.assertEqual(by_subject['math']['points']['current']['value'], 300)
+        self.assertEqual(by_subject['math']['points']['previous']['value'], 0)
+        self.assertEqual(by_subject['korean']['points']['current']['value'], 100)
+        self.assertEqual(by_subject['korean']['points']['previous']['value'], 0)
+
+    def test_material_stationery_and_raw_text_are_not_leaked(self):
+        packet = self._packet()
+        composition = packet['supporting_facts']['points']['composition']
+        self.assertEqual(
+            set(composition),
+            {'totals', 'subjects', 'textbook', 'praise', 'help', 'extra_learning'},
+        )
+        blob = json.dumps(packet, ensure_ascii=False)
+        for forbidden in (
+            'material', 'stationery', 'unclassified', 'by_item', 'print', 'pencil',
+            'raw_subject', 'raw_reason', '원문과목유출금지', '원문사유유출금지',
+            'manual_history',
+        ):
+            self.assertNotIn(forbidden, blob)
+        self.assertNotIn('earn_count', blob)
+        self.assertNotIn('"count": 7', blob)
+        self.assertNotIn('"count": 4', blob)
+
+    def test_evidence_ids_are_indexed_with_correct_units(self):
+        from features.growth.ai.validator import collect_evidence_index
+        packet = self._packet()
+        ids = collect_evidence_ids(packet)
+        expected = [
+            'points.composition.totals.net_points.current',
+            'points.composition.totals.net_points.previous',
+            'points.composition.totals.net_points.delta',
+            'points.composition.totals.total_earn_points.current',
+            'points.composition.totals.total_earn_points.previous',
+            'points.composition.totals.total_earn_points.delta',
+            'points.composition.totals.total_spend_points.current',
+            'points.composition.totals.total_spend_points.previous',
+            'points.composition.totals.total_spend_points.delta',
+            'points.composition.subjects.korean.active_days.current',
+            'points.composition.subjects.korean.points.current',
+            'points.composition.subjects.math.active_days.current',
+            'points.composition.subjects.math.points.current',
+            'points.composition.textbook.points.current',
+            'points.composition.praise.points.current',
+            'points.composition.help.points.current',
+            'points.composition.extra_learning.points.current',
+            'points.composition.extra_learning.by_subject.korean.points.current',
+            'points.composition.extra_learning.by_subject.math.points.current',
+        ]
+        for evidence_id in expected:
+            self.assertIn(evidence_id, ids, evidence_id)
+        index = collect_evidence_index(packet)
+        self.assertEqual(index['points.composition.totals.net_points.current'].unit, 'point')
+        self.assertEqual(index['points.composition.subjects.korean.points.current'].unit, 'point')
+        self.assertEqual(index['points.composition.textbook.points.current'].unit, 'point')
+        self.assertEqual(index['points.composition.extra_learning.by_subject.math.points.current'].unit, 'point')
+        self.assertEqual(index['points.composition.subjects.korean.active_days.current'].unit, 'day')
+        self.assertEqual(index['points.composition.subjects.math.active_days.delta'].unit, 'day')
+
+    def test_missing_composition_is_omitted(self):
+        packet = _packet(_bundle())
+        self.assertNotIn('composition', packet['supporting_facts']['points'])
+
+    def test_incomparable_points_hide_composition_values(self):
+        packet = self._packet(comparable=False)
+        net = packet['supporting_facts']['points']['composition']['totals']['net_points']
+        self.assertFalse(net['comparable'])
+        self.assertFalse(net['current']['available'])
+        self.assertNotIn('value', net['current'])
+        days = packet['supporting_facts']['points']['composition']['subjects']['korean']['active_days']
+        self.assertFalse(days['current']['available'])
+        self.assertNotIn('value', days['current'])
+
+
+class EvidencePacketCenterPolicyTests(unittest.TestCase):
+    def test_current_center_policy_text_is_in_packet(self):
+        from features.growth.center_policy import CURRENT_CENTER_POLICY_TEXT
+        packet = _packet()
+        context = packet['center_context']
+        self.assertTrue(context['available'])
+        self.assertEqual(context['policy_text'], CURRENT_CENTER_POLICY_TEXT)
+        self.assertIn('200점', context['policy_text'])
+        self.assertIn('쎈', context['policy_text'])
+        self.assertIn('독서기록장', context['policy_text'])
+        self.assertNotIn('evidence_id', context)
+
+    def test_missing_policy_does_not_invent_text(self):
+        with patch(
+            'features.growth.evidence_packet.get_current_center_policy_text',
+            return_value=None,
+        ):
+            packet = _packet()
+        context = packet['center_context']
+        self.assertFalse(context['available'])
+        self.assertIsNone(context['policy_text'])
+        self.assertNotIn('200점', json.dumps(packet, ensure_ascii=False))
+
+    def test_policy_is_not_collected_as_evidence(self):
+        from features.growth.ai.validator import collect_evidence_index
+        packet = _packet()
+        self.assertIn('200점', packet['center_context']['policy_text'])
+        ids = collect_evidence_ids(packet)
+        self.assertNotIn('center_context.policy_text', ids)
+        self.assertFalse(any(item.startswith('center_context') for item in ids))
+        index = collect_evidence_index(packet)
+        values = {
+            fact.value for fact in index.values()
+            if fact.available and not isinstance(fact.value, bool)
+        }
+        self.assertNotIn(200, values)
+        self.assertNotIn('200점', index)
+
+    def test_policy_numbers_do_not_justify_child_score_claims(self):
+        from features.growth.ai.validator import (
+            CODE_UNSUPPORTED_NUMERIC_CLAIM,
+            validate_teacher_interpretation,
+        )
+        from tests.test_growth_ai_validator import _output
+        packet = _packet()
+        result = validate_teacher_interpretation(
+            packet,
+            _output(
+                summary='이 아동은 최근 200점을 받았습니다.',
+                summary_ids=['points.period.current'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_UNSUPPORTED_NUMERIC_CLAIM, [item.code for item in result.violations])
+
+    def test_overlong_policy_is_clipped(self):
+        from features.growth.center_policy import MAX_CENTER_POLICY_TEXT_LEN, normalize_center_policy_text
+        text = '가' * (MAX_CENTER_POLICY_TEXT_LEN + 50)
+        self.assertEqual(len(normalize_center_policy_text(text)), MAX_CENTER_POLICY_TEXT_LEN)
+        self.assertIsNone(normalize_center_policy_text('   '))
+        self.assertIsNone(normalize_center_policy_text(None))
+
+
 class EvidencePacketDatabaseTests(unittest.TestCase):
     def setUp(self):
         self.ctx = app.app_context()
@@ -769,6 +1068,22 @@ class EvidencePacketDatabaseTests(unittest.TestCase):
             self.assertNotIn('value', cumulative)
         else:
             self.assertEqual(cumulative['value'], bundle['points']['cumulative_as_of'])
+        composition = packet['supporting_facts']['points']['composition']
+        current = bundle['point_composition']['current']
+        if bundle['points']['comparable']['points'] is True:
+            self.assertEqual(
+                composition['totals']['net_points']['current']['value'],
+                current['net_points'],
+            )
+            korean = (current.get('subjects') or {}).get('korean') or {}
+            if korean:
+                self.assertEqual(
+                    composition['subjects']['korean']['points']['current']['value'],
+                    korean['points'],
+                )
+        self.assertNotIn('material', composition)
+        self.assertNotIn('stationery', composition)
+        self.assertNotIn('unclassified', composition)
 
     def test_view_model_path_does_not_use_packet(self):
         self._progress(date(2026, 8, 15), page=40)
@@ -818,3 +1133,7 @@ class EvidencePacketDatabaseTests(unittest.TestCase):
         self.assertFalse(snapshot['available'])
         self.assertNotIn('value', snapshot['page'])
         self.assertEqual(bundle['reading']['current']['reading_days'], 0)
+        composition = packet['supporting_facts']['points'].get('composition')
+        if composition:
+            self.assertFalse(composition['totals']['net_points']['current']['available'])
+            self.assertNotIn('value', composition['totals']['net_points']['current'])

@@ -25,7 +25,7 @@ from features.growth.ai.safety import (
 
 
 SENTINEL_NAME = 'SENTINEL_CHILD_NAME_ZX9'
-SENTINEL_PACKET = 'growth_teacher_evidence_v1'
+SENTINEL_PACKET = 'growth_teacher_evidence_v2'
 VISIBLE = '최근 독서 활동일이 이전보다 증가했습니다.'
 
 

@@ -4,8 +4,10 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
 
 - generator v1 model: `gpt-5.6-luna` (OpenAI Responses API)
 - production winner: 미확정
-- input: `growth_teacher_evidence_v1` only
-- prompt: `growth_teacher_prompt_v8`
+- input: `growth_teacher_evidence_v2` only
+  - v1 → v2: `supporting_facts.points.composition` whitelist projection과
+    `center_context.policy_text` 해석 배경 추가. 정책 자연어는 child evidence가 아니다.
+- prompt: `growth_teacher_prompt_v9`
   - v1 → v2: live probe에서 관측된 unknown citation(`plan.status`, `effective_weekdays`)과
     metric label confusion(`reading.activity_days`를 "학습 활동일"로 혼용)을 prompt에서만 보강.
     runtime semantic classifier는 두지 않는다.
@@ -21,6 +23,8 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
     실제 원인은 mixed sentence가 아니라 completions를 `회`로 쓴 단위 계약 위반.
   - v7 → v8: mixed-unit sentence 금지 제거. metric canonical unit 계약 강화
     (완독 → 권, 활동일 → 일). 여러 지표를 한 문장/field에서 연결하는 것은 허용.
+  - v8 → v9: center_context.policy_text는 해석 배경. 단일 점수 기계 평가 금지.
+    정책 숫자는 아동 evidence가 아님. 센터 전용 점수 규칙은 prompt에 하드코딩하지 않음.
 - output: `growth_teacher_interpretation_v2`
   - required: `priority_insight`, `interpretation`, `observations`(max 3),
     `next_actions`(max 2, `conditional=true`), `next_check`
@@ -31,7 +35,8 @@ durable technical facts. Notion은 이 문서의 대상이 아니다.
 - provider boundary: `GrowthInterpretationProvider.generate(packet)`
 - v1 implementation: `OpenAIGrowthInterpretationProvider`
 - B3A deterministic factual validator: `validate_teacher_interpretation(packet, parsed_output)`
-  - version: `growth_teacher_factual_validator_v2`
+  - version: `growth_teacher_factual_validator_v3`
+  - v2 → v3: `active_days` evidence_id는 `points.` prefix보다 먼저 day 단위로 매핑
   - citation은 모델이 제출한 reference이며 internal reasoning provenance가 아니다
   - schema `evidence_ids.minItems=1`
   - unknown citation reject (`learning.math.plan.status` 등 field name은 id가 아님)

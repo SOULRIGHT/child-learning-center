@@ -418,6 +418,15 @@ class PointCompositionCanonicalTests(unittest.TestCase):
         self.assertNotIn('point_composition', blob)
         self.assertNotIn('raw_subject', blob)
         self.assertNotIn('추천독서 완독 승인', blob)
+        composition = packet['supporting_facts']['points']['composition']
+        if bundle['points']['comparable']['points'] is True:
+            self.assertEqual(
+                composition['totals']['net_points']['current']['value'],
+                bundle['point_composition']['current']['net_points'],
+            )
+            self.assertEqual(composition['totals']['net_points']['current']['value'], 300)
+        self.assertNotIn('material', composition)
+        self.assertNotIn('stationery', composition)
         _assert_no_raw(self, bundle['point_composition'])
 
 

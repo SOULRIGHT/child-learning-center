@@ -13,7 +13,7 @@
 
 PointEvent projection은 `e57d4b7`에 있다.
 Point composition metrics는 `features/growth/point_composition.py` → `metrics_bundle['point_composition']`에 있다.
-**Evidence Packet / AI prompt / UI에는 아직 연결되지 않았다.**
+Evidence Packet은 composition whitelist와 `center_context.policy_text`를 포함한다. Growth UI/insight selection은 아직 미연결.
 
 ---
 
@@ -60,8 +60,8 @@ Point composition metrics는 `features/growth/point_composition.py` → `metrics
 | **provenance** | 더 좁은 출처. `daily_column` \| `manual_json` \| `manual_sum`. |
 | **EARN / SPEND** | `amount > 0` / `amount < 0`. 저장 field가 아님. property `PointEvent.direction`. |
 | **UNCLASSIFIED** | 의미를 안전하게 확정할 수 없음. 오류가 아니라 정상 fallback. 금액은 그대로 둔다. |
-| **Growth metrics** | `features/growth/metrics.py` 등 deterministic 집계. `point_composition`은 내부 payload. Evidence에는 안 실림. |
-| **Evidence Packet** | `build_teacher_evidence_packet()` → `growth_teacher_evidence_v1`. PointEvent raw / composition breakdown **미포함**. |
+| **Growth metrics** | `features/growth/metrics.py` 등 deterministic 집계. `point_composition`은 내부 payload이며 Evidence Packet은 whitelist만 projection한다. |
+| **Evidence Packet** | `build_teacher_evidence_packet()` → `growth_teacher_evidence_v2`. PointEvent raw / material / stationery / unclassified / raw_subject는 미포함. composition whitelist와 `center_context.policy_text`는 포함. |
 | **activity_date** | 활동이 일어난 달력일. DailyPoints는 `date`. PointEvent는 `activity_date`. |
 | **created_at** | row/JSON 기록 시각(UTC). 활동일 아님. Growth window·PointEvent 날짜로 쓰지 않음. |
 
@@ -91,13 +91,13 @@ project_point_events(records, *, classify_manual=…)   Growth (기존, 미변�
         ▼                                              ▼
 PointEvent[]  (runtime, DB 없음)                      points_metrics / reward_metrics
         │                                              │
-        ▼                                              ├─ Evidence Packet (composition 미포함)
+        ▼                                              ├─ Evidence Packet (composition whitelist + center_context)
 point_composition                                      │
   summarize_point_events /                             ▼
   point_composition_from_events                        Luna (버튼 generation만)
         │
         ▼
-metrics_bundle['point_composition']   ← 내부 deterministic만. AI 미전달
+metrics_bundle['point_composition']   ← packet은 whitelist만 projection. material/raw text 미전달
 ```
 
 독서 보상 (별도 쓰기 경로, `features/reading/rewards.py`):
@@ -911,7 +911,7 @@ DailyPoints
   → fetch_child_daily_point_records
   → points_metrics / reward_metrics / learning.observed_study_days
   → metrics_bundle
-  → build_teacher_evidence_packet   # SCHEMA_VERSION growth_teacher_evidence_v1
+  → build_teacher_evidence_packet   # SCHEMA_VERSION growth_teacher_evidence_v2
   → AI (버튼, 이 문서의 SOT 아님)
 ```
 
@@ -932,16 +932,27 @@ window: 기본 30일 current / previous. `as_of` 이하만 (`_records_as_of`). �
 | `reading.activity_days` / `reading.completions` | 독서 활동 | ChildReading+ReadingDay | 포인트 구성 아님 |
 | `reading.recommended.activity_days` / `.completions` | 추천 프로그램 | | 포인트 아님 |
 
-`points_metrics`는 추가로 `subject_active_days`, `manual_points_sum`을 payload에 넣지만, `_points_facts`는 period/cumulative(/rwb)만 packet에 복사한다. `child_cumulative_points`는 metrics에 실려도 evidence 금지.
+`points_metrics`는 추가로 `subject_active_days`, `manual_points_sum`을 payload에 넣지만, `_points_facts`는 period/cumulative(/rwb)와 `point_composition` whitelist(`composition`)만 packet에 복사한다. `child_cumulative_points`는 metrics에 실려도 evidence 금지.
 
 delta: `_period_pair`가 current−previous 형태의 필드를 만듦 (`points.period.delta` 등).
+
+packet `supporting_facts.points.composition` whitelist (재계산 없음):
+
+- totals: `net_points` / `total_earn_points` / `total_spend_points`
+- subjects.{key}: `points` / `active_days`
+- textbook / praise / help: `points`
+- extra_learning: `points` + `by_subject.{key}.points`
+
+넣지 않음: count, material, stationery, unclassified, raw_subject/raw_reason, textbook.by_subject.
+
+`center_context.policy_text`는 센터 운영 정책 자연어(해석 배경). 아동 관측 evidence가 아니며 evidence_id가 없다. 경계 함수: `features/growth/center_policy.py` `get_current_center_policy_text()`.
 
 ---
 
 ## 현재 Growth에서 손실되는 정보
 
 canonical fetch에는 있으나 **teacher Evidence Packet에는** 없음.
-`metrics_bundle['point_composition']`에는 subject/manual/category 구성이 내부적으로 계산된다. packet/AI에는 아직 복사되지 않는다.
+`metrics_bundle['point_composition']`의 material/stationery/unclassified/count/raw text는 packet에 복사되지 않는다. growth-relevant whitelist만 `supporting_facts.points.composition`에 projection한다.
 
 | 정보 | 살아 있는 곳 | 사라지는 곳 |
 |---|---|---|
@@ -1262,27 +1273,41 @@ delta는 v1에 넣지 않음 (Evidence 단계).
 
 ---
 
-## FUTURE — Evidence / Luna (아직 구현 안 됨)
+## FUTURE — Evidence / Luna remaining
 
-```
-metrics_bundle['point_composition']
-  → Evidence Packet aggregate     # 없음
-  → Luna
-```
+packet `supporting_facts.points.composition` whitelist와 `center_context.policy_text`는 CURRENT.
+아직 없음: composition 기반 insight selection, Growth UI breakdown, material/stationery/unclassified를 packet에 넣기, 센터 정책 DB/관리자 UI.
 
-구현됐다고 쓰지 말 것. packet에 composition을 넣을 때 raw text를 넣지 말 것. `ReadingRewardEvent` overlay를 period/`net_points`에 더하지 말 것.
+packet에 raw text를 넣지 말 것. `ReadingRewardEvent` overlay를 period/`net_points`에 더하지 말 것.
 ---
 
 ## FUTURE — 다기관화
 
 미구현. 목표: 센터마다 코드를 포크하지 않고 **설정/mapping 교체**.
 
-향후 설정 후보:
+센터 포인트/학습 운영 정책은 **정형화된 숫자 규칙 schema로 만들지 않는다.**
+센터마다 운영 방식이 전혀 다를 수 있고 숫자 기반 정책조차 아닐 수 있다.
+
+장기 방향:
+
+관리자 초기설정/관리자 페이지
+→ 자연어 textarea로 운영 정책을 자세히 작성
+→ DB 저장 (본문은 자유형. 적용 시점/버전 같은 시스템 메타데이터를 둘 수 있음)
+→ `get_current_center_policy_text()`가 해당 센터 문자열을 반환
+→ Growth Evidence Packet `center_context.policy_text`로 전달
+
+입력 UI 안내(미구현): "우리 센터에서 포인트, 학습, 독서 기록이 어떤 기준으로 입력되는지 AI가 오해하지 않도록 자세히 적어주세요. 가능하면 예외 규칙과 특수 과목의 기준도 함께 작성해주세요." 예시도 함께 제공.
+
+정형화된 0/100/200 form을 제품 전제조건으로 두지 않는다.
+현재는 코드 상수 한 곳만 있으며 DB/UI는 없다.
+
+정책은 아동 판정 규칙이 아니라 **해석 배경**이다. 단일 점수 = GOOD/BAD 평가를 하지 않는다.
+
+그 외 향후 설정 후보:
 
 - reward system on/off
 - display name: 포인트 / 달란트 / 스티커 / 없음
 - subjects
-- input values (200/100 등)
 - manual aliases / classifier
 - textbook-completion reward 사용 여부·금액
 - catalog/item
@@ -1296,6 +1321,14 @@ Rule Engine / 센터 설정 UI / 새 ledger table은 **없음**.
 ---
 
 ## Change Log
+
+### 2026-09-04 (evidence composition + center policy)
+
+- Evidence Packet에 point_composition whitelist projection (totals/subjects/textbook/praise/help/extra_learning)
+- material/stationery/unclassified/raw text는 packet에 넣지 않음
+- `center_context.policy_text` 해석 배경. evidence_id 아님
+- `get_current_center_policy_text()` 교체 경계. DB/UI 없음
+- Growth prompt v9: 단일 점수 기계 평가 금지, 정책 숫자는 아동 evidence가 아님
 
 ### 2026-09-04 (semantic scheduler)
 

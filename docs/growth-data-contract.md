@@ -4,7 +4,7 @@
 여기에 적힌 규칙은 구현 의도가 아니라 `features/growth/`와
 `app.py`의 `fetch_child_daily_point_records()`에서 확인된 semantics다.
 
-teacher evidence packet (`growth_teacher_evidence_v1`)은 구현되어 있다.
+teacher evidence packet (`growth_teacher_evidence_v2`)은 구현되어 있다.
 anonymizer, Subject 일반화, DailyPoints unique 제약은 **구현되어 있지 않다.**
 없는 것을 있는 것처럼 쓰지 않는다.
 
@@ -379,7 +379,7 @@ B3A deterministic factual validator와 B3B AWS Bedrock Guardrails는 성공 저�
 DB / raw ORM
     → deterministic metrics_bundle
     → InsightCandidate / top_candidates
-    → build_teacher_evidence_packet()          # growth_teacher_evidence_v1
+    → build_teacher_evidence_packet()          # growth_teacher_evidence_v2
     → generate_teacher_growth_interpretation() # B4, 버튼 시에만
         → OpenAIGrowthInterpretationProvider
         → validate_teacher_interpretation()    # B3A
@@ -388,7 +388,7 @@ DB / raw ORM
 
 packet은 bundle/ORM dump가 아니라 READ-ONLY projection이다.
 builder는 metrics를 다시 계산하지 않고 DB를 읽지 않는다.
-LLM 입력은 `growth_teacher_evidence_v1` JSON만 허용한다.
+LLM 입력은 `growth_teacher_evidence_v2` JSON만 허용한다.
 
 generator v1:
 
@@ -399,12 +399,15 @@ generator v1:
 - output: `growth_teacher_interpretation_v1` Structured Outputs
 - B6에서 Gemini 2.5 Flash-Lite challenger와 domain eval로 최종 모델 선정 예정
 
-- schema_version: `growth_teacher_evidence_v1`
+- schema_version: `growth_teacher_evidence_v2`
 - audience: `teacher` only. viewer packet 없음
 - 허용: grade, subject key/label, textbook_title, windows, selected insight evidence,
   reading days/completions, period points, cumulative_as_of,
   learning snapshot/page advance/peer/plan/observed study days,
-  selected recent-window facts
+  selected recent-window facts,
+  points.composition whitelist (`net_points` / earn / spend / subjects.points+active_days /
+  textbook·praise·help.points / extra_learning.points+by_subject.points),
+  `center_context.policy_text` (해석 배경. evidence_id 없음. 아동 fact가 아님)
 - 금지: child name, viewer_slug, ORM, DB PK (`plan_id` 포함), reviews/notes,
   URLs, `child_cumulative_points`, raw bundle, chart, headline paraphraser copy
 - unavailable ≠ 0. estimated vs exact 보존. semantic evidence_id

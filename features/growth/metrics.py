@@ -400,7 +400,7 @@ def points_metrics(child_id, as_of=None, window_days=30):
 def point_composition_metrics(child_id, as_of=None, window_days=30):
     """canonical DailyPoints → PointEvent → window composition.
 
-    Evidence Packet / prompt는 이 payload를 읽지 않는다.
+    Evidence Packet은 이 payload의 whitelist만 projection한다. prompt/UI는 읽지 않는다.
     current-center mapping은 features.points 경계에서만 주입한다.
     """
     from features.growth.point_composition import point_composition_from_events

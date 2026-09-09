@@ -288,7 +288,7 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         generator = FakeGenerator()
         with patch('features.growth.ai.runtime.current_runtime_parts') as parts:
             base = current_runtime_parts()
-            base['prompt_version'] = 'growth_teacher_prompt_v9'
+            base['prompt_version'] = 'growth_teacher_prompt_v99'
             parts.return_value = base
             result = self._generate(generator=generator)
         self.assertTrue(result.ok)
@@ -300,7 +300,7 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self._generate()
         with patch('features.growth.ai.runtime.current_runtime_parts') as parts:
             base = current_runtime_parts()
-            base['prompt_version'] = 'growth_teacher_prompt_v9'
+            base['prompt_version'] = 'growth_teacher_prompt_v99'
             parts.return_value = base
             view = load_teacher_ai_view(self.child, as_of=AS_OF, user_id=self.teacher.id)
         self.assertEqual(view['state'], 'stale')

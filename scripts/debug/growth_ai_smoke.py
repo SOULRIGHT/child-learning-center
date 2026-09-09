@@ -23,7 +23,7 @@ def load_local_env(env_path=None):
 
 
 SYNTHETIC_PACKET = {
-    'schema_version': 'growth_teacher_evidence_v1',
+    'schema_version': 'growth_teacher_evidence_v2',
     'audience': 'teacher',
     'as_of': '2026-12-15',
     'grade': 3,

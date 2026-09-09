@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-FACTUAL_VALIDATOR_VERSION = 'growth_teacher_factual_validator_v2'
+FACTUAL_VALIDATOR_VERSION = 'growth_teacher_factual_validator_v3'
 
 CODE_EMPTY_EVIDENCE_IDS = 'EMPTY_EVIDENCE_IDS'
 CODE_UNKNOWN_EVIDENCE_ID = 'UNKNOWN_EVIDENCE_ID'
@@ -315,7 +315,7 @@ def _unit_for(evidence_id):
         return UNIT_COUNT
     if 'observed_study_days' in evidence_id:
         return UNIT_DAY
-    if 'activity_days' in evidence_id:
+    if 'active_days' in evidence_id or 'activity_days' in evidence_id:
         return UNIT_DAY
     if 'completions' in evidence_id:
         return UNIT_BOOK

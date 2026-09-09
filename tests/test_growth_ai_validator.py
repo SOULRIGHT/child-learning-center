@@ -12,6 +12,7 @@ from features.growth.ai.validator import (
     CODE_UNIT_MISMATCH,
     CODE_UNKNOWN_EVIDENCE_ID,
     CODE_UNSUPPORTED_NUMERIC_CLAIM,
+    FACTUAL_VALIDATOR_VERSION,
     collect_evidence_index,
     validate_teacher_interpretation,
 )
@@ -179,7 +180,41 @@ def _codes(result):
     return tuple(item.code for item in result.violations)
 
 
+def _composition_unit_packet():
+    return {
+        'schema_version': SCHEMA_VERSION,
+        'supporting_facts': {
+            'reading': {
+                'activity_days': {
+                    'current': _fact('reading.activity_days.current', 5),
+                },
+            },
+            'points': {
+                'composition': {
+                    'subjects': {
+                        'korean': {
+                            'points': {
+                                'current': _fact(
+                                    'points.composition.subjects.korean.points.current', 200,
+                                ),
+                            },
+                            'active_days': {
+                                'current': _fact(
+                                    'points.composition.subjects.korean.active_days.current', 4,
+                                ),
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+
 class GrowthAIValidatorTests(unittest.TestCase):
+    def test_factual_validator_version(self):
+        self.assertEqual(FACTUAL_VALIDATOR_VERSION, 'growth_teacher_factual_validator_v3')
+
     def test_empty_summary_evidence_ids_rejected(self):
         result = validate_teacher_interpretation(
             _packet(),
@@ -635,6 +670,37 @@ class GrowthAIValidatorTests(unittest.TestCase):
         self.assertEqual(index['reading.completions.current'].unit, 'book')
         self.assertEqual(index['rewards.exemption.usage.current'].unit, 'count')
         self.assertEqual(index['rewards.manual.event_count.current'].unit, 'count')
+
+    def test_composition_active_days_are_day_unit(self):
+        packet = _composition_unit_packet()
+        index = collect_evidence_index(packet)
+        self.assertEqual(
+            index['points.composition.subjects.korean.points.current'].unit, 'point',
+        )
+        self.assertEqual(
+            index['points.composition.subjects.korean.active_days.current'].unit, 'day',
+        )
+
+    def test_composition_active_days_day_claim_passes(self):
+        result = validate_teacher_interpretation(
+            _composition_unit_packet(),
+            _output(
+                summary='국어 포인트 활동일은 4일입니다.',
+                summary_ids=['points.composition.subjects.korean.active_days.current'],
+            ),
+        )
+        self.assertTrue(result.valid)
+
+    def test_composition_active_days_point_claim_rejected(self):
+        result = validate_teacher_interpretation(
+            _composition_unit_packet(),
+            _output(
+                summary='국어 포인트 활동일은 4점입니다.',
+                summary_ids=['points.composition.subjects.korean.active_days.current'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_UNIT_MISMATCH, _codes(result))
 
     def test_missing_next_check_rejected(self):
         output = _output(
