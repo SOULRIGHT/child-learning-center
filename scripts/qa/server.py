@@ -303,7 +303,14 @@ def main() -> int:
             raise RuntimeError(f'QA resolved engine mismatch: {resolved}')
         from features.dates import kst_today
         as_of = kst_today()
-        state = _seed(db, as_of)
+        if (os.environ.get('CLC_QA_SEED') or '').strip() == 'preview':
+            qa_dir = Path(__file__).resolve().parent
+            if str(qa_dir) not in sys.path:
+                sys.path.insert(0, str(qa_dir))
+            from preview import seed_preview  # noqa: WPS433
+            state = seed_preview(db, as_of)
+        else:
+            state = _seed(db, as_of)
         state['port'] = port
         state['secret_key'] = app.config['SECRET_KEY']
         state_path.write_text(json.dumps(state, ensure_ascii=False), encoding='utf-8')

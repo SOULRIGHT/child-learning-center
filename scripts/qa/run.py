@@ -1,6 +1,6 @@
 """Browser QA orchestrator. Does not run the unittest suite.
 
-Usage: python scripts/qa/run.py step3|step4
+Usage: python scripts/qa/run.py step3|step4|step5|step6|preview
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from tests.helpers import (  # noqa: E402
 )
 
 QA_SECRET = 'clc-step0-test-secret'
-USAGE = 'Usage: python scripts/qa/run.py step3|step4|step5|step6'
+USAGE = 'Usage: python scripts/qa/run.py step3|step4|step5|step6|preview'
 
 
 def _pick_port() -> int:
@@ -315,9 +315,15 @@ def run_step3() -> int:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2 or argv[1] not in ('step3', 'step4', 'step5', 'step6'):
+    if len(argv) != 2 or argv[1] not in ('step3', 'step4', 'step5', 'step6', 'preview'):
         print(USAGE)
         return 2
+    if argv[1] == 'preview':
+        qa_dir = Path(__file__).resolve().parent
+        if str(qa_dir) not in sys.path:
+            sys.path.insert(0, str(qa_dir))
+        from preview import run_preview  # noqa: WPS433
+        return run_preview()
     return run_suite(argv[1])
 
 
