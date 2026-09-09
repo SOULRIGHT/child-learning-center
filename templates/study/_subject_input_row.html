@@ -1,0 +1,46 @@
+<div class="card study-row mb-3 {% if row.is_expected %}border-primary{% endif %}" data-row="{{ row.subject_id }}">
+    <div class="card-body">
+        <input type="hidden" name="subject_id" value="{{ row.subject_id }}">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+            <h5 class="mb-0">{{ row.subject_name }}</h5>
+            {% if row.is_expected %}
+            <span class="badge text-bg-primary">예정 과목</span>
+            {% elif row.can_input %}
+            <span class="badge text-bg-light text-muted">추가 학습</span>
+            {% endif %}
+        </div>
+        {% if row.unknown_label %}
+        <p class="small mb-2 {% if row.unknown_kind == 'missing' %}text-danger{% else %}text-warning{% endif %}">{{ row.unknown_label }}</p>
+        {% endif %}
+        {% if row.can_input %}
+        <input type="hidden" name="plan_id_{{ row.subject_id }}" value="{{ row.plan.id }}">
+        <p class="text-muted mb-2">{{ row.plan.textbook_title }} ({{ row.plan.start_page }}~{{ row.plan.end_page }}쪽)</p>
+        <div class="d-flex flex-wrap gap-3 mb-2">
+            <label class="form-check-label">
+                <input class="form-check-input js-child-status" type="radio" name="study_status_{{ row.subject_id }}" value="studied" {% if row.existing and row.existing.study_status == 'studied' %}checked{% endif %}>
+                공부함
+            </label>
+            <label class="form-check-label">
+                <input class="form-check-input js-child-status" type="radio" name="study_status_{{ row.subject_id }}" value="explicit_not_studied" {% if row.existing and row.existing.study_status == 'explicit_not_studied' %}checked{% endif %}>
+                공부하지 않음
+            </label>
+            <label class="form-check-label">
+                <input class="form-check-input js-child-status" type="radio" name="study_status_{{ row.subject_id }}" value="unknown" {% if row.existing and row.existing.study_status == 'unknown' %}checked{% endif %}>
+                기억 안 남
+            </label>
+        </div>
+        <div class="row g-2 js-child-pages {% if not row.existing or row.existing.study_status != 'studied' %}d-none{% endif %}">
+            <div class="col-6">
+                <label class="form-label" for="start_page_{{ row.subject_id }}">시작 페이지</label>
+                <input class="form-control js-child-start" id="start_page_{{ row.subject_id }}" name="start_page_{{ row.subject_id }}" type="number" min="{{ row.plan.start_page }}" max="{{ row.plan.end_page }}" value="{{ row.existing.start_page if row.existing and row.existing.start_page else '' }}">
+            </div>
+            <div class="col-6">
+                <label class="form-label" for="end_page_{{ row.subject_id }}">끝 페이지</label>
+                <input class="form-control js-child-end" id="end_page_{{ row.subject_id }}" name="end_page_{{ row.subject_id }}" type="number" min="{{ row.plan.start_page }}" max="{{ row.plan.end_page }}" value="{{ row.existing.end_page if row.existing and row.existing.end_page else '' }}">
+            </div>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">{{ no_plan_message }}</p>
+        {% endif %}
+    </div>
+</div>

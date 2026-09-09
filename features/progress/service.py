@@ -113,12 +113,16 @@ def list_subjects(include_inactive=True):
 
 
 def list_active_subjects():
-    """활성 과목 SELECT만 수행한다. 누락 row를 재생성하지 않는다."""
+    """활성 LearningSubject를 DB에서 읽는다. 누락 row를 재생성하지 않는다.
+
+    Growth vNext 학습 요일/정상학습일/입력 과목 목록의 정본이다.
+    국어/수학/쎈 같은 현재 센터 구성을 코드에 고정하지 않는다.
+    """
     return list_subjects(include_inactive=False)
 
 
 def list_progress_input_subjects():
-    """진도 입력에 쓰는 현재 고정 3과목. 관리 UI 없이 운영한다."""
+    """레거시 진도 스냅샷 입력용 고정 3과목. Growth vNext resolver는 쓰지 않는다."""
     wanted = set(PROGRESS_SUBJECT_KEYS)
     return [row for row in list_active_subjects() if row.key in wanted]
 

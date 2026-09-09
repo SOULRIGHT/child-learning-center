@@ -5,7 +5,6 @@ from sqlalchemy.orm import joinedload
 
 from feature_models import LearningStudySession, LearningWorkbookPlan
 from features.planning.timeline import resolve_canonical_workbook_plan
-from features.progress.service import list_progress_input_subjects
 from features.reading.access import model_named
 from features.study.constants import (
     RECORD_VERIFICATION_OBSERVED,
@@ -14,6 +13,13 @@ from features.study.constants import (
     STUDY_STATUS_STUDIED,
     STUDY_STATUS_UNKNOWN,
 )
+from features.study.metrics import (
+    UNKNOWN_KIND_EXPLICIT,
+    UNKNOWN_KIND_MISSING,
+    subject_day_state,
+)
+from features.study.schedule import expected_subjects
+from features.study.subjects import list_study_subjects
 
 CHILD_NO_PLAN_MESSAGE = (
     '아직 등록된 교재가 없어요. 선생님께 교재 등록을 부탁해 주세요.'
@@ -100,7 +106,7 @@ def list_assignment_plans(child, as_of=None):
     grade = getattr(child, 'grade', None)
     if grade is None:
         return []
-    allowed_ids = {subject.id for subject in list_progress_input_subjects()}
+    allowed_ids = {subject.id for subject in list_study_subjects()}
     if not allowed_ids:
         return []
     plans = (
@@ -139,11 +145,16 @@ def pick_applicable_plan(child, subject, as_of):
 
 
 def list_child_study_rows(child, as_of):
-    """활성 과목 행. 과목명은 DB에서 오며 하드코딩하지 않는다."""
-    from features.study.records import find_subject_day_session
+    """활성 과목 행. 과목명은 DB에서 오며 하드코딩하지 않는다.
 
+    아동 self-entry는 expected_subjects로 제한하지 않는다.
+    is_expected는 예정 과목 강조에만 쓴다.
+    """
+    from features.study.records import find_subject_day_session, list_subject_day_sessions
+
+    expected_ids = {subject.id for subject in expected_subjects(child.id, as_of)}
     rows = []
-    for subject in list_progress_input_subjects():
+    for subject in list_study_subjects():
         plan = pick_applicable_plan(child, subject, as_of)
         existing = None
         if plan is not None:
@@ -153,6 +164,16 @@ def list_child_study_rows(child, as_of):
                 as_of,
                 learning_workbook_plan_id=plan.id,
             )
+        is_expected = subject.id in expected_ids
+        unknown_kind = None
+        if is_expected:
+            state = subject_day_state(
+                child.id,
+                subject.id,
+                as_of,
+                list_subject_day_sessions(child.id, subject.id, as_of),
+            )
+            unknown_kind = state.get('unknown_kind')
         rows.append({
             'subject_id': subject.id,
             'subject_name': subject.name,
@@ -164,6 +185,49 @@ def list_child_study_rows(child, as_of):
             },
             'existing': None if existing is None else present_study_session(existing),
             'can_input': plan is not None,
+            'is_expected': is_expected,
+            'unknown_kind': unknown_kind,
+        })
+    rows.sort(key=lambda row: (not row['is_expected'], row['subject_id']))
+    return rows
+
+
+def list_teacher_post_entry_rows(child, as_of):
+    """LEARN-018: 그날 expected 과목 중 outcome=unknown 만."""
+    from features.study.records import find_subject_day_session, list_subject_day_sessions
+
+    rows = []
+    for subject in expected_subjects(child.id, as_of):
+        sessions = list_subject_day_sessions(child.id, subject.id, as_of)
+        state = subject_day_state(child.id, subject.id, as_of, sessions)
+        if not state['expected'] or state['outcome'] != STUDY_STATUS_UNKNOWN:
+            continue
+        plan = pick_applicable_plan(child, subject, as_of)
+        existing = None
+        if plan is not None:
+            existing = find_subject_day_session(
+                child.id,
+                subject.id,
+                as_of,
+                learning_workbook_plan_id=plan.id,
+            )
+        unknown_kind = state.get('unknown_kind') or UNKNOWN_KIND_MISSING
+        rows.append({
+            'subject_id': subject.id,
+            'subject_name': subject.name,
+            'plan': None if plan is None else {
+                'id': plan.id,
+                'textbook_title': plan.textbook_title,
+                'start_page': plan.start_page,
+                'end_page': plan.end_page,
+            },
+            'existing': None if existing is None else present_study_session(existing),
+            'can_input': plan is not None,
+            'is_expected': True,
+            'unknown_kind': unknown_kind,
+            'unknown_label': (
+                '기억 안 남' if unknown_kind == UNKNOWN_KIND_EXPLICIT else '미입력'
+            ),
         })
     return rows
 

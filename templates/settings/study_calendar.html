@@ -7,9 +7,11 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <div>
         <h4 class="mb-1">센터 기본 학습요일</h4>
-        <p class="text-muted mb-0">별도 요일이 지정되지 않은 아동의 예정 학습요일입니다. 출석 기록이나 공휴일은 반영하지 않습니다.</p>
+        <p class="text-muted mb-0">별도 요일이 지정되지 않은 아동의 예정 학습요일입니다. 출석 기록이나 공휴일은 반영하지 않습니다. 과목별 요일과 비학습일은 아래 링크에서 관리합니다.</p>
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('planning.manage_subject_weekdays') }}" class="btn btn-outline-primary">과목별 학습요일</a>
+        <a href="{{ url_for('planning.manage_non_study_days') }}" class="btn btn-outline-primary">비학습일</a>
         <a href="{{ url_for('planning.manage_workbook_plans') }}" class="btn btn-outline-primary">교재 계획 관리</a>
         <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary">설정으로</a>
     </div>

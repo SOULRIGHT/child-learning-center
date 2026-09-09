@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}월별 비학습일{% endblock %}
+{% block page_title %}월별 비학습일{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-1">월별 비학습일</h4>
+        <p class="text-muted mb-0">법정공휴일과 센터 지정 휴무/행사/체험일은 정상학습일 분모에서 제외됩니다. 출석이나 미학습으로 세지 않습니다.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('planning.manage_study_calendar') }}" class="btn btn-outline-primary">센터 기본 학습요일</a>
+        <a href="{{ url_for('planning.manage_subject_weekdays') }}" class="btn btn-outline-primary">과목별 학습요일</a>
+        <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary">설정으로</a>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a class="btn btn-outline-secondary" href="{{ url_for('planning.manage_non_study_days', year=prev_year, month=prev_month) }}">이전 달</a>
+    <h5 class="mb-0">{{ year }}년 {{ month }}월</h5>
+    <a class="btn btn-outline-secondary" href="{{ url_for('planning.manage_non_study_days', year=next_year, month=next_month) }}">다음 달</a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">이달 비학습일</div>
+    <div class="card-body p-0">
+        {% if rows %}
+        <div class="table-responsive">
+            <table class="table mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>날짜</th>
+                        <th>요일</th>
+                        <th>구분</th>
+                        <th>이름</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td>{{ row.day.isoformat() }}</td>
+                        <td>{{ row.weekday_label }}</td>
+                        <td>{{ row.source_label }}</td>
+                        <td>{{ row.label or '-' }}</td>
+                        <td class="text-end">
+                            <form method="post" action="{{ url_for('planning.manage_non_study_days', year=year, month=month) }}" class="d-inline">
+                                <input type="hidden" name="action" value="restore">
+                                <input type="hidden" name="year" value="{{ year }}">
+                                <input type="hidden" name="month" value="{{ month }}">
+                                <input type="hidden" name="day" value="{{ row.day.isoformat() }}">
+                                {% if row.is_holiday %}
+                                <button class="btn btn-sm btn-outline-primary" type="submit">학습일로 복구</button>
+                                {% else %}
+                                <button class="btn btn-sm btn-outline-danger" type="submit">삭제</button>
+                                {% endif %}
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted p-3 mb-0">이달 등록된 비학습일이 없습니다.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">법정공휴일 기본값</div>
+    <div class="card-body">
+        <p class="text-muted small mb-2">이 해 기본 공휴일은 처음 이 화면을 열 때 한 번 채워집니다. 학습일로 복구한 공휴일은 자동으로 다시 생기지 않습니다. 아래 버튼만 명시적으로 기본값을 다시 채웁니다.</p>
+        <form method="post" action="{{ url_for('planning.manage_non_study_days', year=year, month=month) }}">
+            <input type="hidden" name="action" value="restore_year_holidays">
+            <input type="hidden" name="year" value="{{ year }}">
+            <input type="hidden" name="month" value="{{ month }}">
+            <button class="btn btn-outline-secondary" type="submit">{{ year }}년 법정공휴일 기본값 다시 채우기</button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">센터 비학습일 추가</div>
+    <div class="card-body">
+        <p class="text-muted small">휴무, 행사, 체험, 임시공휴일처럼 센터가 지정한 날을 추가합니다.</p>
+        <form method="post" action="{{ url_for('planning.manage_non_study_days', year=year, month=month) }}" class="row g-2 align-items-end">
+            <input type="hidden" name="action" value="add">
+            <input type="hidden" name="year" value="{{ year }}">
+            <input type="hidden" name="month" value="{{ month }}">
+            <div class="col-md-3">
+                <label class="form-label" for="non-study-day">날짜</label>
+                <input class="form-control" id="non-study-day" name="day" type="date" min="{{ start.isoformat() }}" max="{{ end.isoformat() }}" required>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label" for="non-study-label">이름</label>
+                <input class="form-control" id="non-study-label" name="label" type="text" maxlength="80" placeholder="체험학습, 센터 휴무 등">
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-primary" type="submit">추가</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

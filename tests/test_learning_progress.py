@@ -31,6 +31,7 @@ from features.progress.service import (  # noqa: E402
     set_subject_active,
     update_subject,
 )
+from features.study.subjects import list_study_subjects  # noqa: E402
 
 
 class LearningProgressTests(unittest.TestCase):
@@ -351,21 +352,38 @@ class LearningProgressTests(unittest.TestCase):
     def test_progress_input_shows_fixed_korean_math_ssen_only(self):
         ensure_default_subjects()
         create_subject('science', '과학', sort_order=90)
-        science = LearningSubject.query.filter_by(key='science').one()
         self._login(self.teacher_id)
         html = self.client.get(f'/children/{self.child_id}').get_data(as_text=True)
         self.assertEqual(
             [row.key for row in list_progress_input_subjects()],
             ['korean', 'math', 'ssen'],
         )
-        self.assertIn('국어', html)
-        self.assertIn('수학', html)
-        self.assertIn('쎈', html)
-        self.assertNotIn(f'<option value="{science.id}">과학</option>', html)
         self.assertEqual(
             [row['subject'].key for row in current_progress_for_child(self.child_id)],
             ['korean', 'math', 'ssen'],
         )
+        marker = '기존 진도 기록 (읽기 전용'
+        start = html.find(marker)
+        self.assertGreaterEqual(start, 0)
+        form_start = html.find('id="study-session-form-detail"', start)
+        self.assertGreater(form_start, start)
+        legacy = html[start:form_start]
+        self.assertIn('<strong>국어</strong>', legacy)
+        self.assertIn('<strong>수학</strong>', legacy)
+        self.assertIn('<strong>쎈</strong>', legacy)
+        self.assertNotIn('과학', legacy)
+
+    def test_study_input_shows_active_science_subject(self):
+        ensure_default_subjects()
+        create_subject('science', '과학', sort_order=90)
+        science = LearningSubject.query.filter_by(key='science').one()
+        self._login(self.teacher_id)
+        html = self.client.get(f'/children/{self.child_id}').get_data(as_text=True)
+        self.assertIn('science', [row.key for row in list_study_subjects()])
+        form_start = html.find('id="study-session-form-detail"')
+        self.assertGreaterEqual(form_start, 0)
+        form = html[form_start:html.find('</form>', form_start)]
+        self.assertIn(f'<option value="{science.id}">과학</option>', form)
 
     def test_daily_points_subject_columns_unchanged(self):
         from features.subjects import CURRENT_SUBJECTS

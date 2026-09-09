@@ -13,6 +13,8 @@
 {% endblock %}
 
 {% block content %}
+{% set expected_rows = rows | selectattr('is_expected') | list %}
+{% set extra_rows = rows | rejectattr('is_expected') | list %}
 <div class="study-child">
     <div class="d-flex gap-2 mb-3 flex-wrap">
         <a href="{{ url_for('viewer_report', view_token=view_token) }}" class="btn btn-outline-secondary">뒤로가기</a>
@@ -28,44 +30,19 @@
     </form>
     <form method="post" action="{{ url_for('study.viewer_save', view_token=view_token) }}" class="js-child-study-form">
         <input type="hidden" name="study_date" value="{{ study_date.isoformat() }}">
-        {% for row in rows %}
-        <div class="card study-row mb-3" data-row="{{ row.subject_id }}">
-            <div class="card-body">
-                <input type="hidden" name="subject_id" value="{{ row.subject_id }}">
-                <h5 class="mb-1">{{ row.subject_name }}</h5>
-                {% if row.can_input %}
-                <input type="hidden" name="plan_id_{{ row.subject_id }}" value="{{ row.plan.id }}">
-                <p class="text-muted mb-2">{{ row.plan.textbook_title }} ({{ row.plan.start_page }}~{{ row.plan.end_page }}쪽)</p>
-                <div class="d-flex flex-wrap gap-3 mb-2">
-                    <label class="form-check-label">
-                        <input class="form-check-input js-child-status" type="radio" name="study_status_{{ row.subject_id }}" value="studied" {% if row.existing and row.existing.study_status == 'studied' %}checked{% endif %}>
-                        공부함
-                    </label>
-                    <label class="form-check-label">
-                        <input class="form-check-input js-child-status" type="radio" name="study_status_{{ row.subject_id }}" value="explicit_not_studied" {% if row.existing and row.existing.study_status == 'explicit_not_studied' %}checked{% endif %}>
-                        공부하지 않음
-                    </label>
-                    <label class="form-check-label">
-                        <input class="form-check-input js-child-status" type="radio" name="study_status_{{ row.subject_id }}" value="unknown" {% if row.existing and row.existing.study_status == 'unknown' %}checked{% endif %}>
-                        기억 안 남
-                    </label>
-                </div>
-                <div class="row g-2 js-child-pages {% if not row.existing or row.existing.study_status != 'studied' %}d-none{% endif %}">
-                    <div class="col-6">
-                        <label class="form-label" for="start_page_{{ row.subject_id }}">시작 페이지</label>
-                        <input class="form-control js-child-start" id="start_page_{{ row.subject_id }}" name="start_page_{{ row.subject_id }}" type="number" min="{{ row.plan.start_page }}" max="{{ row.plan.end_page }}" value="{{ row.existing.start_page if row.existing and row.existing.start_page else '' }}">
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label" for="end_page_{{ row.subject_id }}">끝 페이지</label>
-                        <input class="form-control js-child-end" id="end_page_{{ row.subject_id }}" name="end_page_{{ row.subject_id }}" type="number" min="{{ row.plan.start_page }}" max="{{ row.plan.end_page }}" value="{{ row.existing.end_page if row.existing and row.existing.end_page else '' }}">
-                    </div>
-                </div>
-                {% else %}
-                <p class="text-muted mb-0">{{ no_plan_message }}</p>
-                {% endif %}
-            </div>
-        </div>
+        {% if expected_rows %}
+        <h6 class="mb-2">오늘 예정된 과목</h6>
+        {% for row in expected_rows %}
+        {% include 'study/_subject_input_row.html' %}
         {% endfor %}
+        {% endif %}
+        {% if extra_rows %}
+        <h6 class="mt-4 mb-2 text-muted">추가로 공부한 과목</h6>
+        <p class="text-muted small">예정이 아닌 날에도 공부했으면 여기서 남길 수 있어요.</p>
+        {% for row in extra_rows %}
+        {% include 'study/_subject_input_row.html' %}
+        {% endfor %}
+        {% endif %}
         {% if not rows %}
         <p class="text-muted">지금은 기록할 학습 과목이 없어요.</p>
         {% endif %}
@@ -88,9 +65,6 @@
             if (pages) pages.classList.toggle('d-none', !studied);
             if (startInput) startInput.disabled = !studied;
             if (endInput) endInput.disabled = !studied;
-            if (!studied) {
-                if (startInput) startInput.value = startInput.value && studied ? startInput.value : (studied ? startInput.value : '');
-            }
         }
         row.querySelectorAll('.js-child-status').forEach(function (input) {
             input.addEventListener('change', function () {

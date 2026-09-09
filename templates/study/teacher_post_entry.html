@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}빠진 학습 기록{% endblock %}
+{% block page_title %}빠진 학습 기록{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-1">{{ child.name }} 빠진 학습 기록</h4>
+        <p class="text-muted mb-0">그날 예정된 과목 중 아직 확인되지 않은 기록만 모았습니다. 미입력과 기억 안 남을 구분해 보여 줍니다.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('child_detail', child_id=child.id) }}" class="btn btn-outline-secondary">아동 상세</a>
+        <a href="{{ url_for('planning.manage_subject_weekdays') }}" class="btn btn-outline-primary">과목별 학습요일</a>
+        <a href="{{ url_for('planning.manage_non_study_days') }}" class="btn btn-outline-primary">비학습일</a>
+    </div>
+</div>
+
+<form method="get" action="{{ url_for('study.teacher_post_entry', child_id=child.id) }}" class="card mb-3">
+    <div class="card-body d-flex gap-2 align-items-end flex-wrap">
+        <div>
+            <label class="form-label" for="study_date">날짜</label>
+            <input class="form-control" id="study_date" name="study_date" type="date" value="{{ study_date.isoformat() }}" max="{{ kst_today.isoformat() }}">
+        </div>
+        <button class="btn btn-outline-primary" type="submit">날짜 보기</button>
+    </div>
+</form>
+
+<form method="post" action="{{ url_for('study.teacher_post_entry', child_id=child.id) }}" class="js-child-study-form">
+    <input type="hidden" name="study_date" value="{{ study_date.isoformat() }}">
+    {% for row in rows %}
+    {% include 'study/_subject_input_row.html' %}
+    {% endfor %}
+    {% if not rows %}
+    <p class="text-muted">이 날짜에 사후입력할 예정 과목이 없습니다. 이미 입력이 끝났거나, 정상학습일이 아닙니다.</p>
+    {% endif %}
+    {% if rows %}
+    <div class="mb-3">
+        <div class="form-label">기록 확인</div>
+        <div class="d-flex flex-wrap gap-3">
+            <label class="form-check-label">
+                <input class="form-check-input" type="radio" name="record_verification" value="observed" checked>
+                기록만 함
+            </label>
+            <label class="form-check-label">
+                <input class="form-check-input" type="radio" name="record_verification" value="verified">
+                실제 교재 확인함
+            </label>
+        </div>
+    </div>
+    <button class="btn btn-primary" type="submit">저장</button>
+    {% endif %}
+</form>
+<script>
+(function () {
+    document.querySelectorAll('.study-row').forEach(function (row) {
+        var pages = row.querySelector('.js-child-pages');
+        var startInput = row.querySelector('.js-child-start');
+        var endInput = row.querySelector('.js-child-end');
+        row.querySelectorAll('.js-child-status').forEach(function (input) {
+            input.addEventListener('change', function () {
+                var studied = input.value === 'studied' && input.checked;
+                if (pages) pages.classList.toggle('d-none', !studied);
+                if (startInput) {
+                    startInput.disabled = !studied;
+                    if (!studied) startInput.value = '';
+                }
+                if (endInput) {
+                    endInput.disabled = !studied;
+                    if (!studied) endInput.value = '';
+                }
+            });
+        });
+        var checked = row.querySelector('.js-child-status:checked');
+        var studied = checked && checked.value === 'studied';
+        if (pages) pages.classList.toggle('d-none', !studied);
+        if (startInput) startInput.disabled = !studied;
+        if (endInput) endInput.disabled = !studied;
+    });
+})();
+</script>
+{% endblock %}

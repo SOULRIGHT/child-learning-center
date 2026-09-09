@@ -43,3 +43,7 @@ openai==3.6.0
 
 # Growth AI safety (AWS Bedrock Guardrails ApplyGuardrail).
 boto3==1.40.75
+
+# Korean public / substitute holidays for CenterNonStudyDay seed.
+# Resolver does not union this library at read time; DB rows are the SOT.
+holidays==0.82

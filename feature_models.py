@@ -463,6 +463,17 @@ class CenterNonStudyDay(db.Model):
         return f'<CenterNonStudyDay {self.day} {self.source}>'
 
 
+class CenterSystemHolidaySeed(db.Model):
+    """연도별 법정공휴일 기본값 최초 제공 여부. exclusion row 개수로 추론하지 않는다."""
+    __tablename__ = 'center_system_holiday_seed'
+
+    year = db.Column(db.Integer, primary_key=True)
+    seeded_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<CenterSystemHolidaySeed {self.year}>'
+
+
 class LearningStudySession(db.Model):
     """아동×과목×날짜 학습 세션. LearningProgressEntry 스냅샷과 별 정본이다.
 

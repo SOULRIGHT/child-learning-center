@@ -24,8 +24,15 @@ from features.study.records import (
     mark_sessions_verified,
     update_study_session,
 )
-from features.study.teacher_input import create_teacher_study_session
-from features.study.view import CHILD_NO_PLAN_MESSAGE, list_child_study_rows
+from features.study.teacher_input import (
+    create_teacher_study_session,
+    save_teacher_post_entry_form,
+)
+from features.study.view import (
+    CHILD_NO_PLAN_MESSAGE,
+    list_child_study_rows,
+    list_teacher_post_entry_rows,
+)
 
 study_bp = Blueprint('study', __name__)
 
@@ -195,3 +202,35 @@ def viewer_save(view_token):
     except StudyRecordError as exc:
         flash(exc.message, 'error')
     return redirect(url_for('study.viewer_form', view_token=token, study_date=study_date.isoformat()))
+
+
+@study_bp.route('/children/<int:child_id>/study-post-entry', methods=['GET', 'POST'])
+@login_required
+def teacher_post_entry(child_id):
+    blocked = _forbid_viewer()
+    if blocked:
+        return blocked
+    child = _child_or_404(child_id)
+    study_date = _parse_study_date(
+        request.form.get('study_date') if request.method == 'POST' else request.args.get('study_date')
+    )
+    if request.method == 'POST':
+        try:
+            saved = save_teacher_post_entry_form(child.id, current_user.id, request.form)
+            if saved:
+                flash('빠진 학습 기록을 저장했습니다.', 'success')
+            else:
+                flash('저장할 과목을 선택하지 않았습니다.', 'info')
+        except StudyRecordError as exc:
+            flash(exc.message, 'error')
+        return redirect(
+            url_for('study.teacher_post_entry', child_id=child.id, study_date=study_date.isoformat())
+        )
+    return render_template(
+        'study/teacher_post_entry.html',
+        child=child,
+        study_date=study_date,
+        kst_today=kst_today(),
+        rows=list_teacher_post_entry_rows(child, study_date),
+        no_plan_message=CHILD_NO_PLAN_MESSAGE,
+    )

@@ -2,6 +2,7 @@
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
+from features.dates import kst_today
 from features.planning.exclusions import PlanningError
 from features.planning.service import (
     PLAN_GRADES,
@@ -19,6 +20,16 @@ from features.planning.service import (
 )
 from features.planning.weekdays import WEEKDAY_CHOICES, format_weekdays
 from features.reading.access import get_child
+from features.study.calendar import StudyCalendarError
+from features.study.settings import (
+    add_center_non_study_day_from_form,
+    non_study_days_month_view,
+    parse_year_month,
+    restore_non_study_day_from_form,
+    restore_year_system_holidays,
+    save_subject_weekdays_from_form,
+    subject_weekdays_settings_rows,
+)
 
 planning_bp = Blueprint('planning', __name__)
 
@@ -61,6 +72,68 @@ def manage_study_calendar():
         weekday_choices=WEEKDAY_CHOICES,
         selected_weekdays=selected,
         selected_label=format_weekdays(selected),
+    )
+
+
+@planning_bp.route('/settings/subject-weekdays', methods=['GET', 'POST'])
+@login_required
+def manage_subject_weekdays():
+    blocked = _forbid_viewer()
+    if blocked:
+        return blocked
+    if request.method == 'POST':
+        try:
+            save_subject_weekdays_from_form(request.form)
+            flash('과목별 예정 학습요일을 저장했습니다.', 'success')
+        except (PlanningError, StudyCalendarError) as exc:
+            flash(exc.message, 'error')
+        return redirect(url_for('planning.manage_subject_weekdays'))
+    return render_template(
+        'settings/subject_weekdays.html',
+        **subject_weekdays_settings_rows(),
+    )
+
+
+@planning_bp.route('/settings/non-study-days', methods=['GET', 'POST'])
+@login_required
+def manage_non_study_days():
+    blocked = _forbid_viewer()
+    if blocked:
+        return blocked
+    today = kst_today()
+    try:
+        year, month = parse_year_month(
+            request.values.get('year'),
+            request.values.get('month'),
+            today=today,
+        )
+    except StudyCalendarError as exc:
+        flash(exc.message, 'error')
+        year, month = today.year, today.month
+    if request.method == 'POST':
+        action = (request.form.get('action') or 'add').strip()
+        try:
+            if action == 'restore':
+                restore_non_study_day_from_form(request.form)
+                flash('해당 날짜를 학습일로 복구했습니다.', 'success')
+            elif action == 'restore_year_holidays':
+                created = restore_year_system_holidays(year)
+                if created:
+                    flash(f'{year}년 법정공휴일 기본값을 {created}건 다시 채웠습니다.', 'success')
+                else:
+                    flash(f'{year}년 법정공휴일 기본값은 이미 반영되어 있습니다.', 'info')
+            else:
+                add_center_non_study_day_from_form(
+                    request.form,
+                    created_by_user_id=current_user.id,
+                )
+                flash('센터 비학습일을 추가했습니다.', 'success')
+        except StudyCalendarError as exc:
+            flash(exc.message, 'error')
+        return redirect(url_for('planning.manage_non_study_days', year=year, month=month))
+    return render_template(
+        'settings/non_study_days.html',
+        **non_study_days_month_view(year, month),
     )
 
 

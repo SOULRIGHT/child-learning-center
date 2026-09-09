@@ -244,6 +244,49 @@ def find_subject_day_session(
     return rows[0]
 
 
+def _as_query_date(raw):
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    try:
+        return date.fromisoformat(str(raw).strip()[:10])
+    except ValueError as exc:
+        raise StudyRecordError('기록 날짜가 올바르지 않습니다.', code='invalid_date') from exc
+
+
+def list_subject_day_sessions(child_id, learning_subject_id, study_date):
+    """같은 child+subject+날짜의 모든 세션. I-2는 studied 여러 행을 하루로 접는다."""
+    day = _as_query_date(study_date)
+    return (
+        LearningStudySession.query
+        .filter_by(
+            child_id=int(child_id),
+            learning_subject_id=int(learning_subject_id),
+            study_date=day,
+        )
+        .order_by(LearningStudySession.id.asc())
+        .all()
+    )
+
+
+def list_child_sessions_in_range(child_id, start_date, end_date):
+    start = _as_query_date(start_date)
+    end = _as_query_date(end_date)
+    return (
+        LearningStudySession.query
+        .filter(LearningStudySession.child_id == int(child_id))
+        .filter(LearningStudySession.study_date >= start)
+        .filter(LearningStudySession.study_date <= end)
+        .order_by(
+            LearningStudySession.study_date.asc(),
+            LearningStudySession.learning_subject_id.asc(),
+            LearningStudySession.id.asc(),
+        )
+        .all()
+    )
+
+
 def save_study_session_writes(writes, *, changed_by_user_id):
     """여러 과목 create/update를 한 트랜잭션으로 저장한다. 빈 목록은 아무 것도 쓰지 않는다."""
     if not writes:

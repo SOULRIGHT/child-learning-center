@@ -124,10 +124,16 @@
                     </h5>
                 </div>
                 <div class="card-body">
-                    <p class="text-muted mb-3">센터 기본 학습요일과 학년별 교재 계획을 관리합니다.</p>
+                    <p class="text-muted mb-3">센터 기본 학습요일, 과목별 요일, 비학습일과 학년별 교재 계획을 관리합니다.</p>
                     <div class="d-grid gap-2">
                         <a href="{{ url_for('planning.manage_study_calendar') }}" class="btn btn-primary">
                             센터 기본 학습요일
+                        </a>
+                        <a href="{{ url_for('planning.manage_subject_weekdays') }}" class="btn btn-outline-primary">
+                            과목별 예정 학습요일
+                        </a>
+                        <a href="{{ url_for('planning.manage_non_study_days') }}" class="btn btn-outline-primary">
+                            월별 비학습일
                         </a>
                         <a href="{{ url_for('planning.manage_workbook_plans') }}" class="btn btn-outline-primary">
                             교재 계획 관리

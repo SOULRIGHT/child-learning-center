@@ -83,6 +83,7 @@
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <span>학습 기록</span>
         <a href="{{ url_for('progress.history', child_id=child.id) }}" class="btn btn-sm btn-outline-primary">전체 이력</a>
+        <a href="{{ url_for('study.teacher_post_entry', child_id=child.id) }}" class="btn btn-sm btn-outline-primary">빠진 학습 기록</a>
     </div>
     <div class="card-body">
         {% include 'study/_recent.html' %}

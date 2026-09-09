@@ -5,6 +5,8 @@ from features.study.assignment import (
     physical_page_bounds,
 )
 from features.study.calendar import (
+    delete_center_non_study_day,
+    delete_subject_study_weekdays,
     save_center_non_study_day,
     save_subject_study_weekdays,
 )
@@ -23,12 +25,13 @@ from features.study.records import (
     mark_sessions_verified,
     update_study_session,
 )
-from features.study.teacher_input import create_teacher_study_session
+from features.study.teacher_input import create_teacher_study_session, save_teacher_post_entry_form
 from features.study.view import (
     list_assignment_plans,
     list_child_study_rows,
     list_observed_study_sessions,
     list_recent_study_sessions,
+    list_teacher_post_entry_rows,
     teacher_study_template_vars,
 )
 
@@ -43,16 +46,20 @@ __all__ = [
     'create_study_session',
     'create_teacher_study_session',
     'delete_study_session',
+    'delete_center_non_study_day',
+    'delete_subject_study_weekdays',
     'list_assignment_plans',
     'list_child_study_rows',
     'list_observed_study_sessions',
     'list_recent_study_sessions',
+    'list_teacher_post_entry_rows',
     'mark_sessions_verified',
     'permanently_excluded_ranges',
     'physical_page_bounds',
     'save_center_non_study_day',
     'save_child_study_form',
     'save_subject_study_weekdays',
+    'save_teacher_post_entry_form',
     'teacher_study_template_vars',
     'update_study_session',
 ]

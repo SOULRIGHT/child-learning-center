@@ -11,7 +11,7 @@ from features.progress.service import (
     get_subject,
     history_for_child,
     kst_today,
-    list_progress_input_subjects,
+    list_active_subjects,
     list_subjects,
     set_subject_active,
     update_subject,
@@ -115,7 +115,7 @@ def history(child_id):
         child=child,
         rows=history_for_child(child_id),
         current_rows=current_progress_for_child(child_id),
-        active_subjects=list_progress_input_subjects(),
+        active_subjects=list_active_subjects(),
         kst_today=kst_today(),
         **teacher_study_template_vars(child, recent_limit=40),
     )

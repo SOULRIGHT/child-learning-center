@@ -49,6 +49,61 @@ def save_subject_study_weekdays(learning_subject_id, study_weekdays):
     return row
 
 
+def get_subject_study_weekdays(learning_subject_id):
+    """저장된 과목별 요일. row가 없으면 None (센터 기본 fallback)."""
+    row = CenterSubjectStudyWeekdays.query.filter_by(
+        learning_subject_id=int(learning_subject_id),
+    ).first()
+    if row is None or row.study_weekdays is None:
+        return None
+    try:
+        return canonicalize_weekdays(row.study_weekdays)
+    except PlanningError as exc:
+        raise StudyCalendarError(exc.message, code=getattr(exc, 'code', 'invalid_weekdays')) from exc
+
+
+def delete_subject_study_weekdays(learning_subject_id):
+    """과목별 요일 row를 지워 센터 기본 fallback으로 되돌린다."""
+    row = CenterSubjectStudyWeekdays.query.filter_by(
+        learning_subject_id=int(learning_subject_id),
+    ).first()
+    if row is None:
+        return False
+    db.session.delete(row)
+    db.session.commit()
+    return True
+
+
+def get_center_non_study_day(day):
+    if not isinstance(day, date) or isinstance(day, datetime):
+        raise StudyCalendarError('날짜가 올바르지 않습니다.', code='invalid_date')
+    return CenterNonStudyDay.query.filter_by(day=day).first()
+
+
+def list_center_non_study_days(start_date, end_date):
+    if not isinstance(start_date, date) or isinstance(start_date, datetime):
+        raise StudyCalendarError('날짜가 올바르지 않습니다.', code='invalid_date')
+    if not isinstance(end_date, date) or isinstance(end_date, datetime):
+        raise StudyCalendarError('날짜가 올바르지 않습니다.', code='invalid_date')
+    return (
+        CenterNonStudyDay.query
+        .filter(CenterNonStudyDay.day >= start_date)
+        .filter(CenterNonStudyDay.day <= end_date)
+        .order_by(CenterNonStudyDay.day.asc(), CenterNonStudyDay.id.asc())
+        .all()
+    )
+
+
+def delete_center_non_study_day(day):
+    """비학습일/공휴일 exclusion row 삭제. 해당 날짜는 학습일로 복구된다."""
+    row = get_center_non_study_day(day)
+    if row is None:
+        return False
+    db.session.delete(row)
+    db.session.commit()
+    return True
+
+
 def save_center_non_study_day(day, *, source=NON_STUDY_SOURCE_CENTER, label=None, created_by_user_id=None):
     """비학습일 1건 저장. 공휴일 기본값을 자동 seed 하지 않는다."""
     if not isinstance(day, date) or isinstance(day, datetime):

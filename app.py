@@ -628,6 +628,7 @@ def restrict_general_user_from_settings():
         'progress.manage_subjects', 'progress.create_subject_route', 'progress.update_subject_route',
         'planning.manage_study_calendar', 'planning.manage_workbook_plans',
         'planning.edit_workbook_plan',
+        'planning.manage_subject_weekdays', 'planning.manage_non_study_days',
     }
 
     if endpoint in settings_endpoints:
@@ -1683,7 +1684,7 @@ def child_detail(child_id):
     # 총 누적 포인트 (실제 전체 누적)
     total_points = child.cumulative_points
     
-    from features.progress.service import current_progress_for_child, list_progress_input_subjects, kst_today
+    from features.progress.service import current_progress_for_child, list_active_subjects, kst_today
     from features.exemption.service import child_exemption_snapshot
     from features.planning.service import child_study_weekdays_view
     from features.study.view import teacher_study_template_vars
@@ -1700,7 +1701,7 @@ def child_detail(child_id):
                          total_records=total_records,
                          per_page=per_page,
                          current_rows=current_progress_for_child(child_id),
-                         active_subjects=list_progress_input_subjects(),
+                         active_subjects=list_active_subjects(),
                          kst_today=kst_today(),
                          exemption_status=child_exemption_snapshot(child_id),
                          study_weekdays=child_study_weekdays_view(child_id),
@@ -2955,7 +2956,7 @@ def points_input(child_id):
     from features.reading.policy import is_general_reading_v2
     from features.reading.service import snapshot_for_date
     from features.presets.service import list_active_presets
-    from features.progress.service import current_progress_for_child, list_progress_input_subjects, kst_today
+    from features.progress.service import current_progress_for_child, list_active_subjects, kst_today
     from features.exemption.service import child_exemption_snapshot
     from features.study.view import teacher_study_template_vars
     reading_snapshot = snapshot_for_date(child_id, selected_date)
@@ -2978,7 +2979,7 @@ def points_input(child_id):
                           reading_current_book_title=reading_snapshot['current_book_title'],
                           manual_presets=manual_presets,
                           current_rows=current_progress_for_child(child_id),
-                          active_subjects=list_progress_input_subjects(),
+                          active_subjects=list_active_subjects(),
                           kst_today=kst_today(),
                           exemption_status=child_exemption_snapshot(child_id, selected_date),
                           is_viewer_mode=False,
@@ -6182,6 +6183,7 @@ from feature_models import (  # noqa: E402
     ChildStudyWeekdays,
     CenterSubjectStudyWeekdays,
     CenterNonStudyDay,
+    CenterSystemHolidaySeed,
     LearningStudySession,
     LearningStudySessionChange,
     ExemptionTicket,

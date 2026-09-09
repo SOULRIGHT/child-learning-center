@@ -6,8 +6,16 @@ from features.study.constants import (
     INPUT_CHANNEL_TEACHER,
     RECORD_VERIFICATION_OBSERVED,
     RECORD_VERIFICATION_VERIFIED,
+    STUDY_STATUS_UNKNOWN,
 )
-from features.study.records import create_study_session
+from features.study.metrics import subject_day_state
+from features.study.records import (
+    create_study_session,
+    find_subject_day_session,
+    list_subject_day_sessions,
+    save_study_session_writes,
+)
+from features.study.schedule import expected_subjects
 
 
 def create_teacher_study_session(child_id, recorded_by_user_id, form):
@@ -36,3 +44,59 @@ def create_teacher_study_session(child_id, recorded_by_user_id, form):
         actor_type=ACTOR_TEACHER,
         input_channel=INPUT_CHANNEL_TEACHER,
     )
+
+
+def save_teacher_post_entry_form(child_id, recorded_by_user_id, form):
+    """LEARN-018 사후입력. expected+unknown 과목만 저장한다. 포인트 원장을 보지 않는다."""
+    study_date = form.get('study_date')
+    allowed_ids = set()
+    for subject in expected_subjects(child_id, study_date):
+        state = subject_day_state(
+            child_id,
+            subject.id,
+            study_date,
+            list_subject_day_sessions(child_id, subject.id, study_date),
+        )
+        if state['expected'] and state['outcome'] == STUDY_STATUS_UNKNOWN:
+            allowed_ids.add(subject.id)
+    verification = '' if form.get('record_verification') is None else str(
+        form.get('record_verification')
+    ).strip()
+    if verification != RECORD_VERIFICATION_VERIFIED:
+        verification = RECORD_VERIFICATION_OBSERVED
+    writes = []
+    for raw_id in form.getlist('subject_id'):
+        try:
+            subject_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if subject_id not in allowed_ids:
+            continue
+        status = '' if form.get(f'study_status_{raw_id}') is None else str(
+            form.get(f'study_status_{raw_id}')
+        ).strip()
+        if not status:
+            continue
+        existing = find_subject_day_session(child_id, subject_id, study_date)
+        shared = {
+            'study_status': status,
+            'start_page': form.get(f'start_page_{raw_id}', ''),
+            'end_page': form.get(f'end_page_{raw_id}', ''),
+        }
+        if existing is None:
+            writes.append({
+                'existing': None,
+                'fields': {
+                    'child_id': child_id,
+                    'learning_subject_id': subject_id,
+                    'study_date': study_date,
+                    'recorded_by_user_id': recorded_by_user_id,
+                    'actor_type': ACTOR_TEACHER,
+                    'input_channel': INPUT_CHANNEL_TEACHER,
+                    'record_verification': verification,
+                    **shared,
+                },
+            })
+        else:
+            writes.append({'existing': existing, 'fields': shared})
+    return save_study_session_writes(writes, changed_by_user_id=recorded_by_user_id)

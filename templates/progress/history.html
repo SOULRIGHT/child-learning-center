@@ -9,7 +9,8 @@
         <h4 class="mb-1">{{ child.name }} 학습 기록</h4>
         <p class="text-muted mb-0">새 학습 기록은 시작~끝 페이지로 저장합니다. 같은 날 공부한 구간을 여러 개 남길 수 있습니다.</p>
     </div>
-    <a href="{{ url_for('child_detail', child_id=child.id) }}" class="btn btn-outline-secondary">아동 상세</a>
+        <a href="{{ url_for('child_detail', child_id=child.id) }}" class="btn btn-outline-secondary">아동 상세</a>
+        <a href="{{ url_for('study.teacher_post_entry', child_id=child.id) }}" class="btn btn-outline-primary">빠진 학습 기록</a>
 </div>
 
 <div class="card mb-4">
