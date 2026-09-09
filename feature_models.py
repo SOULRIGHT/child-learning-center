@@ -104,6 +104,18 @@ TICKET_STATUS_USED = 'used'
 TICKET_STATUS_EXPIRED = 'expired'
 TICKET_STATUS_REVOKED = 'revoked'
 
+# 일일 학습 세션. reading/session.py 의 viewer 본인확인(verified)과 다른 축이다.
+STUDY_STATUS_STUDIED = 'studied'
+STUDY_STATUS_EXPLICIT_NOT_STUDIED = 'explicit_not_studied'
+STUDY_STATUS_UNKNOWN = 'unknown'
+RECORD_VERIFICATION_OBSERVED = 'observed'
+RECORD_VERIFICATION_VERIFIED = 'verified'
+STUDY_CHANGE_CREATED = 'created'
+STUDY_CHANGE_UPDATED = 'updated'
+STUDY_CHANGE_DELETED = 'deleted'
+NON_STUDY_SOURCE_CENTER = 'center'
+NON_STUDY_SOURCE_SYSTEM_HOLIDAY = 'system_holiday'
+
 
 class ChildReading(db.Model):
     """한 아동이 한 권을 읽은 전체 기간."""
@@ -313,7 +325,12 @@ class LearningProgressEntry(db.Model):
 
 
 class LearningWorkbookPlan(db.Model):
-    """학년+과목+교재 공유 학습 계획. 진도 스냅샷(LearningProgressEntry)과 섞지 않는다."""
+    """학년+과목+교재 공유 학습 계획. 진도 스냅샷(LearningProgressEntry)과 섞지 않는다.
+
+    start_page~end_page 는 교재 물리 구간이다.
+    exclusion_ranges_json 은 교사 계획상 영구 제외 페이지다.
+    일시적으로 건너뛴 페이지는 여기에 넣지 않으며, 학습 세션에 없다고 완료로 채우지 않는다.
+    """
     __tablename__ = 'learning_workbook_plan'
     __table_args__ = (
         UniqueConstraint(
@@ -391,6 +408,196 @@ class ChildStudyWeekdays(db.Model):
 
     def __repr__(self):
         return f'<ChildStudyWeekdays child={self.child_id} {self.study_weekdays}>'
+
+
+class CenterSubjectStudyWeekdays(db.Model):
+    """과목별 예정 학습요일. row가 없으면 이후 계산이 센터 기본 요일을 fallback한다."""
+    __tablename__ = 'center_subject_study_weekdays'
+
+    id = db.Column(db.Integer, primary_key=True)
+    learning_subject_id = db.Column(
+        db.Integer,
+        db.ForeignKey('learning_subject.id'),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    study_weekdays = db.Column(db.JSON, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    subject = db.relationship('LearningSubject')
+
+    def __repr__(self):
+        return (
+            f'<CenterSubjectStudyWeekdays subject={self.learning_subject_id} '
+            f'{self.study_weekdays}>'
+        )
+
+
+class CenterNonStudyDay(db.Model):
+    """센터 지정 비학습일 및 향후 시스템 공휴일 seed 자리. 출석/미학습 판정이 아니다."""
+    __tablename__ = 'center_non_study_day'
+    __table_args__ = (
+        UniqueConstraint('day', name='uq_center_non_study_day_day'),
+        CheckConstraint(
+            "source IN ('center', 'system_holiday')",
+            name='ck_center_non_study_day_source',
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    day = db.Column(db.Date, nullable=False, index=True)
+    source = db.Column(
+        db.String(32),
+        nullable=False,
+        default=NON_STUDY_SOURCE_CENTER,
+        server_default='center',
+    )
+    label = db.Column(db.String(80), nullable=True)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<CenterNonStudyDay {self.day} {self.source}>'
+
+
+class LearningStudySession(db.Model):
+    """아동×과목×날짜 학습 세션. LearningProgressEntry 스냅샷과 별 정본이다.
+
+    study_status 와 record_verification 은 독립이다.
+    record_verification 은 교사가 실제 교재를 확인했는지이며,
+    공용 태블릿 viewer 본인확인(features.reading.session)이 아니다.
+    """
+    __tablename__ = 'learning_study_session'
+    __table_args__ = (
+        CheckConstraint(
+            "study_status IN ('studied', 'explicit_not_studied', 'unknown')",
+            name='ck_learning_study_session_study_status',
+        ),
+        CheckConstraint(
+            "record_verification IN ('observed', 'verified')",
+            name='ck_learning_study_session_record_verification',
+        ),
+        CheckConstraint(
+            "("
+            "study_status = 'studied' AND start_page IS NOT NULL AND end_page IS NOT NULL "
+            "AND start_page >= 1 AND start_page <= end_page"
+            ") OR ("
+            "study_status IN ('explicit_not_studied', 'unknown') "
+            "AND start_page IS NULL AND end_page IS NULL"
+            ")",
+            name='ck_learning_study_session_pages_match_status',
+        ),
+        Index(
+            'ix_learning_study_session_child_subject_date',
+            'child_id',
+            'learning_subject_id',
+            'study_date',
+        ),
+        Index(
+            'uq_learning_study_session_non_range_day',
+            'child_id',
+            'learning_subject_id',
+            'study_date',
+            unique=True,
+            sqlite_where=text(
+                "study_status IN ('explicit_not_studied', 'unknown')"
+            ),
+            postgresql_where=text(
+                "study_status IN ('explicit_not_studied', 'unknown')"
+            ),
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    child_id = db.Column(db.Integer, db.ForeignKey('child.id'), nullable=False, index=True)
+    learning_subject_id = db.Column(
+        db.Integer,
+        db.ForeignKey('learning_subject.id'),
+        nullable=False,
+        index=True,
+    )
+    study_date = db.Column(db.Date, nullable=False, index=True)
+    textbook_title = db.Column(db.String(120), nullable=True)
+    study_status = db.Column(db.String(32), nullable=False)
+    start_page = db.Column(db.Integer, nullable=True)
+    end_page = db.Column(db.Integer, nullable=True)
+    record_verification = db.Column(
+        db.String(16),
+        nullable=False,
+        default=RECORD_VERIFICATION_OBSERVED,
+        server_default='observed',
+    )
+    recorded_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    actor_type = db.Column(
+        db.String(16),
+        nullable=False,
+        default=ACTOR_TEACHER,
+        server_default='teacher',
+    )
+    input_channel = db.Column(db.String(32), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    subject = db.relationship('LearningSubject')
+    changes = db.relationship(
+        'LearningStudySessionChange',
+        back_populates='session',
+        lazy='dynamic',
+    )
+
+    def __repr__(self):
+        return (
+            f'<LearningStudySession {self.id} child={self.child_id} '
+            f'{self.study_date} {self.study_status}>'
+        )
+
+
+class LearningStudySessionChange(db.Model):
+    """학습 세션 수정/삭제 이력. 삭제는 예외 이벤트다. Growth 리포트 스냅샷이 아니다."""
+    __tablename__ = 'learning_study_session_change'
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('created', 'updated', 'deleted')",
+            name='ck_learning_study_session_change_event',
+        ),
+        Index('ix_learning_study_session_change_session_id', 'session_id'),
+        Index(
+            'ix_learning_study_session_change_child_date',
+            'child_id',
+            'study_date',
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(
+        db.Integer,
+        db.ForeignKey('learning_study_session.id', ondelete='SET NULL'),
+        nullable=True,
+    )
+    child_id = db.Column(db.Integer, db.ForeignKey('child.id'), nullable=False)
+    learning_subject_id = db.Column(
+        db.Integer,
+        db.ForeignKey('learning_subject.id'),
+        nullable=False,
+    )
+    study_date = db.Column(db.Date, nullable=False)
+    event_type = db.Column(db.String(16), nullable=False)
+    before_payload = db.Column(db.JSON, nullable=True)
+    after_payload = db.Column(db.JSON, nullable=True)
+    change_reason = db.Column(db.Text, nullable=True)
+    changed_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    changed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    session = db.relationship('LearningStudySession', back_populates='changes')
+
+    def __repr__(self):
+        return (
+            f'<LearningStudySessionChange {self.id} {self.event_type} '
+            f'session={self.session_id}>'
+        )
 
 
 class ExemptionTicket(db.Model):
