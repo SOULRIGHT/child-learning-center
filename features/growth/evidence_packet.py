@@ -2,69 +2,56 @@
 
 READ-ONLY projection. metrics/insight/planner를 다시 계산하지 않는다.
 DB/ORM query를 하지 않는다. LLM/prompt/validator가 아니다.
+v3 canonical facts는 bundle['canonical'] projection만 사용한다.
 """
 from __future__ import annotations
 
 from datetime import date, datetime
 
-from features.growth.copy import (
-    HIGHER_PERCEIVED_DIFFICULTY_WITH_STABLE_FUN,
-    LEARNING_PAGE_ADVANCE_RECENT_WINDOW_BEST,
-    POINTS_PERIOD_RECENT_WINDOW_BEST,
-    READING_COMPLETIONS_RECENT_WINDOW_BEST,
-    READING_DAYS_RECENT_WINDOW_BEST,
-)
-from features.growth.insights import (
-    InsightCandidate,
-    generate_insight_candidates,
-    top_candidates,
-)
 from features.growth.center_policy import get_current_center_policy_text, normalize_center_policy_text
+from features.growth.evidence_selector import (
+    EvidenceCandidate,
+    SELECTED_MAJOR_LIMIT,
+    select_major_insights,
+)
 from features.growth.learning_metrics import MAX_PROGRESS_SNAPSHOT_AGE_DAYS
 
-# features.growth.service.INSIGHT_LIMIT 과 같아야 한다. service를 import 하지 않는다.
-SELECTED_INSIGHT_LIMIT = 3
+# Overall AI selected_insights = major only, max 4. UI INSIGHT_LIMIT(3)과 분리한다.
+SELECTED_INSIGHT_LIMIT = SELECTED_MAJOR_LIMIT
 
-SCHEMA_VERSION = 'growth_teacher_evidence_v2'
+SCHEMA_VERSION = 'growth_teacher_evidence_v3'
 AUDIENCE_TEACHER = 'teacher'
 
 STATUS_INSUFFICIENT_HISTORY = 'insufficient_history'
 STATUS_UNAVAILABLE = 'unavailable'
 
-_RWB_READING_DAYS = READING_DAYS_RECENT_WINDOW_BEST
-_RWB_COMPLETIONS = READING_COMPLETIONS_RECENT_WINDOW_BEST
-_RWB_POINTS = POINTS_PERIOD_RECENT_WINDOW_BEST
-_RWB_LEARNING = LEARNING_PAGE_ADVANCE_RECENT_WINDOW_BEST
-
 _JSON_SCALARS = (str, int, float, bool, type(None))
 
 
 def build_teacher_evidence_packet(bundle, selected_candidates=None, *, grade=None):
-    """deterministic bundle + top candidates → teacher whitelist packet.
+    """deterministic bundle + major candidates → teacher whitelist packet.
 
-    selected_candidates가 없으면 service와 같은 top_candidates(limit=3)를 쓴다.
+    selected_candidates가 없으면 canonical selector의 major(max 4)를 쓴다.
     계산/원장 조회는 하지 않는다.
     """
     bundle = bundle or {}
-    selected = _selected(bundle, selected_candidates)
-    selected_ids = {item.id for item in selected}
+    canonical = bundle.get('canonical') or {}
     reading = bundle.get('reading') or {}
     points = bundle.get('points') or {}
-    progress = bundle.get('progress') or {}
     learning = bundle.get('learning') or {}
-    recent = bundle.get('recent_window_bests') or {}
 
-    scope = _scope(reading, learning, recent, selected_ids)
+    scope = _scope(reading, learning, canonical)
     supporting = {
-        'reading': _reading_facts(reading, recent, selected_ids),
+        'reading': _reading_facts(reading, canonical.get('reading') or {}),
         'points': _points_facts(
-            points, recent, selected_ids, bundle.get('point_composition'),
+            points,
+            bundle.get('point_composition'),
+            canonical.get('points_peer') or {},
         ),
-        'learning': _learning_facts(
-            progress, points, learning, recent, selected_ids, selected,
-        ),
+        'learning': _learning_facts(canonical),
         'rewards': _rewards_facts(bundle.get('rewards') or {}),
     }
+    selected = _selected(supporting, selected_candidates)
     packet = {
         'schema_version': SCHEMA_VERSION,
         'audience': AUDIENCE_TEACHER,
@@ -80,10 +67,10 @@ def build_teacher_evidence_packet(bundle, selected_candidates=None, *, grade=Non
     return _to_jsonable(packet)
 
 
-def _selected(bundle, selected_candidates):
+def _selected(supporting, selected_candidates):
     if selected_candidates is not None:
         return list(selected_candidates)
-    return top_candidates(generate_insight_candidates(bundle), limit=SELECTED_INSIGHT_LIMIT)
+    return select_major_insights(supporting, limit=SELECTED_INSIGHT_LIMIT)
 
 
 def _center_context(policy_text):
@@ -101,37 +88,36 @@ def _center_context(policy_text):
 
 
 def _as_of(bundle):
-    for key in ('reading', 'points', 'progress', 'learning', 'recent_window_bests'):
+    for key in ('canonical', 'reading', 'points', 'progress', 'learning', 'recent_window_bests'):
         value = (bundle.get(key) or {}).get('as_of')
         if value is not None:
             return value
     return None
 
 
-def _scope(reading, learning, recent, selected_ids):
-    scope = {
-        'window_days': reading.get('window_days') or learning.get('window_days') or 30,
-        'current_window': _window(reading.get('current_window') or learning.get('current_window')),
-        'previous_window': _window(reading.get('previous_window') or learning.get('previous_window')),
+def _scope(reading, learning, canonical):
+    window_source = canonical or reading or learning or {}
+    return {
+        'window_days': window_source.get('window_days') or reading.get('window_days') or learning.get('window_days') or 30,
+        'current_window': _window(
+            window_source.get('current_window')
+            or reading.get('current_window')
+            or learning.get('current_window')
+        ),
+        'previous_window': _window(
+            window_source.get('previous_window')
+            or reading.get('previous_window')
+            or learning.get('previous_window')
+        ),
         'freshness': {
             'max_snapshot_age_days': int(
                 learning.get('max_snapshot_age_days') or MAX_PROGRESS_SNAPSHOT_AGE_DAYS
             ),
         },
     }
-    if selected_ids & {_RWB_READING_DAYS, _RWB_COMPLETIONS, _RWB_POINTS, _RWB_LEARNING}:
-        scope['recent_windows'] = {
-            'window_days': recent.get('window_days') or 30,
-            'window_count': recent.get('window_count') or 3,
-            'lookback_days': recent.get('lookback_days') or 90,
-            'current_window': _window(recent.get('current_window')),
-            'previous_1_window': _window(recent.get('previous_1_window')),
-            'previous_2_window': _window(recent.get('previous_2_window')),
-        }
-    return scope
 
 
-def _reading_facts(reading, recent, selected_ids):
+def _reading_facts(reading, analysis_payload):
     comparable = (reading.get('comparable') or {}).get('reading_days') is True
     completed_ok = (reading.get('comparable') or {}).get('completed') is True
     current = reading.get('current') or {}
@@ -161,19 +147,143 @@ def _reading_facts(reading, recent, selected_ids):
             (previous.get('completed_by_program') or {}).get('recommended'),
             comparable=completed_ok,
         ),
+        'analysis': _reading_analysis_facts(analysis_payload),
     }
-    if _RWB_READING_DAYS in selected_ids:
-        facts['recent_window_activity_days'] = _rwb_block(
-            'reading.rwb.activity_days', recent.get('reading_days') or {},
-        )
-    if _RWB_COMPLETIONS in selected_ids:
-        facts['recent_window_completions'] = _rwb_block(
-            'reading.rwb.completions', recent.get('reading_completions') or {},
-        )
-    pair_ok = (reading.get('comparable') or {}).get('experience_rating_pair') is True
-    if pair_ok and HIGHER_PERCEIVED_DIFFICULTY_WITH_STABLE_FUN in selected_ids:
-        facts['experience_rating_pair'] = _rating_pair(reading)
     return facts
+
+
+def _reading_analysis_facts(payload):
+    payload = payload or {}
+    facts_in = payload.get('facts') or {}
+    ai_status = payload.get('ai_status') or 'unavailable'
+    recent = facts_in.get('recent_count')
+    previous = facts_in.get('previous_count')
+    block = {
+        'ai_status': ai_status,
+        'sufficiency': facts_in.get('sufficiency'),
+        'recent_count': _measured(
+            'reading.analysis.recent_count',
+            recent,
+            available=recent is not None,
+        ),
+        'previous_count': _measured(
+            'reading.analysis.previous_count',
+            previous,
+            available=previous is not None,
+        ),
+        'text_record_count': _measured(
+            'reading.analysis.text_record_count',
+            facts_in.get('text_record_count'),
+            available=facts_in.get('text_record_count') is not None,
+        ),
+        'completed_count': _measured(
+            'reading.analysis.completed_count',
+            facts_in.get('completed_count'),
+            available=facts_in.get('completed_count') is not None,
+        ),
+        'completion_duration_median': _measured(
+            'reading.analysis.completion_duration_median',
+            facts_in.get('completion_duration_median'),
+            available=facts_in.get('completion_duration_median') is not None,
+            status=None if facts_in.get('completion_duration_median') is not None else STATUS_UNAVAILABLE,
+        ),
+        'character_count': _side_stats(
+            'reading.analysis.character_count', facts_in.get('character_count') or {},
+        ),
+        'sentence_count': _side_stats(
+            'reading.analysis.sentence_count', facts_in.get('sentence_count') or {},
+        ),
+        'recent_records': _meta_records(facts_in.get('recent_records') or []),
+        'previous_records': _meta_records(facts_in.get('previous_records') or []),
+        'ai_status_fact': _measured(
+            'reading.analysis.ai_status',
+            ai_status,
+            available=True,
+        ),
+        'sufficiency_fact': _measured(
+            'reading.analysis.sufficiency',
+            facts_in.get('sufficiency'),
+            available=facts_in.get('sufficiency') is not None,
+            status=None if facts_in.get('sufficiency') is not None else STATUS_UNAVAILABLE,
+        ),
+        'observations': [],
+        'limitations': [],
+        'allowed_evidence_refs': list(payload.get('allowed_evidence_refs') or []),
+    }
+    if ai_status == 'current':
+        block['observations'] = _observation_facts(payload.get('observations') or [])
+        block['limitations'] = _limitation_facts(payload.get('limitations') or [])
+    return block
+
+
+def _side_stats(prefix, stats):
+    return {
+        'recent_median': _measured(
+            f'{prefix}.recent_median',
+            stats.get('recent_median'),
+            available=stats.get('recent_median') is not None,
+            status=None if stats.get('recent_median') is not None else STATUS_UNAVAILABLE,
+        ),
+        'previous_median': _measured(
+            f'{prefix}.previous_median',
+            stats.get('previous_median'),
+            available=stats.get('previous_median') is not None,
+            status=None if stats.get('previous_median') is not None else STATUS_UNAVAILABLE,
+        ),
+        'recent_sample_count': _measured(
+            f'{prefix}.recent_sample_count',
+            stats.get('recent_sample_count'),
+            available=stats.get('recent_sample_count') is not None,
+        ),
+        'previous_sample_count': _measured(
+            f'{prefix}.previous_sample_count',
+            stats.get('previous_sample_count'),
+            available=stats.get('previous_sample_count') is not None,
+        ),
+    }
+
+
+def _meta_records(rows):
+    found = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        found.append({
+            'record_id': row.get('record_id'),
+            'date': _iso_date(row.get('date')) if row.get('date') is not None else None,
+            'book_title': row.get('book_title'),
+            'status': row.get('status'),
+            'program_type': row.get('program_type'),
+        })
+    return found
+
+
+def _observation_facts(rows):
+    found = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        found.append({
+            'evidence_id': f'reading.analysis.observation.{index + 1}',
+            'available': True,
+            'dimension': row.get('dimension'),
+            'value': row.get('observation'),
+            'evidence_refs': list(row.get('evidence_refs') or []),
+        })
+    return found
+
+
+def _limitation_facts(rows):
+    found = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, str) or not row.strip():
+            continue
+        found.append({
+            'evidence_id': f'reading.analysis.limitation.{index + 1}',
+            'available': True,
+            'value': row.strip(),
+        })
+    return found
 
 
 def _rating_pair(reading):
@@ -200,7 +310,7 @@ def _rating_pair(reading):
     }
 
 
-def _points_facts(points, recent, selected_ids, composition=None):
+def _points_facts(points, composition=None, points_peer=None):
     comparable = (points.get('comparable') or {}).get('points') is True
     current = points.get('current') or {}
     previous = points.get('previous') or {}
@@ -212,9 +322,8 @@ def _points_facts(points, recent, selected_ids, composition=None):
             comparable=comparable,
         ),
         'cumulative_as_of': _cumulative_fact(points.get('cumulative_as_of')),
+        'peer': _canonical_peer_facts('points.peer', points_peer or {}),
     }
-    if _RWB_POINTS in selected_ids:
-        facts['recent_window'] = _rwb_block('points.rwb.period', recent.get('points') or {})
     if isinstance(composition, dict) and composition:
         facts['composition'] = _composition_facts(composition, comparable=comparable)
     return facts
@@ -233,20 +342,20 @@ def _composition_facts(composition, *, comparable):
         'totals': {
             'net_points': _period_pair(
                 'points.composition.totals.net_points',
-                _as_int(current.get('net_points')),
-                _as_int(previous.get('net_points')),
+                _optional_number(current.get('net_points')),
+                _optional_number(previous.get('net_points')),
                 comparable=comparable,
             ),
             'total_earn_points': _period_pair(
                 'points.composition.totals.total_earn_points',
-                _as_int(current.get('total_earn_points')),
-                _as_int(previous.get('total_earn_points')),
+                _optional_number(current.get('total_earn_points')),
+                _optional_number(previous.get('total_earn_points')),
                 comparable=comparable,
             ),
             'total_spend_points': _period_pair(
                 'points.composition.totals.total_spend_points',
-                _as_int(current.get('total_spend_points')),
-                _as_int(previous.get('total_spend_points')),
+                _optional_number(current.get('total_spend_points')),
+                _optional_number(previous.get('total_spend_points')),
                 comparable=comparable,
             ),
         },
@@ -267,8 +376,8 @@ def _composition_facts(composition, *, comparable):
         'extra_learning': {
             'points': _period_pair(
                 'points.composition.extra_learning.points',
-                _as_int(extra_current.get('points')),
-                _as_int(extra_previous.get('points')),
+                _composition_sum(extra_current.get('points')),
+                _composition_sum(extra_previous.get('points')),
                 comparable=comparable,
             ),
             'by_subject': _composition_extra_by_subject(
@@ -290,14 +399,14 @@ def _composition_subjects(current_subjects, previous_subjects, *, comparable):
         subjects[key] = {
             'points': _period_pair(
                 f'points.composition.subjects.{key}.points',
-                _as_int(current.get('points')),
-                _as_int(previous.get('points')),
+                _composition_sum(current.get('points')),
+                _composition_sum(previous.get('points')),
                 comparable=comparable,
             ),
             'active_days': _period_pair(
                 f'points.composition.subjects.{key}.active_days',
-                _as_int(current.get('active_days')),
-                _as_int(previous.get('active_days')),
+                _composition_sum(current.get('active_days')),
+                _composition_sum(previous.get('active_days')),
                 comparable=comparable,
             ),
         }
@@ -308,8 +417,8 @@ def _composition_category_points(name, current, previous, *, comparable):
     return {
         'points': _period_pair(
             f'points.composition.{name}.points',
-            _as_int((current.get(name) or {}).get('points')),
-            _as_int((previous.get(name) or {}).get('points')),
+            _composition_sum((current.get(name) or {}).get('points')),
+            _composition_sum((previous.get(name) or {}).get('points')),
             comparable=comparable,
         ),
     }
@@ -325,21 +434,33 @@ def _composition_extra_by_subject(current_by, previous_by, *, comparable):
         by_subject[key] = {
             'points': _period_pair(
                 f'points.composition.extra_learning.by_subject.{key}.points',
-                _as_int(current.get('points')),
-                _as_int(previous.get('points')),
+                _composition_sum(current.get('points')),
+                _composition_sum(previous.get('points')),
                 comparable=comparable,
             ),
         }
     return by_subject
 
 
-def _as_int(value):
+def _optional_number(value):
+    """unavailable/missing 은 None. 실제 합계 0만 0으로 유지한다."""
     if value is None or isinstance(value, bool):
-        return 0
+        return None
+    if isinstance(value, (int, float)):
+        return value
     try:
         return int(value)
     except (TypeError, ValueError):
-        return 0
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+
+def _composition_sum(value):
+    """composition 기간 payload가 있을 때 빠진 카테고리는 합계 0이다."""
+    number = _optional_number(value)
+    return 0 if number is None else number
 
 
 def _cumulative_fact(value):
@@ -348,38 +469,246 @@ def _cumulative_fact(value):
     return _measured('points.cumulative_as_of', value, available=True)
 
 
-def _learning_facts(progress, points, learning, recent, selected_ids, selected):
-    progress_comparable = (progress.get('comparable') or {}).get('progress') is True
-    current = progress.get('current') or {}
-    previous = progress.get('previous') or {}
-    observed = learning.get('observed_study_days') or {}
-    points_comparable = (points.get('comparable') or {}).get('points') is True
-    rwb_subjects = set()
-    if _RWB_LEARNING in selected_ids:
-        for item in selected:
-            if item.id != _RWB_LEARNING:
-                continue
-            for row in (item.evidence or {}).get('subjects') or []:
-                key = row.get('subject_key')
-                if key:
-                    rwb_subjects.add(key)
+def _learning_facts(canonical):
     subjects = {}
-    rwb_learning = recent.get('learning') or {}
-    for key, payload in (learning.get('subjects') or {}).items():
-        subjects[key] = _subject_facts(
-            key,
-            payload,
-            rwb_learning.get(key) if key in rwb_subjects else None,
-        )
+    for key, payload in ((canonical or {}).get('subjects') or {}).items():
+        subjects[key] = _canonical_subject_facts(key, payload or {})
+    return {'subjects': subjects}
+
+
+def _canonical_subject_facts(subject_key, payload):
+    current = payload.get('performance_current') or {}
+    previous = payload.get('performance_previous') or {}
+    compare = payload.get('compare') or {}
+    prefix = f'learning.{subject_key}'
     return {
-        'progress_entry_count': _period_pair(
-            'learning.progress_entry_count',
-            current.get('progress_entry_count'),
-            previous.get('progress_entry_count'),
-            comparable=progress_comparable,
+        'subject_key': subject_key,
+        'subject_label': payload.get('subject_label') or subject_key,
+        'performance': {
+            'current': _performance_side(f'{prefix}.performance', 'current', current),
+            'previous': _performance_side(f'{prefix}.performance', 'previous', previous),
+        },
+        'compare': {
+            'enough_days': compare.get('enough_days') is True,
+            'confirmation_band': compare.get('confirmation_band') or 'unavailable',
+            'period_change_allowed': compare.get('period_change_allowed') is True,
+            'major_insight_eligible': compare.get('major_insight_eligible') is True,
+            'performance_delta_pp': _measured(
+                f'{prefix}.performance.delta_pp',
+                compare.get('performance_delta_pp'),
+                available=compare.get('performance_delta_pp') is not None,
+                status=None if compare.get('performance_delta_pp') is not None else STATUS_UNAVAILABLE,
+            ),
+            'confirmation_delta_pp': _measured(
+                f'{prefix}.performance.confirmation_delta_pp',
+                compare.get('confirmation_delta_pp'),
+                available=compare.get('confirmation_delta_pp') is not None,
+                status=None if compare.get('confirmation_delta_pp') is not None else STATUS_UNAVAILABLE,
+            ),
+            'enough_days_fact': _measured(
+                f'{prefix}.performance.enough_days',
+                compare.get('enough_days') is True,
+                available=True,
+            ),
+        },
+        'progress': _canonical_progress_facts(subject_key, payload.get('progress') or {}),
+        'forecast': _canonical_forecast_facts(subject_key, payload.get('forecast') or {}),
+        'plan': _canonical_plan_facts(subject_key, payload.get('plan') or {}),
+        'performance_peer': _canonical_peer_facts(
+            f'{prefix}.performance_peer', payload.get('performance_peer') or {},
         ),
-        'observed_study_days': _observed_study_days(observed, comparable=points_comparable),
-        'subjects': subjects,
+        'coverage_peer': _canonical_peer_facts(
+            f'{prefix}.coverage_peer', payload.get('coverage_peer') or {},
+        ),
+    }
+
+
+def _performance_side(prefix, side, payload):
+    available = payload.get('available') is not False
+    expected = payload.get('expected_days')
+    rate = payload.get('performance_rate')
+    confirmation = payload.get('confirmation_rate')
+    return {
+        'expected_days': _measured(
+            f'{prefix}.expected_days.{side}',
+            expected,
+            available=available and expected is not None,
+        ),
+        'studied_days': _measured(
+            f'{prefix}.studied_days.{side}',
+            payload.get('studied_days'),
+            available=available and payload.get('studied_days') is not None,
+        ),
+        'explicit_not_studied_days': _measured(
+            f'{prefix}.explicit_not_studied_days.{side}',
+            payload.get('explicit_not_studied_days'),
+            available=available and payload.get('explicit_not_studied_days') is not None,
+        ),
+        'unknown_days': _measured(
+            f'{prefix}.unknown_days.{side}',
+            payload.get('unknown_days'),
+            available=available and payload.get('unknown_days') is not None,
+        ),
+        'extra_studied_days': _measured(
+            f'{prefix}.extra_studied_days.{side}',
+            payload.get('extra_studied_days'),
+            available=available and payload.get('extra_studied_days') is not None,
+        ),
+        'performance_rate': _measured(
+            f'{prefix}.rate.{side}',
+            rate,
+            available=available and rate is not None,
+            status=None if rate is not None else STATUS_UNAVAILABLE,
+        ),
+        'confirmation_rate': _measured(
+            f'{prefix}.confirmation.{side}',
+            confirmation,
+            available=available and confirmation is not None,
+            status=None if confirmation is not None else STATUS_UNAVAILABLE,
+        ),
+        'confirmation_band': payload.get('interpretation') or 'unavailable',
+        'eligibility': payload.get('eligibility') or {},
+    }
+
+
+def _canonical_progress_facts(subject_key, progress):
+    prefix = f'learning.{subject_key}.progress'
+    available = progress.get('available') is True
+    status = progress.get('status') or STATUS_UNAVAILABLE
+    latest = progress.get('latest_observed_end_page')
+    return {
+        'available': available,
+        'status': status,
+        'exclusions_confirmed': progress.get('exclusions_confirmed') is True,
+        'observed_page_count': _measured(
+            f'{prefix}.observed_page_count',
+            progress.get('observed_page_count'),
+            available=progress.get('observed_page_count') is not None,
+            status=None if progress.get('observed_page_count') is not None else status,
+        ),
+        'assigned_covered_page_count': _measured(
+            f'{prefix}.assigned_covered_page_count',
+            progress.get('assigned_covered_page_count'),
+            available=available and progress.get('assigned_covered_page_count') is not None,
+            status=None if available else status,
+        ),
+        'assigned_denominator': _measured(
+            f'{prefix}.assigned_denominator',
+            progress.get('assigned_denominator'),
+            available=progress.get('assigned_denominator') is not None,
+            status=None if progress.get('assigned_denominator') is not None else status,
+        ),
+        'coverage_ratio': _measured(
+            f'{prefix}.coverage_ratio',
+            progress.get('coverage_ratio'),
+            available=available and progress.get('coverage_ratio') is not None,
+            status=None if available else status,
+        ),
+        'latest_observed_end_page': {
+            **_measured(
+                f'{prefix}.latest_observed_end_page',
+                latest,
+                available=latest is not None,
+                status=None if latest is not None else status,
+            ),
+            'role': progress.get('latest_observed_end_page_role') or 'reference_position',
+        },
+    }
+
+
+def _canonical_forecast_facts(subject_key, forecast):
+    prefix = f'learning.{subject_key}.forecast'
+    available = forecast.get('available') is True
+    reason = forecast.get('reason') or STATUS_UNAVAILABLE
+    earliest = _iso_date(forecast.get('earliest_date')) if forecast.get('earliest_date') is not None else None
+    latest = _iso_date(forecast.get('latest_date')) if forecast.get('latest_date') is not None else None
+    return {
+        'available': available,
+        'reason': reason,
+        'vs_target': forecast.get('vs_target') or 'unavailable',
+        'earliest_date': _measured(
+            f'{prefix}.earliest_date',
+            earliest,
+            available=available and earliest is not None,
+            status=None if available and earliest is not None else reason,
+        ),
+        'latest_date': _measured(
+            f'{prefix}.latest_date',
+            latest,
+            available=available and latest is not None,
+            status=None if available and latest is not None else reason,
+        ),
+    }
+
+
+def _canonical_plan_facts(subject_key, plan):
+    prefix = f'learning.{subject_key}.plan'
+    available = plan.get('available') is True
+    facts = {
+        'available': available,
+        'status': plan.get('status') or 'no_plan',
+    }
+    title = plan.get('textbook_title')
+    if title:
+        facts['textbook_title'] = title
+    if plan.get('start_page') is not None:
+        facts['start_page'] = _measured(
+            f'{prefix}.start_page', plan.get('start_page'), available=True,
+        )
+    if plan.get('end_page') is not None:
+        facts['end_page'] = _measured(
+            f'{prefix}.end_page', plan.get('end_page'), available=True,
+        )
+    if plan.get('start_date') is not None:
+        facts['start_date'] = _measured(
+            f'{prefix}.start_date', _iso_date(plan.get('start_date')), available=True,
+        )
+    target = plan.get('target_completion_date')
+    if target is not None:
+        facts['target_completion_date'] = _measured(
+            f'{prefix}.target_completion_date', _iso_date(target), available=True,
+        )
+    return facts
+
+
+def _canonical_peer_facts(prefix, peer):
+    available = peer.get('available') is True
+    n = peer.get('peer_sample_count')
+    if n is None:
+        n = 0
+    display = peer.get('display_tier') or 'none'
+    child_value = peer.get('child_value')
+    median = peer.get('peer_median')
+    difference = peer.get('difference')
+    if isinstance(difference, float):
+        difference = round(difference, 6)
+    if isinstance(child_value, float):
+        child_value = round(child_value, 6)
+    if isinstance(median, float):
+        median = round(median, 6)
+    return {
+        'available': available,
+        'display_tier': display,
+        'reason': peer.get('reason') or STATUS_UNAVAILABLE,
+        'child_value': _measured(
+            f'{prefix}.child_value',
+            child_value,
+            available=child_value is not None,
+            status=None if child_value is not None else STATUS_UNAVAILABLE,
+        ),
+        'peer_median': _measured(
+            f'{prefix}.peer_median',
+            median,
+            available=available and median is not None,
+            status=None if available else (peer.get('reason') or STATUS_UNAVAILABLE),
+        ),
+        'difference': _measured(
+            f'{prefix}.difference',
+            difference,
+            available=available and difference is not None,
+            status=None if available and difference is not None else STATUS_UNAVAILABLE,
+        ),
+        'peer_sample_count': _measured(f'{prefix}.n', n, available=True),
     }
 
 
@@ -688,54 +1017,39 @@ def _count_peer(prefix, peer):
 
 
 def _insight_entry(candidate):
-    evidence = dict(candidate.evidence or {})
+    evidence = dict(getattr(candidate, 'evidence', None) or {})
     evidence.pop('relative_change', None)
+    evidence_ids = getattr(candidate, 'evidence_ids', None)
+    if evidence_ids is None:
+        evidence_ids = _insight_evidence_ids(candidate)
     payload = {
         'id': candidate.id,
         'category': candidate.category,
         'direction': candidate.direction,
         'metric_key': candidate.metric_key,
-        'evidence_ids': _insight_evidence_ids(candidate),
+        'tier': getattr(candidate, 'tier', None) or 'major',
+        'evidence_ids': list(evidence_ids),
         'evidence': _insight_evidence(evidence),
     }
     return payload
 
 
 def _insight_evidence_ids(candidate):
-    metric = candidate.metric_key
-    evidence = candidate.evidence or {}
-    kind = evidence.get('kind')
-    if kind == 'recent_window_best':
-        if candidate.id == _RWB_READING_DAYS:
-            return _rwb_ids('reading.rwb.activity_days')
-        if candidate.id == _RWB_COMPLETIONS:
-            return _rwb_ids('reading.rwb.completions')
-        if candidate.id == _RWB_POINTS:
-            return _rwb_ids('points.rwb.period')
-        if candidate.id == _RWB_LEARNING:
-            ids = []
-            for row in evidence.get('subjects') or []:
-                key = row.get('subject_key')
-                if key:
-                    ids.extend(_rwb_ids(f'learning.{key}.rwb.page_advance'))
-            return ids
+    metric = getattr(candidate, 'metric_key', None)
     if metric == 'reading_days':
         return _period_ids('reading.activity_days')
     if metric == 'completed_count':
         return _period_ids('reading.completions')
     if metric == 'period_points':
         return _period_ids('points.period')
-    if metric == 'progress_entry_count':
-        return _period_ids('learning.progress_entry_count')
-    if metric == 'paired_experience_rating':
-        return [
-            'reading.experience.difficulty.current',
-            'reading.experience.difficulty.previous',
-            'reading.experience.fun.current',
-            'reading.experience.fun.previous',
-            'reading.experience.n.current',
-            'reading.experience.n.previous',
-        ]
+    if metric == 'performance_rate':
+        key = ((getattr(candidate, 'evidence', None) or {}).get('subject_key'))
+        if key:
+            return [
+                f'learning.{key}.performance.rate.current',
+                f'learning.{key}.performance.rate.previous',
+                f'learning.{key}.performance.delta_pp',
+            ]
     return []
 
 
@@ -857,8 +1171,8 @@ def _to_jsonable(value):
         return [_to_jsonable(item) for item in value]
     if getattr(value, '_sa_instance_state', None) is not None:
         raise TypeError('ORM object is not allowed in evidence packet')
-    if isinstance(value, InsightCandidate):
-        raise TypeError('InsightCandidate is not allowed in evidence packet')
+    if isinstance(value, EvidenceCandidate):
+        raise TypeError('EvidenceCandidate is not allowed in evidence packet')
     raise TypeError(f'unsupported packet type: {type(value)!r}')
 
 

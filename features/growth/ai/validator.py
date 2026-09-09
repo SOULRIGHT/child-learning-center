@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-FACTUAL_VALIDATOR_VERSION = 'growth_teacher_factual_validator_v3'
+FACTUAL_VALIDATOR_VERSION = 'growth_teacher_factual_validator_v4'
 
 CODE_EMPTY_EVIDENCE_IDS = 'EMPTY_EVIDENCE_IDS'
 CODE_UNKNOWN_EVIDENCE_ID = 'UNKNOWN_EVIDENCE_ID'
@@ -17,6 +17,14 @@ CODE_UNIT_MISMATCH = 'UNIT_MISMATCH'
 CODE_ESTIMATED_AS_EXACT = 'ESTIMATED_AS_EXACT'
 CODE_UNAVAILABLE_AS_ZERO = 'UNAVAILABLE_AS_ZERO'
 CODE_NON_CONDITIONAL_SUGGESTION = 'NON_CONDITIONAL_SUGGESTION'
+CODE_FORGED_FORECAST_DATE = 'FORGED_FORECAST_DATE'
+CODE_REFERENCE_ONLY_SOLE_PRIORITY = 'REFERENCE_ONLY_SOLE_PRIORITY'
+CODE_REFERENCE_ONLY_SOLE_NEXT_ACTION = 'REFERENCE_ONLY_SOLE_NEXT_ACTION'
+CODE_UNAVAILABLE_PEER = 'UNAVAILABLE_PEER'
+CODE_LIMITED_AS_MAJOR = 'LIMITED_AS_MAJOR'
+CODE_STALE_READING_OBSERVATION = 'STALE_READING_OBSERVATION'
+CODE_RANK_LANGUAGE = 'RANK_LANGUAGE'
+CODE_RAW_READING_QUOTE = 'RAW_READING_QUOTE'
 
 UNIT_DAY = 'day'
 UNIT_BOOK = 'book'
@@ -50,9 +58,11 @@ _ESTIMATED_MARKERS = ('현재 추정 기준', '대략', '추정', '예상', '약
 
 _DATE_ISO = re.compile(r'\d{4}-\d{2}-\d{2}')
 _DATE_KR = re.compile(r'\d{4}년\s*\d{1,2}월\s*\d{1,2}일')
+_DATE_KR_DAY = re.compile(r'(?:(\d{4})년\s*)?(\d{1,2})월\s*(\d{1,2})일')
 _YEAR_KR = re.compile(r'\d{4}년')
 _MONTH_KR = re.compile(r'\d{1,2}월')
 _GRADE_KR = re.compile(r'\d{1,2}학년')
+_FORECAST_DATE_HINTS = ('완료', '마칠', '끝날', '마무리', '예상일', '완료일')
 _CLAIM = re.compile(
     r'(\d+(?:\.\d+)?)\s*(포인트|페이지|쪽|점|권|일|건|회|명)'
 )
@@ -138,6 +148,10 @@ def validate_teacher_interpretation(packet, parsed_output) -> ValidationResult:
         )
         violations.extend(_numeric_violations(location, text, cited, exempt))
         violations.extend(_estimated_violations(location, text, cited))
+        violations.extend(_iso_date_violations(location, text, packet))
+        violations.extend(_peer_tier_violations(location, evidence_ids, packet, extra))
+        violations.extend(_reading_violations(location, text, evidence_ids, packet))
+        violations.extend(_rank_violations(location, text))
     return ValidationResult(valid=not violations, violations=tuple(violations))
 
 
@@ -278,6 +292,7 @@ def _expected_unit_label(facts):
 
 def _mask_non_metric_numbers(text):
     masked = _DATE_ISO.sub(' ', text)
+    masked = _DATE_KR_DAY.sub(' ', masked)
     masked = _DATE_KR.sub(' ', masked)
     masked = _YEAR_KR.sub(' ', masked)
     masked = _MONTH_KR.sub(' ', masked)
@@ -307,12 +322,14 @@ def _is_exempt(number, unit, exempt):
 
 
 def _unit_for(evidence_id):
-    if '.peer.n' in evidence_id:
+    if '.peer.n' in evidence_id or (evidence_id.endswith('.n') and 'peer' in evidence_id):
         return UNIT_PERSON
     if 'exemption.usage' in evidence_id and '.peer.n' not in evidence_id:
         return UNIT_COUNT
     if 'manual.event_count' in evidence_id:
         return UNIT_COUNT
+    if 'expected_days' in evidence_id or 'studied_days' in evidence_id or 'unknown_days' in evidence_id:
+        return UNIT_DAY
     if 'observed_study_days' in evidence_id:
         return UNIT_DAY
     if 'active_days' in evidence_id or 'activity_days' in evidence_id:
@@ -326,6 +343,12 @@ def _unit_for(evidence_id):
     if '.plan.remaining_planned_days' in evidence_id:
         return UNIT_DAY
     if any(token in evidence_id for token in (
+        '.progress.observed_page_count',
+        '.progress.assigned_covered_page_count',
+        '.progress.assigned_denominator',
+        '.progress.latest_observed_end_page',
+        '.plan.start_page',
+        '.plan.end_page',
         '.page_advance',
         '.snapshot.current_page',
         '.plan.remaining_workload',
@@ -373,3 +396,165 @@ def _numeric_equal(left, right):
     if not _is_number(left) or not _is_number(right):
         return False
     return float(left) == float(right)
+
+
+def _iso_date_violations(location, text, packet):
+    allowed = _collect_iso_dates(packet)
+    found = []
+    for match in _DATE_ISO.findall(text or ''):
+        if match not in allowed:
+            found.append(Violation(CODE_FORGED_FORECAST_DATE, location, claim=match))
+    if not any(hint in (text or '') for hint in _FORECAST_DATE_HINTS):
+        return found
+    allowed_ymd = set()
+    allowed_md = set()
+    for iso in allowed:
+        year, month, day = (int(part) for part in iso.split('-'))
+        allowed_ymd.add((year, month, day))
+        allowed_md.add((month, day))
+    for match in _DATE_KR_DAY.finditer(text or ''):
+        year_raw, month, day = match.group(1), int(match.group(2)), int(match.group(3))
+        ok = (
+            (int(year_raw), month, day) in allowed_ymd
+            if year_raw
+            else (month, day) in allowed_md
+        )
+        if not ok:
+            found.append(Violation(CODE_FORGED_FORECAST_DATE, location, claim=match.group(0)))
+    return found
+
+
+def _collect_iso_dates(node, found=None):
+    found = found if found is not None else set()
+    if isinstance(node, str) and _DATE_ISO.fullmatch(node):
+        found.add(node)
+    elif isinstance(node, dict):
+        for value in node.values():
+            _collect_iso_dates(value, found)
+    elif isinstance(node, list):
+        for item in node:
+            _collect_iso_dates(item, found)
+    return found
+
+
+def _peer_tier_violations(location, evidence_ids, packet, extra):
+    if not isinstance(evidence_ids, list) or not evidence_ids:
+        return []
+    cited = [eid for eid in evidence_ids if isinstance(eid, str)]
+    if not cited:
+        return []
+    metas = [_peer_meta(packet, eid) for eid in cited]
+    peers = [item for item in metas if item is not None]
+    if not peers:
+        return []
+    found = []
+    if any(item['display_tier'] in ('none',) or item['available'] is False for item in peers):
+        found.append(Violation(CODE_UNAVAILABLE_PEER, location))
+    sole_reference = all(
+        item is not None and item['display_tier'] == 'reference_only' for item in metas
+    )
+    if sole_reference and location == 'priority_insight':
+        found.append(Violation(CODE_REFERENCE_ONLY_SOLE_PRIORITY, location))
+    if sole_reference and extra.get('check_conditional'):
+        found.append(Violation(CODE_REFERENCE_ONLY_SOLE_NEXT_ACTION, location))
+    sole_limited = all(
+        item is not None and item['display_tier'] == 'limited' for item in metas
+    )
+    if sole_limited and location == 'priority_insight':
+        found.append(Violation(CODE_LIMITED_AS_MAJOR, location))
+    if sole_limited and extra.get('check_conditional'):
+        found.append(Violation(CODE_LIMITED_AS_MAJOR, location))
+    return found
+
+
+def _peer_meta(packet, evidence_id):
+    if 'peer' not in evidence_id:
+        return None
+    node = _find_evidence_node(packet, evidence_id)
+    if node is None:
+        return None
+    parent = _find_peer_parent(packet, evidence_id)
+    if parent is None:
+        return None
+    return {
+        'display_tier': parent.get('display_tier') or 'none',
+        'available': parent.get('available') is True,
+    }
+
+
+def _find_evidence_node(node, evidence_id):
+    if isinstance(node, dict):
+        if node.get('evidence_id') == evidence_id:
+            return node
+        for value in node.values():
+            found = _find_evidence_node(value, evidence_id)
+            if found is not None:
+                return found
+    elif isinstance(node, list):
+        for item in node:
+            found = _find_evidence_node(item, evidence_id)
+            if found is not None:
+                return found
+    return None
+
+
+def _find_peer_parent(node, evidence_id, parent=None):
+    if isinstance(node, dict):
+        if node.get('evidence_id') == evidence_id:
+            return parent
+        current_parent = node if 'display_tier' in node else parent
+        for value in node.values():
+            found = _find_peer_parent(value, evidence_id, current_parent)
+            if found is not None:
+                return found
+    elif isinstance(node, list):
+        for item in node:
+            found = _find_peer_parent(item, evidence_id, parent)
+            if found is not None:
+                return found
+    return None
+
+
+def _reading_violations(location, text, evidence_ids, packet):
+    found = []
+    blob = (text or '')
+    if 'review_text' in blob.lower():
+        found.append(Violation(CODE_RAW_READING_QUOTE, location))
+    if re.search(r'"[^"]{20,}"', blob) or re.search(r"'[^']{20,}'", blob):
+        found.append(Violation(CODE_RAW_READING_QUOTE, location))
+    analysis = ((packet.get('supporting_facts') or {}).get('reading') or {}).get('analysis') or {}
+    ai_status = analysis.get('ai_status')
+    ids = evidence_ids if isinstance(evidence_ids, list) else []
+    observation_ids = [eid for eid in ids if isinstance(eid, str) and 'reading.analysis.observation' in eid]
+    if observation_ids and ai_status in ('stale', 'unavailable', 'none', 'insufficient'):
+        found.append(Violation(CODE_STALE_READING_OBSERVATION, location))
+    allowed_refs = {
+        (ref.get('record_id'), ref.get('date'))
+        for ref in analysis.get('allowed_evidence_refs') or []
+        if isinstance(ref, dict)
+    }
+    for obs in analysis.get('observations') or []:
+        if not isinstance(obs, dict):
+            continue
+        for ref in obs.get('evidence_refs') or []:
+            if not isinstance(ref, dict):
+                continue
+            key = (ref.get('record_id'), ref.get('date'))
+            if allowed_refs and key not in allowed_refs:
+                found.append(Violation(CODE_UNKNOWN_EVIDENCE_ID, location, evidence_id=str(ref.get('record_id'))))
+    return found
+
+
+_RANK_TOKENS = (
+    '백분위', 'percentile', '퍼센타일', '순위', '등수',
+    '상위권', '하위권', '최상위', '최하위', '1등',
+    'above average', 'below average',
+)
+
+
+def _rank_violations(location, text):
+    lowered = (text or '').lower()
+    for token in _RANK_TOKENS:
+        if token.lower() in lowered:
+            return [Violation(CODE_RANK_LANGUAGE, location, claim=token)]
+    return []

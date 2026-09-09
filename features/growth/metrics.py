@@ -415,6 +415,7 @@ def point_composition_metrics(child_id, as_of=None, window_days=30):
 
 def metrics_bundle(child_id, as_of=None, window_days=30):
     """reading/progress/points/learning/recent_window_bests 스냅샷을 한 묶음으로 모은다."""
+    from features.growth.canonical_evidence import build_canonical_evidence
     from features.growth.learning_metrics import learning_metrics
     from features.growth.recent_window_bests import recent_window_bests
     from features.growth.reward_metrics import reward_metrics
@@ -427,6 +428,23 @@ def metrics_bundle(child_id, as_of=None, window_days=30):
         window_days=window_days,
         points_payload=points,
     )
+    try:
+        canonical = build_canonical_evidence(
+            child_id, as_of=as_of, window_days=window_days,
+        )
+    except Exception:
+        canonical = {
+            'as_of': as_of,
+            'window_days': int(window_days),
+            'subjects': {},
+            'points_peer': {'available': False, 'display_tier': 'none', 'peer_sample_count': 0},
+            'reading': {
+                'ai_status': 'unavailable',
+                'facts': {'available': False},
+                'observations': [],
+                'limitations': [],
+            },
+        }
     return {
         'reading': reading,
         'progress': progress_metrics(child_id, as_of=as_of, window_days=window_days),
@@ -444,4 +462,5 @@ def metrics_bundle(child_id, as_of=None, window_days=30):
         'point_composition': point_composition_metrics(
             child_id, as_of=as_of, window_days=window_days,
         ),
+        'canonical': canonical,
     }

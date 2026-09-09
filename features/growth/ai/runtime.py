@@ -61,6 +61,7 @@ from features.growth.metrics import metrics_bundle
 from features.growth.windows import resolve_as_of
 
 GROWTH_AI_ENABLED_ENV = 'GROWTH_AI_ENABLED'
+QA_FAKE_GROWTH_AI_ENV = 'CLC_QA_FAKE_GROWTH_AI'
 SUCCESS_QUOTA_PER_DAY = 30
 DAILY_QUOTA = SUCCESS_QUOTA_PER_DAY
 FAILURE_BUDGET_PER_DAY = 10
@@ -138,8 +139,28 @@ def is_growth_ai_enabled():
     return raw in ('1', 'true', 'yes', 'on')
 
 
+def _qa_fake_growth_ai():
+    testing = (os.environ.get('CLC_TESTING') or '').strip() == '1'
+    fake = (os.environ.get(QA_FAKE_GROWTH_AI_ENV) or '').strip().lower()
+    return testing and fake in ('1', 'true', 'yes', 'on')
+
+
 def can_use_teacher_ai(role):
     return role in TEACHER_AI_ROLES
+
+
+def _default_generator():
+    if _qa_fake_growth_ai():
+        from features.growth.ai.fake import FakeGrowthInterpretationProvider
+        return FakeGrowthInterpretationProvider()
+    return OpenAIGrowthInterpretationProvider()
+
+
+def _default_safety():
+    if _qa_fake_growth_ai():
+        from features.growth.ai.fake import FakePassSafetyProvider
+        return FakePassSafetyProvider()
+    return AwsBedrockGuardrailSafetyProvider()
 
 
 def current_runtime_parts():
@@ -253,8 +274,8 @@ def generate_teacher_growth_interpretation(
     )
     db.session.add(row)
     db.session.commit()
-    generator = generator or OpenAIGrowthInterpretationProvider()
-    safety = safety or AwsBedrockGuardrailSafetyProvider()
+    generator = generator or _default_generator()
+    safety = safety or _default_safety()
     deadline = _Deadline(DEADLINE_S, clock)
     try:
         parsed, gen_meta, safety_meta = _run_pipeline(

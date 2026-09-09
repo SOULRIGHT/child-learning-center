@@ -28,6 +28,43 @@ from tests.helpers import (  # noqa: E402
 )
 
 
+def _seed_step7_stale_generation(child_id: int, teacher_id: int, as_of: date) -> None:
+    """Existing SUCCESS generation + mismatched packet hash → GET stale, no live AI."""
+    from app import db
+    from feature_models import GROWTH_AI_STATUS_SUCCESS, GrowthAIGeneration
+    from features.growth.ai.runtime import current_runtime_signature
+    from features.growth.ai.schema import OUTPUT_SCHEMA_VERSION
+
+    db.session.add(GrowthAIGeneration(
+        child_id=int(child_id),
+        requested_by_user_id=int(teacher_id),
+        packet_hash='a' * 64,
+        runtime_signature=current_runtime_signature(),
+        as_of=as_of,
+        status=GROWTH_AI_STATUS_SUCCESS,
+        parsed_output={
+            'schema_version': OUTPUT_SCHEMA_VERSION,
+            'priority_insight': {
+                'text': '이전 해석입니다. 기록이 바뀌면 다시 분석하세요.',
+                'evidence_ids': ['reading.activity_days.current'],
+            },
+            'interpretation': {
+                'text': '이전 해석은 현재 packet과 다를 수 있습니다.',
+                'evidence_ids': ['reading.activity_days.current'],
+            },
+            'observations': [],
+            'next_actions': [],
+            'next_check': {
+                'text': '현재 기록으로 다시 분석하면 됩니다.',
+                'evidence_ids': ['reading.activity_days.current'],
+            },
+        },
+        created_at=datetime.utcnow(),
+        completed_at=datetime.utcnow(),
+    ))
+    db.session.commit()
+
+
 def _qa_db_path_from_url(url: str) -> Path:
     _refuse_remote_database(url)
     if not (url or '').startswith('sqlite:///'):
@@ -309,6 +346,8 @@ def main() -> int:
                 sys.path.insert(0, str(qa_dir))
             from preview import seed_preview  # noqa: WPS433
             state = seed_preview(db, as_of)
+            if (os.environ.get('CLC_QA_SUITE') or '').strip() == 'step7':
+                _seed_step7_stale_generation(state['child_id'], state['teacher_id'], as_of)
         else:
             state = _seed(db, as_of)
         state['port'] = port

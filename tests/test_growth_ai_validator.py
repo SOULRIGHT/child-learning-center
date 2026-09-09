@@ -7,8 +7,16 @@ from features.growth.ai.schema import OUTPUT_SCHEMA_VERSION
 from features.growth.ai.validator import (
     CODE_EMPTY_EVIDENCE_IDS,
     CODE_ESTIMATED_AS_EXACT,
+    CODE_FORGED_FORECAST_DATE,
+    CODE_LIMITED_AS_MAJOR,
     CODE_NON_CONDITIONAL_SUGGESTION,
+    CODE_RANK_LANGUAGE,
+    CODE_RAW_READING_QUOTE,
+    CODE_REFERENCE_ONLY_SOLE_NEXT_ACTION,
+    CODE_REFERENCE_ONLY_SOLE_PRIORITY,
+    CODE_STALE_READING_OBSERVATION,
     CODE_UNAVAILABLE_AS_ZERO,
+    CODE_UNAVAILABLE_PEER,
     CODE_UNIT_MISMATCH,
     CODE_UNKNOWN_EVIDENCE_ID,
     CODE_UNSUPPORTED_NUMERIC_CLAIM,
@@ -213,7 +221,7 @@ def _composition_unit_packet():
 
 class GrowthAIValidatorTests(unittest.TestCase):
     def test_factual_validator_version(self):
-        self.assertEqual(FACTUAL_VALIDATOR_VERSION, 'growth_teacher_factual_validator_v3')
+        self.assertEqual(FACTUAL_VALIDATOR_VERSION, 'growth_teacher_factual_validator_v4')
 
     def test_empty_summary_evidence_ids_rejected(self):
         result = validate_teacher_interpretation(
@@ -754,3 +762,265 @@ class GrowthAIValidatorTests(unittest.TestCase):
         )
         self.assertFalse(result.valid)
         self.assertIn(CODE_UNAVAILABLE_AS_ZERO, _codes(result))
+
+
+def _peer_packet(*, display_tier='reference_only', available=True, ai_status='none'):
+    packet = _packet()
+    packet['supporting_facts']['learning']['subjects']['math']['coverage_peer'] = {
+        'available': available,
+        'display_tier': display_tier,
+        'reason': 'reference_only',
+        'child_value': _fact('learning.math.coverage_peer.child_value', 0.7),
+        'peer_median': _fact('learning.math.coverage_peer.peer_median', 0.5, available=available),
+        'difference': _fact('learning.math.coverage_peer.difference', 0.2, available=available),
+        'peer_sample_count': _fact('learning.math.coverage_peer.n', 2),
+    }
+    packet['supporting_facts']['learning']['subjects']['math']['forecast'] = {
+        'available': True,
+        'reason': 'ok',
+        'earliest_date': _fact('learning.math.forecast.earliest_date', '2026-12-20'),
+        'latest_date': _fact('learning.math.forecast.latest_date', '2026-12-28'),
+    }
+    packet['supporting_facts']['reading']['analysis'] = {
+        'ai_status': ai_status,
+        'observations': [],
+        'allowed_evidence_refs': [],
+    }
+    return packet
+
+
+class GrowthAIValidatorV3Tests(unittest.TestCase):
+    def test_invalid_evidence_ref_rejected(self):
+        result = validate_teacher_interpretation(
+            _packet(),
+            _output(summary='최근 관찰입니다.', summary_ids=['learning.math.not_a_real_id']),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_UNKNOWN_EVIDENCE_ID, _codes(result))
+
+    def test_unsupported_numeric_claim_rejected(self):
+        result = validate_teacher_interpretation(
+            _packet(),
+            _output(
+                summary='독서 활동일은 99일입니다.',
+                summary_ids=['reading.activity_days.current'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_UNSUPPORTED_NUMERIC_CLAIM, _codes(result))
+
+    def test_forged_forecast_iso_date_rejected(self):
+        result = validate_teacher_interpretation(
+            _peer_packet(),
+            _output(
+                summary='완료 예상일은 2099-01-01 입니다.',
+                summary_ids=['learning.math.forecast.earliest_date'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_FORGED_FORECAST_DATE, _codes(result))
+
+    def test_forged_korean_forecast_date_rejected(self):
+        result = validate_teacher_interpretation(
+            _peer_packet(),
+            _output(
+                summary='10월 2일쯤 완료될 것으로 보입니다.',
+                summary_ids=['learning.math.forecast.earliest_date'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_FORGED_FORECAST_DATE, _codes(result))
+
+        full = validate_teacher_interpretation(
+            _peer_packet(),
+            _output(
+                summary='2026년 10월 2일 완료될 것으로 보입니다.',
+                summary_ids=['learning.math.forecast.earliest_date'],
+            ),
+        )
+        self.assertFalse(full.valid)
+        self.assertIn(CODE_FORGED_FORECAST_DATE, _codes(full))
+
+    def test_packet_forecast_korean_dates_allowed(self):
+        result = validate_teacher_interpretation(
+            _peer_packet(),
+            _output(
+                summary='완료 예상 구간은 12월 20일부터 12월 28일입니다.',
+                summary_ids=[
+                    'learning.math.forecast.earliest_date',
+                    'learning.math.forecast.latest_date',
+                ],
+            ),
+        )
+        self.assertTrue(result.valid)
+
+    def test_reference_only_peer_sole_priority_rejected(self):
+        result = validate_teacher_interpretation(
+            _peer_packet(),
+            _output(
+                summary='또래 중앙값만 근거로 핵심 결론을 냅니다.',
+                summary_ids=['learning.math.coverage_peer.peer_median'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_REFERENCE_ONLY_SOLE_PRIORITY, _codes(result))
+
+    def test_reference_only_peer_sole_next_action_rejected(self):
+        result = validate_teacher_interpretation(
+            _peer_packet(),
+            _output(
+                summary='독서 활동일은 5일입니다.',
+                summary_ids=['reading.activity_days.current'],
+                suggestions=[{
+                    'text': '또래 중앙값만 보고 행동을 정하면 좋겠습니다.',
+                    'evidence_ids': ['learning.math.coverage_peer.peer_median'],
+                    'conditional': True,
+                }],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_REFERENCE_ONLY_SOLE_NEXT_ACTION, _codes(result))
+
+    def test_reference_only_peer_as_supporting_observation_allowed(self):
+        result = validate_teacher_interpretation(
+            _peer_packet(),
+            _output(
+                summary='최근 독서 활동일은 5일입니다.',
+                summary_ids=['reading.activity_days.current'],
+                observations=[_obs(
+                    '참고 자료로 동일 계획 중앙값 자료가 있습니다.',
+                    ['learning.math.coverage_peer.peer_median'],
+                )],
+            ),
+        )
+        self.assertTrue(result.valid)
+
+    def test_reference_only_peer_with_other_priority_evidence_allowed(self):
+        result = validate_teacher_interpretation(
+            _peer_packet(),
+            _output(
+                summary='최근 독서 활동일은 5일이고, 참고로 동일 계획 중앙값 자료가 있습니다.',
+                summary_ids=[
+                    'reading.activity_days.current',
+                    'learning.math.coverage_peer.peer_median',
+                ],
+            ),
+        )
+        self.assertTrue(result.valid)
+
+    def test_unavailable_peer_rejected(self):
+        result = validate_teacher_interpretation(
+            _peer_packet(display_tier='none', available=False),
+            _output(
+                summary='또래 비교를 핵심으로 봅니다.',
+                summary_ids=['learning.math.coverage_peer.peer_median'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_UNAVAILABLE_PEER, _codes(result))
+
+    def test_limited_peer_as_major_rejected(self):
+        result = validate_teacher_interpretation(
+            _peer_packet(display_tier='limited'),
+            _output(
+                summary='또래 중앙값만으로 강한 결론을 냅니다.',
+                summary_ids=['learning.math.coverage_peer.peer_median'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_LIMITED_AS_MAJOR, _codes(result))
+
+    def test_limited_peer_sole_next_action_rejected(self):
+        result = validate_teacher_interpretation(
+            _peer_packet(display_tier='limited'),
+            _output(
+                summary='최근 독서 활동일은 5일입니다.',
+                summary_ids=['reading.activity_days.current'],
+                suggestions=[{
+                    'text': '제한된 또래 자료만으로 다음 행동을 정하면 좋겠습니다.',
+                    'evidence_ids': ['learning.math.coverage_peer.peer_median'],
+                    'conditional': True,
+                }],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_LIMITED_AS_MAJOR, _codes(result))
+
+    def test_limited_peer_as_observation_allowed(self):
+        result = validate_teacher_interpretation(
+            _peer_packet(display_tier='limited'),
+            _output(
+                summary='최근 독서 활동일은 5일입니다.',
+                summary_ids=['reading.activity_days.current'],
+                observations=[_obs(
+                    '제한된 또래 중앙값 자료가 있습니다.',
+                    ['learning.math.coverage_peer.peer_median'],
+                )],
+            ),
+        )
+        self.assertTrue(result.valid)
+
+    def test_stale_reading_observation_rejected(self):
+        packet = _peer_packet(ai_status='stale')
+        packet['supporting_facts']['reading']['analysis']['observations'] = [{
+            'evidence_id': 'reading.analysis.observation.1',
+            'available': True,
+            'value': 'stale-obs',
+        }]
+        result = validate_teacher_interpretation(
+            packet,
+            _output(
+                summary='stale 관찰을 사용합니다.',
+                summary_ids=['reading.analysis.observation.1'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_STALE_READING_OBSERVATION, _codes(result))
+
+    def test_invented_stale_reading_observation_id_rejected(self):
+        result = validate_teacher_interpretation(
+            _peer_packet(ai_status='stale'),
+            _output(
+                summary='존재하지 않는 독서 관찰을 사용합니다.',
+                summary_ids=['reading.analysis.observation.1'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_UNKNOWN_EVIDENCE_ID, _codes(result))
+
+    def test_raw_reading_quote_rejected_derived_observation_allowed(self):
+        packet = _peer_packet(ai_status='current')
+        packet['supporting_facts']['reading']['analysis']['observations'] = [{
+            'evidence_id': 'reading.analysis.observation.1',
+            'available': True,
+            'value': '문장 길이가 늘어난 기록이 있습니다.',
+        }]
+        quoted = validate_teacher_interpretation(
+            packet,
+            _output(
+                summary='"이 책은 정말 재미있었고 주인공이 용감했다"',
+                summary_ids=['reading.analysis.observation.1'],
+            ),
+        )
+        self.assertFalse(quoted.valid)
+        self.assertIn(CODE_RAW_READING_QUOTE, _codes(quoted))
+
+        derived = validate_teacher_interpretation(
+            packet,
+            _output(
+                summary='문장 길이가 늘어난 기록이 있습니다.',
+                summary_ids=['reading.analysis.observation.1'],
+            ),
+        )
+        self.assertTrue(derived.valid)
+
+    def test_rank_language_rejected(self):
+        result = validate_teacher_interpretation(
+            _packet(),
+            _output(
+                summary='백분위로 상위권입니다.',
+                summary_ids=['reading.activity_days.current'],
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertIn(CODE_RANK_LANGUAGE, _codes(result))

@@ -1032,3 +1032,38 @@ class GrowthAIRuntimeTests(unittest.TestCase):
         self.assertNotIn('generated_output', blob)
         self.assertTrue(payload['started'])
         self.assertNotIn('failure_code', payload)
+
+
+class QaFakeProviderIsolationTests(unittest.TestCase):
+    def test_fake_requires_testing_and_qa_flag(self):
+        from features.growth.ai.fake import FakeGrowthInterpretationProvider
+        from features.growth.ai.openai_provider import OpenAIGrowthInterpretationProvider
+        from features.growth.ai.runtime import _default_generator, _qa_fake_growth_ai
+
+        with patch.dict(os.environ, {
+            'CLC_TESTING': '1',
+            'CLC_QA_FAKE_GROWTH_AI': '1',
+        }, clear=False):
+            self.assertTrue(_qa_fake_growth_ai())
+            self.assertIsInstance(_default_generator(), FakeGrowthInterpretationProvider)
+
+        with patch.dict(os.environ, {
+            'CLC_TESTING': '1',
+            'CLC_QA_FAKE_GROWTH_AI': '0',
+        }, clear=False):
+            self.assertFalse(_qa_fake_growth_ai())
+            self.assertIsInstance(_default_generator(), OpenAIGrowthInterpretationProvider)
+
+        with patch.dict(os.environ, {
+            'CLC_TESTING': '0',
+            'CLC_QA_FAKE_GROWTH_AI': '1',
+        }, clear=False):
+            self.assertFalse(_qa_fake_growth_ai())
+            self.assertIsInstance(_default_generator(), OpenAIGrowthInterpretationProvider)
+
+        with patch.dict(os.environ, {
+            'CLC_TESTING': '0',
+            'CLC_QA_FAKE_GROWTH_AI': '0',
+        }, clear=False):
+            self.assertFalse(_qa_fake_growth_ai())
+            self.assertIsInstance(_default_generator(), OpenAIGrowthInterpretationProvider)

@@ -34,7 +34,7 @@ class GenerationResult:
 
 
 class GrowthInterpretationProvider:
-    """generate(packet) -> GenerationResult. packet은 growth_teacher_evidence_v2 dict."""
+    """generate(packet) -> GenerationResult. packet은 growth_teacher_evidence_v3 dict."""
 
     def generate(self, packet, timeout_s=None) -> GenerationResult:
         raise NotImplementedError

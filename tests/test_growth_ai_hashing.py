@@ -59,13 +59,13 @@ class PacketHashTests(unittest.TestCase):
             'safety_guardrail_version': '1',
         }
         other = dict(base)
-        other['prompt_version'] = 'growth_teacher_prompt_v9'
+        other['prompt_version'] = 'growth_teacher_prompt_v10'
         self.assertNotEqual(runtime_signature(base), runtime_signature(other))
-        self.assertEqual(GROWTH_TEACHER_PROMPT_VERSION, 'growth_teacher_prompt_v9')
+        self.assertEqual(GROWTH_TEACHER_PROMPT_VERSION, 'growth_teacher_prompt_v10')
         self.assertEqual(current_runtime_parts()['prompt_version'], GROWTH_TEACHER_PROMPT_VERSION)
         self.assertEqual(
             current_runtime_parts()['factual_validator_version'],
-            'growth_teacher_factual_validator_v3',
+            'growth_teacher_factual_validator_v4',
         )
 
     def test_v2_prompt_and_schema_change_current_signature(self):

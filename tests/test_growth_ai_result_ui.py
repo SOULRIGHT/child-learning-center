@@ -27,7 +27,7 @@ class GrowthAiResultUiTests(unittest.TestCase):
         self.assertIn('setObservationsSummary', js)
         self.assertIn('INTERPRETATION_TITLE = \'왜 중요하게 보나요?\'', copy_src)
         self.assertIn('OBS_TITLE = \'세부 관찰\'', copy_src)
-        self.assertIn('growth_teacher_prompt_v9', (PROJECT_ROOT / 'features' / 'growth' / 'ai' / 'prompt.py').read_text(encoding='utf-8'))
+        self.assertIn('growth_teacher_prompt_v10', (PROJECT_ROOT / 'features' / 'growth' / 'ai' / 'prompt.py').read_text(encoding='utf-8'))
         self.assertIn('최대 2문장', (PROJECT_ROOT / 'features' / 'growth' / 'ai' / 'prompt.py').read_text(encoding='utf-8'))
         self.assertIn('여러 지표를 한 문장이나 한 항목에서 연결하는 것은 허용한다', (PROJECT_ROOT / 'features' / 'growth' / 'ai' / 'prompt.py').read_text(encoding='utf-8'))
         self.assertNotIn('서로 다른 단위의 정량 비교', (PROJECT_ROOT / 'features' / 'growth' / 'ai' / 'prompt.py').read_text(encoding='utf-8'))

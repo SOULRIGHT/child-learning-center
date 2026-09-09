@@ -4,7 +4,7 @@ from __future__ import annotations
 import inspect
 import json
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import patch
 
 from tests.helpers import bootstrap_test_app, local_development_sqlite_path, resolved_engine_sqlite_path
@@ -312,6 +312,166 @@ def _recent(**kwargs):
     }
 
 
+def _canonical_subject(
+    key='math',
+    name='수학',
+    *,
+    expected=(10, 10),
+    studied=(8, 7),
+    not_studied=(1, 1),
+    unknown=(1, 2),
+    extra=(0, 0),
+    performance=(0.8, 0.7),
+    confirmation=(0.9, 0.8),
+    band='primary',
+    enough_days=True,
+    major_eligible=True,
+    delta_pp=10.0,
+    coverage_ratio=0.5,
+    observed_pages=40,
+    assigned_covered=40,
+    assigned_denom=80,
+    latest_page=40,
+    progress_available=True,
+    progress_status='exact',
+    exclusions_confirmed=True,
+    forecast_available=True,
+    earliest='2026-12-20',
+    latest='2026-12-30',
+    vs_target='on_or_ahead',
+    forecast_reason='ok',
+    title='수학 3-2',
+    start_page=1,
+    end_page=80,
+    target='2026-12-31',
+    perf_peer_n=3,
+    perf_peer_tier='primary',
+    perf_child=0.8,
+    perf_median=0.7,
+    cov_peer_n=3,
+    cov_peer_tier='primary',
+    cov_child=0.5,
+    cov_median=0.4,
+):
+    return {
+        'subject_key': key,
+        'subject_label': name,
+        'performance_current': {
+            'available': True,
+            'expected_days': expected[0],
+            'studied_days': studied[0],
+            'explicit_not_studied_days': not_studied[0],
+            'unknown_days': unknown[0],
+            'extra_studied_days': extra[0],
+            'performance_rate': performance[0],
+            'confirmation_rate': confirmation[0],
+            'interpretation': band,
+            'eligibility': {'enough_days': enough_days, 'confirmation_band': band},
+        },
+        'performance_previous': {
+            'available': True,
+            'expected_days': expected[1],
+            'studied_days': studied[1],
+            'explicit_not_studied_days': not_studied[1],
+            'unknown_days': unknown[1],
+            'extra_studied_days': extra[1],
+            'performance_rate': performance[1],
+            'confirmation_rate': confirmation[1],
+            'interpretation': band,
+            'eligibility': {'enough_days': enough_days, 'confirmation_band': band},
+        },
+        'compare': {
+            'performance_delta_pp': delta_pp,
+            'confirmation_delta_pp': 10.0,
+            'enough_days': enough_days,
+            'confirmation_band': band,
+            'period_change_allowed': enough_days and band in ('limited', 'primary'),
+            'major_insight_eligible': major_eligible,
+        },
+        'progress': {
+            'available': progress_available,
+            'status': progress_status,
+            'observed_page_count': observed_pages,
+            'assigned_covered_page_count': assigned_covered,
+            'assigned_denominator': assigned_denom,
+            'coverage_ratio': coverage_ratio,
+            'latest_observed_end_page': latest_page,
+            'latest_observed_end_page_role': 'reference_position',
+            'exclusions_confirmed': exclusions_confirmed,
+        },
+        'forecast': {
+            'available': forecast_available,
+            'reason': forecast_reason,
+            'earliest_date': earliest,
+            'latest_date': latest,
+            'vs_target': vs_target,
+        },
+        'plan': {
+            'available': True,
+            'status': 'active',
+            'textbook_title': title,
+            'start_page': start_page,
+            'end_page': end_page,
+            'start_date': date(2026, 7, 1),
+            'target_completion_date': target,
+        },
+        'performance_peer': {
+            'available': perf_peer_n >= 2,
+            'reason': 'ok' if perf_peer_n >= 3 else ('reference_only' if perf_peer_n == 2 else 'insufficient_peers'),
+            'child_value': perf_child,
+            'peer_median': perf_median,
+            'difference': None if perf_child is None or perf_median is None else perf_child - perf_median,
+            'peer_sample_count': perf_peer_n,
+            'display_tier': perf_peer_tier,
+        },
+        'coverage_peer': {
+            'available': cov_peer_n >= 2,
+            'reason': 'ok' if cov_peer_n >= 3 else ('reference_only' if cov_peer_n == 2 else 'insufficient_peers'),
+            'child_value': cov_child,
+            'peer_median': cov_median,
+            'difference': None if cov_child is None or cov_median is None else cov_child - cov_median,
+            'peer_sample_count': cov_peer_n,
+            'display_tier': cov_peer_tier,
+        },
+    }
+
+
+def _canonical(*, subjects=None, points_peer=None, reading=None):
+    return {
+        'as_of': AS_OF,
+        'window_days': 30,
+        'current_window': dict(CURRENT),
+        'previous_window': dict(PREV),
+        'subjects': subjects if subjects is not None else {'math': _canonical_subject()},
+        'points_peer': points_peer or {
+            'available': True,
+            'reason': 'ok',
+            'child_value': 400,
+            'peer_median': 300,
+            'difference': 100,
+            'peer_sample_count': 3,
+            'display_tier': 'primary',
+        },
+        'reading': reading or {
+            'as_of': AS_OF.isoformat(),
+            'ai_status': 'none',
+            'facts': {
+                'recent_count': 0,
+                'previous_count': 0,
+                'sufficiency': 'no_change_conclusion',
+                'completed_count': 0,
+                'character_count': {},
+                'sentence_count': {},
+                'recent_records': [],
+                'previous_records': [],
+            },
+            'observations': [],
+            'limitations': [],
+            'allowed_evidence_refs': [],
+        },
+    }
+
+
 def _bundle(**kwargs):
     payload = {
         'reading': kwargs.get('reading', _reading()),
@@ -319,6 +479,7 @@ def _bundle(**kwargs):
         'points': kwargs.get('points', _points()),
         'learning': kwargs.get('learning', _learning()),
         'recent_window_bests': kwargs.get('recent', _recent()),
+        'canonical': kwargs.get('canonical', _canonical()),
     }
     if 'point_composition' in kwargs:
         payload['point_composition'] = kwargs['point_composition']
@@ -382,7 +543,7 @@ class EvidencePacketContractTests(unittest.TestCase):
                 self.assertIn(evidence_id, registered, evidence_id)
 
     def _assert_contract(self, packet):
-        self.assertEqual(SCHEMA_VERSION, 'growth_teacher_evidence_v2')
+        self.assertEqual(SCHEMA_VERSION, 'growth_teacher_evidence_v3')
         self.assertEqual(packet['schema_version'], SCHEMA_VERSION)
         self.assertEqual(packet['audience'], AUDIENCE_TEACHER)
         self.assertRegex(packet['as_of'], r'^\d{4}-\d{2}-\d{2}$')
@@ -397,7 +558,8 @@ class EvidencePacketContractTests(unittest.TestCase):
         self._assert_ids(packet)
 
     def test_limit_matches_growth_service(self):
-        self.assertEqual(SELECTED_INSIGHT_LIMIT, INSIGHT_LIMIT)
+        self.assertEqual(SELECTED_INSIGHT_LIMIT, 4)
+        self.assertEqual(INSIGHT_LIMIT, 3)
 
     def test_builder_is_projection_not_provider(self):
         source = inspect.getsource(inspect.getmodule(build_teacher_evidence_packet))
@@ -424,33 +586,31 @@ class EvidencePacketContractTests(unittest.TestCase):
         self.assertEqual(points['period']['current']['value'], 400)
         self.assertEqual(points['cumulative_as_of']['value'], 1200)
         math = packet['supporting_facts']['learning']['subjects']['math']
-        self.assertEqual(math['current_snapshot']['page']['value'], 40)
-        self.assertEqual(math['page_advance']['current']['value'], 20)
-        observed = packet['supporting_facts']['learning']['observed_study_days']
-        self.assertFalse(observed['attendance'])
-        self.assertEqual(observed['proxy'], 'point_activity_days')
+        self.assertEqual(math['performance']['current']['studied_days']['value'], 8)
+        self.assertEqual(math['progress']['coverage_ratio']['value'], 0.5)
+        self.assertEqual(math['progress']['latest_observed_end_page']['role'], 'reference_position')
+        self.assertNotIn('observed_study_days', packet['supporting_facts']['learning'])
+        self.assertNotIn('page_advance', math)
+        self.assertNotIn('current_snapshot', math)
         self.assertNotIn('recent_windows', packet['scope'])
         encoded = json.dumps(packet)
-        self.assertNotIn('99999', encoded)
+        self.assertNotIn('child_cumulative_points', encoded)
         self.assertNotIn('40404', encoded)
 
     def test_actual_zero_keeps_value(self):
         packet = _packet(_bundle(
             reading=_reading(days=(0, 0), completed=(0, 0)),
             points=_points(values=(0, 0), cumulative=0),
-            learning=_learning(
-                observed=(0, 0),
-                subjects={'math': _subject(current_advance=0, previous_advance=0, delta=0)},
-            ),
+            canonical=_canonical(subjects={'math': _canonical_subject(studied=(0, 0), performance=(0.0, 0.0), delta_pp=0.0, major_eligible=False)}),
         ))
         self._assert_contract(packet)
         days = packet['supporting_facts']['reading']['activity_days']['current']
         self.assertTrue(days['available'])
         self.assertEqual(days['value'], 0)
         self.assertNotIn('status', days)
-        advance = packet['supporting_facts']['learning']['subjects']['math']['page_advance']['current']
-        self.assertTrue(advance['available'])
-        self.assertEqual(advance['value'], 0)
+        studied = packet['supporting_facts']['learning']['subjects']['math']['performance']['current']['studied_days']
+        self.assertTrue(studied['available'])
+        self.assertEqual(studied['value'], 0)
         cumulative = packet['supporting_facts']['points']['cumulative_as_of']
         self.assertTrue(cumulative['available'])
         self.assertEqual(cumulative['value'], 0)
@@ -472,151 +632,124 @@ class EvidencePacketContractTests(unittest.TestCase):
         self.assertNotIn('value', cumulative)
 
     def test_stale_progress_is_not_zero(self):
-        packet = _packet(_bundle(learning=_learning(subjects={'math': _subject(
-            stale=True,
-            current_available=False,
-            previous_available=False,
-            trend_comparable=False,
-            current_advance=None,
-            previous_advance=None,
-            delta=None,
-            advance_status='stale_endpoint',
+        packet = _packet(_bundle(canonical=_canonical(subjects={'math': _canonical_subject(
+            progress_available=False,
+            progress_status='no_studied_sessions',
+            observed_pages=None,
+            assigned_covered=None,
+            assigned_denom=None,
+            coverage_ratio=None,
+            latest_page=None,
+            forecast_available=False,
+            earliest=None,
+            latest=None,
+            major_eligible=False,
         )})))
-        advance = packet['supporting_facts']['learning']['subjects']['math']['page_advance']['current']
-        self.assertFalse(advance['available'])
-        self.assertNotIn('value', advance)
-        self.assertEqual(
-            packet['supporting_facts']['learning']['subjects']['math']['current_snapshot']['stale'],
-            True,
-        )
+        coverage = packet['supporting_facts']['learning']['subjects']['math']['progress']['coverage_ratio']
+        self.assertFalse(coverage['available'])
+        self.assertNotIn('value', coverage)
 
     def test_cross_book_has_no_advance_value(self):
-        packet = _packet(_bundle(learning=_learning(subjects={'math': _subject(
-            current_available=False,
-            previous_available=False,
-            trend_comparable=False,
-            current_advance=None,
-            delta=None,
-            advance_status='cross_book',
+        packet = _packet(_bundle(canonical=_canonical(subjects={'math': _canonical_subject(
+            progress_available=False,
+            progress_status='no_plan',
+            coverage_ratio=None,
+            observed_pages=None,
+            assigned_covered=None,
+            assigned_denom=None,
+            latest_page=None,
+            major_eligible=False,
         )})))
-        current = packet['supporting_facts']['learning']['subjects']['math']['page_advance']['current']
+        current = packet['supporting_facts']['learning']['subjects']['math']['progress']['coverage_ratio']
         self.assertFalse(current['available'])
         self.assertNotIn('value', current)
-        self.assertEqual(current['status'], 'cross_book')
 
     def test_peer_available_and_small_n_kept(self):
-        packet = _packet(_bundle(learning=_learning(subjects={'math': _subject(
-            peer_n=1,
-            peer_median=30,
-            peer_gap=10,
-            peer_available=True,
-            peer_status='ok',
+        packet = _packet(_bundle(canonical=_canonical(subjects={'math': _canonical_subject(
+            perf_peer_n=2,
+            perf_peer_tier='reference_only',
+            perf_median=0.3,
+            perf_child=0.4,
+            major_eligible=False,
         )})))
-        peer = packet['supporting_facts']['learning']['subjects']['math']['peer']
+        peer = packet['supporting_facts']['learning']['subjects']['math']['performance_peer']
         self.assertTrue(peer['available'])
-        self.assertEqual(peer['n']['value'], 1)
-        self.assertEqual(peer['median']['value'], 30)
-        self.assertEqual(peer['gap']['value'], 10)
+        self.assertEqual(peer['peer_sample_count']['value'], 2)
+        self.assertEqual(peer['display_tier'], 'reference_only')
+        self.assertEqual(peer['peer_median']['value'], 0.3)
 
     def test_peer_n0_omits_median(self):
-        packet = _packet(_bundle(learning=_learning(subjects={'math': _subject(
-            peer_n=0,
-            peer_median=None,
-            peer_available=False,
-            peer_status='no_peers',
+        packet = _packet(_bundle(canonical=_canonical(subjects={'math': _canonical_subject(
+            perf_peer_n=0,
+            perf_peer_tier='none',
+            perf_median=None,
+            major_eligible=False,
         )})))
-        peer = packet['supporting_facts']['learning']['subjects']['math']['peer']
+        peer = packet['supporting_facts']['learning']['subjects']['math']['performance_peer']
         self.assertFalse(peer['available'])
-        self.assertEqual(peer['status'], 'no_peers')
-        self.assertEqual(peer['n']['value'], 0)
-        self.assertNotIn('median', peer)
-        self.assertNotIn('gap', peer)
+        self.assertEqual(peer['display_tier'], 'none')
+        self.assertEqual(peer['peer_sample_count']['value'], 0)
+        self.assertFalse(peer['peer_median']['available'])
+        self.assertNotIn('value', peer['peer_median'])
 
     def test_exact_and_estimated_plan(self):
-        estimated = _packet(_bundle(learning=_learning(subjects={'math': _subject(
-            plan_status='active',
-            workload_kind=WORKLOAD_KIND_ESTIMATED,
-            remaining=80,
-            days=20,
-            required=4,
-            target=date(2026, 12, 20),
-        )})))
-        plan = estimated['supporting_facts']['learning']['subjects']['math']['plan']
-        self.assertEqual(plan['workload_kind'], 'estimated')
-        self.assertEqual(plan['remaining_workload']['value'], 80)
-        exact = _packet(_bundle(learning=_learning(subjects={'math': _subject(
-            plan_status='active',
-            workload_kind=WORKLOAD_KIND_EXACT,
-            remaining=40,
-            days=10,
-            required=4,
-            target=date(2026, 12, 20),
-        )})))
-        self.assertEqual(
-            exact['supporting_facts']['learning']['subjects']['math']['plan']['workload_kind'],
-            'exact',
-        )
-
-    def test_no_planned_days_keeps_zero_days_without_fake_rate(self):
-        packet = _packet(_bundle(learning=_learning(subjects={'math': _subject(
-            plan_status='no_remaining_planned_days',
-            workload_kind='exact',
-            remaining=40,
-            days=0,
-            required=None,
-            weekdays=(),
+        packet = _packet(_bundle(canonical=_canonical(subjects={'math': _canonical_subject(
+            forecast_available=True,
+            earliest='2026-12-20',
+            latest='2026-12-28',
+            target='2026-12-20',
         )})))
         plan = packet['supporting_facts']['learning']['subjects']['math']['plan']
-        self.assertEqual(plan['remaining_planned_days']['value'], 0)
-        self.assertNotIn('required_per_planned_day', plan)
-        self.assertEqual(plan['effective_weekdays'], [])
+        forecast = packet['supporting_facts']['learning']['subjects']['math']['forecast']
+        self.assertEqual(plan['target_completion_date']['value'], '2026-12-20')
+        self.assertNotIn('remaining_workload', plan)
+        self.assertNotIn('workload_kind', plan)
+        self.assertTrue(forecast['available'])
+        self.assertEqual(forecast['earliest_date']['value'], '2026-12-20')
+
+    def test_no_planned_days_keeps_zero_days_without_fake_rate(self):
+        packet = _packet(_bundle(canonical=_canonical(subjects={'math': _canonical_subject(
+            forecast_available=False,
+            forecast_reason='no_future_study_days',
+            earliest=None,
+            latest=None,
+            major_eligible=False,
+        )})))
+        forecast = packet['supporting_facts']['learning']['subjects']['math']['forecast']
+        self.assertFalse(forecast['available'])
+        self.assertNotIn('value', forecast['earliest_date'])
+        self.assertEqual(forecast['reason'], 'no_future_study_days')
 
     def test_recent_window_selected_insight_ids_resolve(self):
-        bundle = _bundle(
-            reading=_reading(days=(4, 4)),
-            recent=_recent(reading_days=_rwb(15, 13, 10)),
-        )
-        packet = _packet(bundle)
+        packet = _packet(_bundle())
         self._assert_contract(packet)
-        ids = [item['id'] for item in packet['selected_insights']]
-        self.assertIn(READING_DAYS_RECENT_WINDOW_BEST, ids)
-        rwb = packet['supporting_facts']['reading']['recent_window_activity_days']
-        self.assertEqual(rwb['current']['value'], 15)
-        self.assertEqual(rwb['margin']['value'], 2)
-        self.assertIn('recent_windows', packet['scope'])
+        self.assertLessEqual(len(packet['selected_insights']), SELECTED_INSIGHT_LIMIT)
+        self.assertTrue(all(item.get('tier') == 'major' for item in packet['selected_insights']))
+        self.assertNotIn('recent_window_activity_days', packet['supporting_facts']['reading'])
+        self.assertNotIn('recent_windows', packet['scope'])
         self.assertTrue(all('headline' not in item for item in packet['selected_insights']))
 
     def test_multi_subject_learning_recent_window(self):
-        bundle = _bundle(
-            reading=_reading(days=(1, 1), completed=(0, 0)),
-            points=_points(values=(50, 50)),
-            learning=_learning(subjects={
-                'korean': _subject(key='korean', name='국어', title='국어 3-2', current_advance=28),
-                'math': _subject(key='math', name='수학', title='수학 3-2', current_advance=44),
-            }),
-            recent=_recent(learning={
-                'korean': _rwb(28, 21, 10, title='국어 3-2'),
-                'math': _rwb(44, 32, 20, title='수학 3-2'),
-            }),
-        )
-        packet = _packet(bundle)
+        packet = _packet(_bundle(canonical=_canonical(subjects={
+            'korean': _canonical_subject(key='korean', name='국어', title='국어 3-2', delta_pp=12.0),
+            'math': _canonical_subject(key='math', name='수학', title='수학 3-2', delta_pp=15.0),
+        })))
         self._assert_contract(packet)
-        selected = packet['selected_insights'][0]
-        self.assertEqual(selected['id'], LEARNING_PAGE_ADVANCE_RECENT_WINDOW_BEST)
         subjects = packet['supporting_facts']['learning']['subjects']
-        self.assertIn('recent_window', subjects['korean'])
-        self.assertIn('recent_window', subjects['math'])
-        self.assertEqual(subjects['math']['recent_window']['margin']['value'], 12)
+        self.assertIn('korean', subjects)
+        self.assertIn('math', subjects)
+        self.assertNotIn('recent_window', subjects['korean'])
+        self.assertNotIn('page_advance', subjects['math'])
 
     def test_negative_page_correction_is_preserved(self):
-        packet = _packet(_bundle(learning=_learning(subjects={'math': _subject(
-            current_advance=-5,
-            previous_advance=10,
-            delta=-15,
+        packet = _packet(_bundle(canonical=_canonical(subjects={'math': _canonical_subject(
+            extra=(2, 0),
+            major_eligible=False,
+            delta_pp=0.0,
         )})))
-        current = packet['supporting_facts']['learning']['subjects']['math']['page_advance']['current']
-        self.assertTrue(current['available'])
-        self.assertEqual(current['value'], -5)
+        extra = packet['supporting_facts']['learning']['subjects']['math']['performance']['current']['extra_studied_days']
+        self.assertTrue(extra['available'])
+        self.assertEqual(extra['value'], 2)
 
     def test_insufficient_history_recent_window_not_dumped(self):
         packet = _packet(_bundle(recent=_recent()))
@@ -1050,11 +1183,11 @@ class EvidencePacketDatabaseTests(unittest.TestCase):
         self._progress(date(2026, 8, 15), page=120)
         self._daily(date(2026, 8, 20), korean=200)
         bundle, packet = self._packet()
-        math = bundle['learning']['subjects']['math']
+        math = bundle['canonical']['subjects']['math']
         packet_math = packet['supporting_facts']['learning']['subjects']['math']
         self.assertEqual(
-            packet_math['page_advance']['current']['value'],
-            math['page_advance']['current']['value'],
+            packet_math['performance']['current']['studied_days']['value'],
+            math['performance_current']['studied_days'],
         )
         period = packet['supporting_facts']['points']['period']
         if bundle['points']['comparable']['points'] is True:
@@ -1112,15 +1245,12 @@ class EvidencePacketDatabaseTests(unittest.TestCase):
         )
         set_child_weekdays_override(self.child.id, [])
         bundle, packet = self._packet(as_of)
-        peer_fact = packet['supporting_facts']['learning']['subjects']['math']['peer']
-        self.assertTrue(peer_fact['available'])
-        self.assertEqual(peer_fact['n']['value'], 1)
-        self.assertEqual(peer_fact['median']['value'], 30)
+        peer_fact = packet['supporting_facts']['learning']['subjects']['math']['performance_peer']
+        self.assertEqual(peer_fact['display_tier'] in ('none', 'reference_only', 'limited', 'primary'), True)
+        self.assertNotIn('peer', packet['supporting_facts']['learning']['subjects']['math'])
         plan = packet['supporting_facts']['learning']['subjects']['math']['plan']
-        self.assertEqual(plan['workload_kind'], 'exact')
-        self.assertEqual(plan['effective_weekdays'], [])
-        self.assertEqual(plan['remaining_planned_days']['value'], 0)
-        self.assertNotIn('required_per_planned_day', plan)
+        self.assertNotIn('remaining_planned_days', plan)
+        self.assertNotIn('workload_kind', plan)
         self.assertNotIn('동료패킷', json.dumps(packet))
 
     def test_empty_history_is_unavailable_not_zero(self):
@@ -1129,11 +1259,54 @@ class EvidencePacketDatabaseTests(unittest.TestCase):
         self.assertFalse(days['available'])
         self.assertNotIn('value', days)
         self.assertFalse(packet['supporting_facts']['points']['cumulative_as_of']['available'])
-        snapshot = packet['supporting_facts']['learning']['subjects']['math']['current_snapshot']
-        self.assertFalse(snapshot['available'])
-        self.assertNotIn('value', snapshot['page'])
+        progress = packet['supporting_facts']['learning']['subjects']['math']['progress']
+        self.assertFalse(progress['available'])
+        self.assertNotIn('value', progress['coverage_ratio'])
         self.assertEqual(bundle['reading']['current']['reading_days'], 0)
         composition = packet['supporting_facts']['points'].get('composition')
         if composition:
             self.assertFalse(composition['totals']['net_points']['current']['available'])
             self.assertNotIn('value', composition['totals']['net_points']['current'])
+
+    def test_legacy_progress_entry_and_daily_points_do_not_change_canonical_learning(self):
+        as_of = date(2026, 8, 22)
+        create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math.id,
+            textbook_title='우등생 수학 3-2',
+            start_page=1,
+            end_page=100,
+            start_date=date(2026, 7, 1),
+            target_completion_date=date(2026, 12, 20),
+            exclusion_ranges_text=None,
+        )
+        _, before = self._packet(as_of)
+        math_before = before['supporting_facts']['learning']['subjects']['math']
+        learning_before = json.dumps({
+            'performance': math_before['performance'],
+            'progress': math_before['progress'],
+            'forecast': math_before['forecast'],
+            'performance_peer': math_before['performance_peer'],
+            'coverage_peer': math_before['coverage_peer'],
+        }, sort_keys=True, ensure_ascii=False)
+
+        self._progress(as_of, page=99999)
+        for offset in range(20):
+            self._daily(as_of - timedelta(days=offset), korean=900)
+
+        _, after = self._packet(as_of)
+        math_after = after['supporting_facts']['learning']['subjects']['math']
+        learning_after = json.dumps({
+            'performance': math_after['performance'],
+            'progress': math_after['progress'],
+            'forecast': math_after['forecast'],
+            'performance_peer': math_after['performance_peer'],
+            'coverage_peer': math_after['coverage_peer'],
+        }, sort_keys=True, ensure_ascii=False)
+        self.assertEqual(learning_before, learning_after)
+        blob = json.dumps(after['supporting_facts']['learning'], ensure_ascii=False)
+        self.assertNotIn('observed_study_days', blob)
+        self.assertNotIn('page_advance', blob)
+        self.assertNotIn('current_snapshot', blob)
+        self.assertNotEqual(math_after['progress']['latest_observed_end_page'].get('value'), 99999)
+        self.assertNotIn('99999', json.dumps(math_after['progress'], ensure_ascii=False))
