@@ -17,7 +17,7 @@
 </div>
 
 {% if rows %}
-<form method="post" action="{{ url_for('planning.manage_subject_weekdays') }}">
+<form method="post" action="{{ url_for('planning.manage_subject_weekdays') }}" data-testid="subject-weekdays-form">
     {% for row in rows %}
     <div class="card mb-3">
         <div class="card-body">

@@ -1,0 +1,4 @@
+# Local / QA-only dependencies. Do not install these in production.
+# Install: python -m pip install -r requirements-dev.txt
+# Browser: python -m playwright install chromium
+playwright==1.48.0

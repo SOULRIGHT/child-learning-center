@@ -85,7 +85,7 @@
     <div class="card-header">센터 비학습일 추가</div>
     <div class="card-body">
         <p class="text-muted small">휴무, 행사, 체험, 임시공휴일처럼 센터가 지정한 날을 추가합니다.</p>
-        <form method="post" action="{{ url_for('planning.manage_non_study_days', year=year, month=month) }}" class="row g-2 align-items-end">
+        <form method="post" action="{{ url_for('planning.manage_non_study_days', year=year, month=month) }}" class="row g-2 align-items-end" data-testid="non-study-add-form">
             <input type="hidden" name="action" value="add">
             <input type="hidden" name="year" value="{{ year }}">
             <input type="hidden" name="month" value="{{ month }}">

@@ -88,7 +88,7 @@
     <div class="card-body">
         {% include 'study/_recent.html' %}
         {% include 'progress/_current.html' %}
-        <details class="mt-2">
+        <details class="mt-2" data-testid="teacher-study-form">
             <summary class="btn btn-sm btn-outline-primary">학습 기록하기</summary>
             <div class="mt-3">
                 {% set return_to = 'detail' %}

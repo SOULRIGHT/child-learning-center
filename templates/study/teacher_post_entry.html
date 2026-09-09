@@ -26,7 +26,7 @@
     </div>
 </form>
 
-<form method="post" action="{{ url_for('study.teacher_post_entry', child_id=child.id) }}" class="js-child-study-form">
+<form method="post" action="{{ url_for('study.teacher_post_entry', child_id=child.id) }}" class="js-child-study-form" data-testid="teacher-post-entry-form">
     <input type="hidden" name="study_date" value="{{ study_date.isoformat() }}">
     {% for row in rows %}
     {% include 'study/_subject_input_row.html' %}

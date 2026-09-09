@@ -67,6 +67,9 @@ firebase_env_example.txt
 *.tmp
 *.temp
 
+# Browser QA artifacts (failure-only traces/screenshots)
+qa-results/
+
 # SQL exports
 *.sql
 # Local generated backups
