@@ -3,6 +3,7 @@ from flask import Blueprint, abort, current_app, flash, redirect, render_templat
 from flask_login import current_user, login_required
 
 from features.reading.access import get_child
+from features.study.view import teacher_study_template_vars
 from features.progress.service import (
     ProgressError,
     create_subject,
@@ -12,12 +13,17 @@ from features.progress.service import (
     kst_today,
     list_progress_input_subjects,
     list_subjects,
-    save_progress_entry,
     set_subject_active,
     update_subject,
 )
 
 progress_bp = Blueprint('progress', __name__)
+
+LEGACY_PROGRESS_POST_MESSAGE = (
+    '이 진도 입력 방식은 더 이상 사용하지 않습니다. '
+    '학습 기록에서 시작~끝 페이지를 입력해 주세요. '
+    '과거 페이지 값은 학습 기록으로 자동 변환되지 않습니다.'
+)
 
 
 def _is_viewer():
@@ -111,6 +117,7 @@ def history(child_id):
         current_rows=current_progress_for_child(child_id),
         active_subjects=list_progress_input_subjects(),
         kst_today=kst_today(),
+        **teacher_study_template_vars(child, recent_limit=40),
     )
 
 
@@ -121,18 +128,7 @@ def save_progress(child_id):
     if blocked:
         return blocked
     _child_or_404(child_id)
-    try:
-        save_progress_entry(
-            child_id=child_id,
-            learning_subject_id=request.form.get('learning_subject_id'),
-            textbook_title=request.form.get('textbook_title'),
-            page=request.form.get('page'),
-            recorded_on=request.form.get('recorded_on'),
-            created_by_user_id=current_user.id,
-        )
-        flash('학습 진도를 저장했습니다.', 'success')
-    except ProgressError as exc:
-        flash(exc.message, 'error')
+    flash(LEGACY_PROGRESS_POST_MESSAGE, 'error')
     if (request.form.get('return_to') or '').strip() == 'points':
         return redirect(url_for('points_input', child_id=child_id))
     if (request.form.get('return_to') or '').strip() == 'history':

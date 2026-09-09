@@ -1,34 +1,48 @@
 {% extends "base.html" %}
 
-{% block title %}{{ child.name }} - 학습 진도 이력{% endblock %}
-{% block page_title %}{{ child.name }} 학습 진도{% endblock %}
+{% block title %}{{ child.name }} - 학습 기록{% endblock %}
+{% block page_title %}{{ child.name }} 학습 기록{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <div>
-        <h4 class="mb-1">{{ child.name }} 학습 진도</h4>
-        <p class="text-muted mb-0">같은 날짜에 다시 저장하면 그날 기록만 수정됩니다. 다른 날짜는 이력이 남습니다.</p>
+        <h4 class="mb-1">{{ child.name }} 학습 기록</h4>
+        <p class="text-muted mb-0">새 학습 기록은 시작~끝 페이지로 저장합니다. 같은 날 공부한 구간을 여러 개 남길 수 있습니다.</p>
     </div>
     <a href="{{ url_for('child_detail', child_id=child.id) }}" class="btn btn-outline-secondary">아동 상세</a>
 </div>
 
 <div class="card mb-4">
-    <div class="card-header">현재 진도</div>
+    <div class="card-header">학습 기록</div>
+    <div class="card-body">
+        {% set return_to = 'history' %}
+        {% include 'study/_form.html' %}
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">미확인 학습 기록</div>
+    <div class="card-body">
+        {% include 'study/_observed.html' %}
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">최근 학습 기록</div>
+    <div class="card-body">
+        {% include 'study/_recent.html' %}
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">기존 진도 기록 (읽기 전용)</div>
     <div class="card-body">
         {% include 'progress/_current.html' %}
     </div>
 </div>
 
-<div class="card mb-4">
-    <div class="card-header">진도 기록</div>
-    <div class="card-body">
-        {% set return_to = 'history' %}
-        {% include 'progress/_form.html' %}
-    </div>
-</div>
-
 <div class="card">
-    <div class="card-header">전체 이력</div>
+    <div class="card-header">기존 진도 이력 (읽기 전용)</div>
     <div class="card-body">
         {% if rows %}
         <div class="table-responsive">
@@ -66,7 +80,7 @@
             </table>
         </div>
         {% else %}
-        <p class="text-muted mb-0">아직 진도 기록이 없습니다.</p>
+        <p class="text-muted mb-0">기존 진도 기록이 없습니다.</p>
         {% endif %}
     </div>
 </div>

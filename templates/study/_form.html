@@ -1,0 +1,153 @@
+<form method="post" action="{{ url_for('study.save_study_session', child_id=child.id) }}" class="js-study-session-form" data-form-key="{{ return_to }}" id="study-session-form-{{ return_to }}">
+    <input type="hidden" name="return_to" value="{{ return_to }}">
+    <input type="hidden" name="learning_workbook_plan_id" class="js-study-plan-id" value="">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label" for="study_date_{{ return_to }}">학습 날짜</label>
+            <input class="form-control" id="study_date_{{ return_to }}" name="study_date" type="date" value="{{ kst_today.isoformat() }}" max="{{ kst_today.isoformat() }}" required>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="learning_subject_id_{{ return_to }}">과목</label>
+            <select class="form-select js-study-subject" id="learning_subject_id_{{ return_to }}" name="learning_subject_id" required>
+                {% for subject in active_subjects %}
+                <option value="{{ subject.id }}">{{ subject.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-6">
+            <div class="form-label">교재</div>
+            <p class="js-study-plan-label mb-1">날짜와 과목에 맞는 등록 교재가 표시됩니다.</p>
+            <p class="form-text js-study-plan-empty mb-0 d-none">이 날짜에 등록된 교재가 없습니다. 설정에서 교재 계획을 등록하세요.</p>
+        </div>
+    </div>
+    <div class="mt-3">
+        <div class="form-label">학습 상태</div>
+        <div class="d-flex flex-wrap gap-3">
+            <label class="form-check-label">
+                <input class="form-check-input js-study-status" type="radio" name="study_status" value="studied" checked>
+                공부함
+            </label>
+            <label class="form-check-label">
+                <input class="form-check-input js-study-status" type="radio" name="study_status" value="explicit_not_studied">
+                공부하지 않음
+            </label>
+            <label class="form-check-label">
+                <input class="form-check-input js-study-status" type="radio" name="study_status" value="unknown">
+                기억 안 남
+            </label>
+        </div>
+    </div>
+    <div class="row g-2 align-items-end mt-1 js-study-pages">
+        <div class="col-md-3">
+            <label class="form-label" for="start_page_{{ return_to }}">시작 페이지</label>
+            <input class="form-control js-study-start" id="start_page_{{ return_to }}" name="start_page" type="number" min="1" max="2000">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="end_page_{{ return_to }}">끝 페이지</label>
+            <input class="form-control js-study-end" id="end_page_{{ return_to }}" name="end_page" type="number" min="1" max="2000">
+        </div>
+    </div>
+    <div class="mt-3">
+        <div class="form-label">기록 확인</div>
+        <div class="d-flex flex-wrap gap-3">
+            <label class="form-check-label">
+                <input class="form-check-input" type="radio" name="record_verification" value="observed" checked>
+                기록만 함
+            </label>
+            <label class="form-check-label">
+                <input class="form-check-input" type="radio" name="record_verification" value="verified">
+                실제 교재 확인함
+            </label>
+        </div>
+        <p class="form-text mb-0">실제 교재를 직접 열어 해당 범위를 확인한 경우에만 ‘실제 교재 확인함’을 선택합니다.</p>
+    </div>
+    <div class="mt-3">
+        <button class="btn btn-primary js-study-submit" type="submit" {% if not active_subjects or not assignment_plans %}disabled{% endif %}>학습 기록 저장</button>
+        {% if active_subjects %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('planning.manage_workbook_plans') }}">교재 계획 관리</a>
+        {% endif %}
+    </div>
+</form>
+{% if not active_subjects %}
+<p class="small text-muted mt-2 mb-0">활성 학습 과목이 없습니다.</p>
+{% endif %}
+<script>
+(function () {
+    var form = document.getElementById('study-session-form-{{ return_to }}');
+    if (!form || form.dataset.bound === '1') return;
+    form.dataset.bound = '1';
+    var plans = [
+        {% for plan in assignment_plans %}
+        {
+            id: {{ plan.id }},
+            subjectId: {{ plan.learning_subject_id }},
+            startDate: {{ plan.start_date.isoformat()|tojson }},
+            title: {{ plan.textbook_title|tojson }},
+            startPage: {{ plan.start_page }},
+            endPage: {{ plan.end_page }}
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+    var pages = form.querySelector('.js-study-pages');
+    var startInput = form.querySelector('.js-study-start');
+    var endInput = form.querySelector('.js-study-end');
+    var subjectSelect = form.querySelector('.js-study-subject');
+    var dateInput = form.querySelector('[name="study_date"]');
+    var planIdInput = form.querySelector('.js-study-plan-id');
+    var planLabel = form.querySelector('.js-study-plan-label');
+    var planEmpty = form.querySelector('.js-study-plan-empty');
+    var submitBtn = form.querySelector('.js-study-submit');
+    function selectedStatus() {
+        var checked = form.querySelector('.js-study-status:checked');
+        return checked ? checked.value : 'studied';
+    }
+    function canonicalPlan(subjectId, studyDate) {
+        var started = plans.filter(function (plan) {
+            return String(plan.subjectId) === String(subjectId) && plan.startDate <= studyDate;
+        });
+        if (!started.length) return null;
+        var latest = started.reduce(function (max, plan) {
+            return plan.startDate > max ? plan.startDate : max;
+        }, started[0].startDate);
+        var tied = started.filter(function (plan) { return plan.startDate === latest; });
+        return tied[0] || null;
+    }
+    function syncPages() {
+        var studied = selectedStatus() === 'studied';
+        if (pages) pages.classList.toggle('d-none', !studied);
+        if (startInput) {
+            startInput.disabled = !studied;
+            if (!studied) startInput.value = '';
+        }
+        if (endInput) {
+            endInput.disabled = !studied;
+            if (!studied) endInput.value = '';
+        }
+    }
+    function syncPlan() {
+        var subjectId = subjectSelect ? subjectSelect.value : '';
+        var studyDate = dateInput ? dateInput.value : '';
+        var plan = canonicalPlan(subjectId, studyDate);
+        if (planIdInput) planIdInput.value = plan ? String(plan.id) : '';
+        if (plan) {
+            if (planLabel) {
+                planLabel.textContent = plan.title + ' (' + plan.startPage + '~' + plan.endPage + '쪽)';
+                planLabel.classList.remove('d-none');
+            }
+            if (planEmpty) planEmpty.classList.add('d-none');
+            if (submitBtn) submitBtn.disabled = false;
+        } else {
+            if (planLabel) planLabel.classList.add('d-none');
+            if (planEmpty) planEmpty.classList.remove('d-none');
+            if (submitBtn) submitBtn.disabled = true;
+        }
+        syncPages();
+    }
+    form.querySelectorAll('.js-study-status').forEach(function (input) {
+        input.addEventListener('change', syncPages);
+    });
+    if (subjectSelect) subjectSelect.addEventListener('change', syncPlan);
+    if (dateInput) dateInput.addEventListener('change', syncPlan);
+    syncPlan();
+})();
+</script>

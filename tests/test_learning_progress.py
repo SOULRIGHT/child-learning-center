@@ -15,7 +15,7 @@ from tests.helpers import bootstrap_test_app
 app, db = bootstrap_test_app()
 
 from app import Child, DailyPoints, PointsHistory, User, get_backup_data  # noqa: E402
-from feature_models import LearningProgressEntry, LearningSubject  # noqa: E402
+from feature_models import LearningProgressEntry, LearningStudySession, LearningSubject  # noqa: E402
 from features.progress.restore import restore_learning_progress_from_backup_data  # noqa: E402
 from features.progress.service import (  # noqa: E402
     DEFAULT_SUBJECTS,
@@ -250,7 +250,7 @@ class LearningProgressTests(unittest.TestCase):
         daily = DailyPoints.query.filter_by(child_id=self.child_id).one()
         self.assertEqual(daily.korean_points, 100)
 
-    def test_21_teacher_can_save(self):
+    def test_21_teacher_http_progress_post_does_not_write_snapshot(self):
         self._login(self.teacher_id)
         math = self._math()
         resp = self.client.post(
@@ -265,7 +265,22 @@ class LearningProgressTests(unittest.TestCase):
             follow_redirects=False,
         )
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(LearningProgressEntry.query.one().page, 74)
+        self.assertEqual(LearningProgressEntry.query.count(), 0)
+        self.assertEqual(LearningStudySession.query.count(), 0)
+        followed = self.client.post(
+            f'/children/{self.child_id}/progress',
+            data={
+                'learning_subject_id': str(math.id),
+                'textbook_title': '쎈 수학 3-2',
+                'page': '74',
+                'recorded_on': self.today.isoformat(),
+                'return_to': 'detail',
+            },
+            follow_redirects=True,
+        )
+        html = followed.get_data(as_text=True)
+        self.assertIn('이 진도 입력 방식은 더 이상 사용하지 않습니다', html)
+        self.assertIn('과거 페이지 값은 학습 기록으로 자동 변환되지 않습니다', html)
 
     def test_22_viewer_cannot_save(self):
         self._login(self.viewer_id)

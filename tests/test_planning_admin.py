@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import unittest
-from datetime import date
+from datetime import date, timedelta
 
 from tests.helpers import bootstrap_test_app, local_development_sqlite_path, resolved_engine_sqlite_path
 
@@ -13,13 +13,25 @@ from feature_models import (  # noqa: E402
     CenterStudyCalendar,
     ChildStudyWeekdays,
     LearningProgressEntry,
+    LearningStudySession,
     LearningSubject,
     LearningWorkbookPlan,
+    STUDY_STATUS_STUDIED,
 )
 from features.planning.exclusions import PlanningError  # noqa: E402
+from features.planning.timeline import (  # noqa: E402
+    PLAN_DUPLICATE_START_MESSAGE,
+    PLAN_TIMELINE_CONFLICT_MESSAGE,
+    canonical_workbook_plan,
+)
 from features.planning.service import (  # noqa: E402
+    PLAN_IDENTITY_LOCKED_MESSAGE,
+    PLAN_PAGE_RANGE_CONFLICT_MESSAGE,
+    PLAN_REFERENCED_DELETE_MESSAGE,
+    PLAN_START_DATE_CONFLICT_MESSAGE,
     clear_child_weekdays_override,
     create_workbook_plan,
+    delete_workbook_plan,
     effective_child_study_weekdays,
     get_center_weekdays,
     get_child_override_weekdays,
@@ -32,6 +44,7 @@ from features.planning.service import (  # noqa: E402
 )
 from features.planning.weekdays import DEFAULT_STUDY_WEEKDAYS, format_weekdays  # noqa: E402
 from features.progress.service import ensure_default_subjects, kst_today, save_progress_entry  # noqa: E402
+from features.study.records import create_study_session  # noqa: E402
 
 
 class PlanningAdminTests(unittest.TestCase):
@@ -100,6 +113,34 @@ class PlanningAdminTests(unittest.TestCase):
         }
         data.update(overrides)
         return data
+
+    def _plan_update_kwargs(self, plan, **overrides):
+        data = {
+            'grade': plan.grade,
+            'learning_subject_id': plan.learning_subject_id,
+            'textbook_title': plan.textbook_title,
+            'start_page': plan.start_page,
+            'end_page': plan.end_page,
+            'start_date': plan.start_date,
+            'target_completion_date': plan.target_completion_date,
+            'exclusion_ranges_text': plan.exclusion_ranges_text,
+        }
+        data.update(overrides)
+        return data
+
+    def _attach_study_session(self, plan, **overrides):
+        payload = {
+            'child_id': self.child_id,
+            'learning_subject_id': plan.learning_subject_id,
+            'study_date': kst_today(),
+            'study_status': STUDY_STATUS_STUDIED,
+            'recorded_by_user_id': self.teacher_id,
+            'start_page': 70,
+            'end_page': 71,
+            'learning_workbook_plan_id': plan.id,
+        }
+        payload.update(overrides)
+        return create_study_session(**payload)
 
     def _assert_viewer_blocked(self, method, path, **kwargs):
         self._login(self.viewer_id)
@@ -271,7 +312,7 @@ class PlanningAdminTests(unittest.TestCase):
         )
         html = resp.get_data(as_text=True)
         self.assertEqual(LearningWorkbookPlan.query.count(), 1)
-        self.assertIn('같은 학년·과목·교재·시작일의 계획이 이미 있습니다', html)
+        self.assertIn(PLAN_DUPLICATE_START_MESSAGE, html)
         self.assertNotIn('IntegrityError', html)
         self.assertNotIn('UNIQUE constraint', html)
 
@@ -313,6 +354,261 @@ class PlanningAdminTests(unittest.TestCase):
         db.session.refresh(plan)
         self.assertIsNone(plan.exclusion_ranges_text)
         self.assertIsNone(plan.exclusion_ranges_json)
+
+    def test_unreferenced_plan_can_change_identity_in_place(self):
+        plan = create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math_id,
+            textbook_title='우등생 수학 3-2',
+            start_page=10,
+            end_page=184,
+            start_date='2026-09-01',
+            target_completion_date='2026-12-20',
+        )
+        update_workbook_plan(
+            plan,
+            **self._plan_update_kwargs(plan, textbook_title='우등생 수학 이름만 수정'),
+        )
+        db.session.refresh(plan)
+        self.assertEqual(plan.textbook_title, '우등생 수학 이름만 수정')
+
+    def test_referenced_plan_identity_fields_are_locked(self):
+        plan = create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math_id,
+            textbook_title='우등생 수학 3-2',
+            start_page=10,
+            end_page=184,
+            start_date='2026-09-01',
+            target_completion_date='2026-12-20',
+        )
+        self._attach_study_session(plan)
+        with self.assertRaises(PlanningError) as title_ctx:
+            update_workbook_plan(
+                plan,
+                **self._plan_update_kwargs(plan, textbook_title='다른 교재'),
+            )
+        self.assertEqual(title_ctx.exception.code, 'plan_identity_locked')
+        self.assertEqual(str(title_ctx.exception.message), PLAN_IDENTITY_LOCKED_MESSAGE)
+        with self.assertRaises(PlanningError) as grade_ctx:
+            update_workbook_plan(plan, **self._plan_update_kwargs(plan, grade=4))
+        self.assertEqual(grade_ctx.exception.code, 'plan_identity_locked')
+        with self.assertRaises(PlanningError) as subject_ctx:
+            update_workbook_plan(
+                plan,
+                **self._plan_update_kwargs(plan, learning_subject_id=self.korean_id),
+            )
+        self.assertEqual(subject_ctx.exception.code, 'plan_identity_locked')
+        db.session.refresh(plan)
+        self.assertEqual(plan.textbook_title, '우등생 수학 3-2')
+        self.assertEqual(plan.grade, 3)
+        self.assertEqual(plan.learning_subject_id, self.math_id)
+
+        update_workbook_plan(
+            plan,
+            **self._plan_update_kwargs(
+                plan,
+                start_page=12,
+                end_page=180,
+                target_completion_date='2026-12-18',
+                exclusion_ranges_text='35-42',
+            ),
+        )
+        db.session.refresh(plan)
+        self.assertEqual(plan.start_page, 12)
+        self.assertEqual(plan.end_page, 180)
+        self.assertEqual(plan.target_completion_date, date(2026, 12, 18))
+        self.assertEqual(plan.exclusion_ranges_json, [{'start': 35, 'end': 42}])
+
+        replacement = create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math_id,
+            textbook_title='새 교재 3-2',
+            start_page=1,
+            end_page=200,
+            start_date=(kst_today() + timedelta(days=1)).isoformat(),
+            target_completion_date='2026-12-20',
+        )
+        self.assertNotEqual(replacement.id, plan.id)
+        db.session.refresh(plan)
+        self.assertEqual(plan.textbook_title, '우등생 수학 3-2')
+
+    def test_edit_form_rejects_identity_change_when_referenced(self):
+        plan = create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math_id,
+            textbook_title='우등생 수학 3-2',
+            start_page=10,
+            end_page=184,
+            start_date='2026-09-01',
+            target_completion_date='2026-12-20',
+        )
+        self._attach_study_session(plan)
+        self._login(self.teacher_id)
+        html = self.client.get(f'/settings/workbook-plans/{plan.id}').get_data(as_text=True)
+        self.assertIn(PLAN_IDENTITY_LOCKED_MESSAGE, html)
+        resp = self.client.post(
+            f'/settings/workbook-plans/{plan.id}',
+            data=self._plan_form(textbook_title='다른 교재'),
+            follow_redirects=True,
+        )
+        self.assertIn(PLAN_IDENTITY_LOCKED_MESSAGE, resp.get_data(as_text=True))
+        db.session.refresh(plan)
+        self.assertEqual(plan.textbook_title, '우등생 수학 3-2')
+
+    def test_referenced_plan_start_date_cannot_move_past_earliest_session(self):
+        plan = create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math_id,
+            textbook_title='우등생 수학 3-2',
+            start_page=10,
+            end_page=100,
+            start_date='2026-09-01',
+            target_completion_date='2026-12-20',
+        )
+        self._attach_study_session(
+            plan,
+            study_date=date(2026, 9, 3),
+            start_page=20,
+            end_page=25,
+        )
+        with self.assertRaises(PlanningError) as ctx:
+            update_workbook_plan(
+                plan,
+                **self._plan_update_kwargs(plan, start_date='2026-09-10'),
+            )
+        self.assertEqual(ctx.exception.code, 'plan_start_date_conflicts_sessions')
+        self.assertEqual(ctx.exception.message, PLAN_START_DATE_CONFLICT_MESSAGE)
+        db.session.refresh(plan)
+        self.assertEqual(plan.start_date, date(2026, 9, 1))
+
+        update_workbook_plan(
+            plan,
+            **self._plan_update_kwargs(plan, start_date='2026-08-20'),
+        )
+        db.session.refresh(plan)
+        self.assertEqual(plan.start_date, date(2026, 8, 20))
+
+    def test_referenced_plan_page_range_must_keep_studied_sessions(self):
+        plan = create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math_id,
+            textbook_title='우등생 수학 3-2',
+            start_page=10,
+            end_page=100,
+            start_date='2026-09-01',
+            target_completion_date='2026-12-20',
+        )
+        self._attach_study_session(
+            plan,
+            study_date=date(2026, 9, 3),
+            start_page=20,
+            end_page=25,
+        )
+        with self.assertRaises(PlanningError) as ctx:
+            update_workbook_plan(
+                plan,
+                **self._plan_update_kwargs(plan, start_page=30, end_page=100),
+            )
+        self.assertEqual(ctx.exception.code, 'plan_page_range_conflicts_sessions')
+        self.assertEqual(ctx.exception.message, PLAN_PAGE_RANGE_CONFLICT_MESSAGE)
+        db.session.refresh(plan)
+        self.assertEqual((plan.start_page, plan.end_page), (10, 100))
+
+        update_workbook_plan(
+            plan,
+            **self._plan_update_kwargs(plan, start_page=1, end_page=200),
+        )
+        db.session.refresh(plan)
+        self.assertEqual((plan.start_page, plan.end_page), (1, 200))
+
+        update_workbook_plan(
+            plan,
+            **self._plan_update_kwargs(plan, start_page=20, end_page=25),
+        )
+        db.session.refresh(plan)
+        self.assertEqual((plan.start_page, plan.end_page), (20, 25))
+
+    def test_referenced_plan_can_change_target_completion_date(self):
+        plan = create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math_id,
+            textbook_title='우등생 수학 3-2',
+            start_page=10,
+            end_page=100,
+            start_date='2026-09-01',
+            target_completion_date='2026-12-20',
+        )
+        self._attach_study_session(
+            plan,
+            study_date=date(2026, 9, 3),
+            start_page=20,
+            end_page=25,
+        )
+        update_workbook_plan(
+            plan,
+            **self._plan_update_kwargs(plan, target_completion_date='2026-12-31'),
+        )
+        db.session.refresh(plan)
+        self.assertEqual(plan.target_completion_date, date(2026, 12, 31))
+        self.assertEqual(plan.start_date, date(2026, 9, 1))
+        self.assertEqual((plan.start_page, plan.end_page), (10, 100))
+
+    def test_unreferenced_plan_can_be_deleted(self):
+        plan = create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math_id,
+            textbook_title='삭제할 교재',
+            start_page=10,
+            end_page=100,
+            start_date='2026-09-01',
+            target_completion_date='2026-12-20',
+        )
+        plan_id = plan.id
+        self._login(self.teacher_id)
+        list_html = self.client.get('/settings/workbook-plans').get_data(as_text=True)
+        self.assertIn('>삭제</button>', list_html)
+        self.assertNotIn('삭제 불가', list_html)
+        html = self.client.get(f'/settings/workbook-plans/{plan.id}').get_data(as_text=True)
+        self.assertIn('confirm_delete', html)
+        resp = self.client.post(
+            f'/settings/workbook-plans/{plan.id}/delete',
+            data={'confirm_delete': 'yes'},
+            follow_redirects=True,
+        )
+        self.assertIn('삭제했습니다', resp.get_data(as_text=True))
+        self.assertIsNone(LearningWorkbookPlan.query.get(plan_id))
+
+    def test_referenced_plan_cannot_be_deleted(self):
+        plan = create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math_id,
+            textbook_title='연결된 교재',
+            start_page=10,
+            end_page=100,
+            start_date='2026-09-01',
+            target_completion_date='2026-12-20',
+        )
+        self._attach_study_session(plan, start_page=20, end_page=25)
+        with self.assertRaises(PlanningError) as ctx:
+            delete_workbook_plan(plan)
+        self.assertEqual(ctx.exception.code, 'plan_referenced')
+        self.assertEqual(ctx.exception.message, PLAN_REFERENCED_DELETE_MESSAGE)
+        self._login(self.teacher_id)
+        list_html = self.client.get('/settings/workbook-plans').get_data(as_text=True)
+        self.assertIn('삭제 불가', list_html)
+        self.assertIn('학습기록에서 사용 중', list_html)
+        html = self.client.get(f'/settings/workbook-plans/{plan.id}').get_data(as_text=True)
+        self.assertIn('삭제 불가', html)
+        self.assertIn('학습기록에서 사용 중', html)
+        self.assertNotIn('name="confirm_delete"', html)
+        self.client.post(
+            f'/settings/workbook-plans/{plan.id}/delete',
+            data={'confirm_delete': 'yes'},
+            follow_redirects=True,
+        )
+        self.assertIsNotNone(LearningWorkbookPlan.query.get(plan.id))
+        self.assertEqual(LearningStudySession.query.count(), 1)
 
     def test_workbook_plan_list_rendering_and_order(self):
         create_workbook_plan(
@@ -366,7 +662,8 @@ class PlanningAdminTests(unittest.TestCase):
         self.assertIn('20% 추정', html)
         self.assertIn('정확한 제외 범위 있음', html)
         self.assertIn('비워두면 실제 학습량은 전체 페이지의 20%가 제외된 것으로 추정합니다', html)
-        self.assertNotIn('삭제', html)
+        self.assertIn('>삭제</button>', html)
+        self.assertNotIn('삭제 불가', html)
         korean_at = html.index('국어 교재')
         first_math_at = html.index('첫째 수학')
         second_math_at = html.index('둘째 수학')
@@ -455,7 +752,7 @@ class PlanningAdminTests(unittest.TestCase):
         self.assertEqual(entry.page, 40)
         self._login(self.teacher_id)
         html = self.client.get(f'/children/{self.child_id}').get_data(as_text=True)
-        self.assertIn('학습 진도', html)
+        self.assertIn('학습 기록', html)
         self.assertIn('진도 기록', html)
         self.assertIn('학습 예정 요일', html)
 
@@ -463,3 +760,99 @@ class PlanningAdminTests(unittest.TestCase):
         with self.assertRaises(PlanningError):
             save_child_study_weekdays(self.child_id, '', ['0'])
         self.assertEqual(ChildStudyWeekdays.query.count(), 0)
+
+    def test_same_start_date_second_plan_is_rejected(self):
+        create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math_id,
+            textbook_title='우등생 수학 3-1',
+            start_page=1,
+            end_page=100,
+            start_date='2026-03-01',
+            target_completion_date='2026-08-20',
+        )
+        with self.assertRaises(PlanningError) as ctx:
+            create_workbook_plan(
+                grade=3,
+                learning_subject_id=self.math_id,
+                textbook_title='우등생 수학 3-2',
+                start_page=1,
+                end_page=100,
+                start_date='2026-03-01',
+                target_completion_date='2026-12-20',
+            )
+        self.assertEqual(ctx.exception.code, 'duplicate_plan_start')
+        self.assertEqual(ctx.exception.message, PLAN_DUPLICATE_START_MESSAGE)
+        self.assertEqual(LearningWorkbookPlan.query.count(), 1)
+
+    def test_backdated_plan_cannot_steal_existing_session(self):
+        old = create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math_id,
+            textbook_title='이전 교재',
+            start_page=1,
+            end_page=100,
+            start_date='2026-03-01',
+            target_completion_date='2026-08-20',
+        )
+        self._attach_study_session(
+            old,
+            study_date=date(2026, 8, 25),
+            start_page=20,
+            end_page=25,
+        )
+        with self.assertRaises(PlanningError) as ctx:
+            create_workbook_plan(
+                grade=3,
+                learning_subject_id=self.math_id,
+                textbook_title='새 교재',
+                start_page=1,
+                end_page=100,
+                start_date='2026-08-01',
+                target_completion_date='2026-12-20',
+            )
+        self.assertEqual(ctx.exception.code, 'plan_timeline_conflicts_sessions')
+        self.assertEqual(ctx.exception.message, PLAN_TIMELINE_CONFLICT_MESSAGE)
+        self.assertEqual(LearningWorkbookPlan.query.count(), 1)
+        self.assertEqual(LearningStudySession.query.one().learning_workbook_plan_id, old.id)
+
+    def test_moving_start_date_cannot_steal_existing_session(self):
+        old = create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math_id,
+            textbook_title='이전 교재',
+            start_page=1,
+            end_page=100,
+            start_date='2026-03-01',
+            target_completion_date='2026-08-20',
+        )
+        new = create_workbook_plan(
+            grade=3,
+            learning_subject_id=self.math_id,
+            textbook_title='새 교재',
+            start_page=1,
+            end_page=100,
+            start_date='2026-09-01',
+            target_completion_date='2026-12-20',
+        )
+        self._attach_study_session(
+            old,
+            study_date=date(2026, 8, 25),
+            start_page=20,
+            end_page=25,
+        )
+        self.assertEqual(
+            canonical_workbook_plan(
+                grade=3, learning_subject_id=self.math_id, study_date=date(2026, 8, 25),
+            ).id,
+            old.id,
+        )
+        with self.assertRaises(PlanningError) as ctx:
+            update_workbook_plan(
+                new,
+                **self._plan_update_kwargs(new, start_date='2026-08-01'),
+            )
+        self.assertEqual(ctx.exception.code, 'plan_timeline_conflicts_sessions')
+        db.session.refresh(new)
+        self.assertEqual(new.start_date, date(2026, 9, 1))
+        self.assertEqual(LearningStudySession.query.one().learning_workbook_plan_id, old.id)

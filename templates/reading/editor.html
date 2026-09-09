@@ -41,6 +41,7 @@
     <div class="d-flex gap-2 mb-3 flex-wrap">
         <a href="{{ url_for('viewer_report', view_token=view_token) }}" class="btn btn-outline-secondary">뒤로가기</a>
         <a href="{{ url_for('reading.viewer_history', view_token=view_token) }}" class="btn btn-outline-primary">내 독서 기록</a>
+        <a href="{{ url_for('reading.viewer_confirm', view_token=view_token, next='study') }}" class="btn btn-outline-success">학습 페이지 기록하기</a>
     </div>
     {% else %}
     <div class="d-flex gap-2 mb-3 flex-wrap">

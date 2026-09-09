@@ -1,0 +1,56 @@
+{% if observed_study_sessions %}
+<form id="verify-study-form-{{ return_to }}" method="post" action="{{ url_for('study.verify_study_sessions', child_id=child.id) }}">
+    <input type="hidden" name="return_to" value="{{ return_to }}">
+</form>
+<p class="small text-muted">실제 교재를 확인한 기록만 선택하세요. 확인하지 않은 채로 한꺼번에 처리하지 않습니다.</p>
+<div class="table-responsive">
+    <table class="table table-sm table-hover mb-2">
+        <thead class="table-light">
+            <tr>
+                <th>선택</th>
+                <th>날짜</th>
+                <th>과목</th>
+                <th>교재</th>
+                <th>학습</th>
+                <th>입력</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in observed_study_sessions %}
+            <tr>
+                <td>
+                    <input class="form-check-input" type="checkbox" name="session_id" value="{{ row.id }}" form="verify-study-form-{{ return_to }}">
+                </td>
+                <td>{{ row.study_date.isoformat() }}</td>
+                <td>{{ row.subject_name }}</td>
+                <td>{{ row.textbook_title or '—' }}</td>
+                <td>
+                    {% if row.studied %}
+                    공부함 {{ row.start_page }}~{{ row.end_page }}쪽
+                    {% else %}
+                    {{ row.status_label }}
+                    {% endif %}
+                </td>
+                <td>{{ row.actor_label }}{% if row.recorded_by_name %} · {{ row.recorded_by_name }}{% endif %}</td>
+                <td>
+                    {% if row.studied %}
+                    <form method="post" action="{{ url_for('study.update_teacher_study_session_route', child_id=child.id, session_id=row.id) }}" class="d-flex gap-1 align-items-center">
+                        <input type="hidden" name="return_to" value="{{ return_to }}">
+                        <input type="hidden" name="study_status" value="studied">
+                        <input class="form-control form-control-sm" name="start_page" type="number" min="1" max="2000" value="{{ row.start_page }}" style="width: 4.5rem;">
+                        <span>~</span>
+                        <input class="form-control form-control-sm" name="end_page" type="number" min="1" max="2000" value="{{ row.end_page }}" style="width: 4.5rem;">
+                        <button class="btn btn-sm btn-outline-secondary" type="submit">수정</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<button class="btn btn-outline-primary" type="submit" form="verify-study-form-{{ return_to }}">선택한 기록 실제 교재 확인함</button>
+{% else %}
+<p class="text-muted small mb-0">미확인 학습 기록이 없습니다.</p>
+{% endif %}

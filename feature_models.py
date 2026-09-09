@@ -520,6 +520,12 @@ class LearningStudySession(db.Model):
         index=True,
     )
     study_date = db.Column(db.Date, nullable=False, index=True)
+    learning_workbook_plan_id = db.Column(
+        db.Integer,
+        db.ForeignKey('learning_workbook_plan.id'),
+        nullable=True,
+        index=True,
+    )
     textbook_title = db.Column(db.String(120), nullable=True)
     study_status = db.Column(db.String(32), nullable=False)
     start_page = db.Column(db.Integer, nullable=True)
@@ -542,6 +548,7 @@ class LearningStudySession(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     subject = db.relationship('LearningSubject')
+    workbook_plan = db.relationship('LearningWorkbookPlan')
     changes = db.relationship(
         'LearningStudySessionChange',
         back_populates='session',

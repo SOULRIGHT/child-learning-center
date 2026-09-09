@@ -99,6 +99,8 @@ def _confirm_next_url(view_token):
     next_name = (request.form.get('next') or request.args.get('next') or '').strip().lower()
     if next_name == 'history':
         return url_for('reading.viewer_history', view_token=view_token)
+    if next_name == 'study':
+        return url_for('study.viewer_form', view_token=view_token)
     return url_for('reading.viewer_editor', view_token=view_token)
 
 
@@ -219,7 +221,12 @@ def viewer_confirm(view_token):
         return redirect(url_for('viewer_home') if _is_viewer() else url_for('dashboard'))
 
     next_name = (request.args.get('next') or '').strip().lower()
-    confirm_next = 'history' if next_name == 'history' else ''
+    if next_name == 'history':
+        confirm_next = 'history'
+    elif next_name == 'study':
+        confirm_next = 'study'
+    else:
+        confirm_next = ''
     return render_template(
         'reading/confirm.html',
         child=child,

@@ -11,6 +11,7 @@ from feature_models import (
     LearningStudySession,
     LearningStudySessionChange,
     LearningSubject,
+    LearningWorkbookPlan,
     STUDY_CHANGE_CREATED,
     STUDY_CHANGE_DELETED,
     STUDY_CHANGE_UPDATED,
@@ -24,6 +25,7 @@ from features.study.constants import (
     MIN_PAGE,
     NON_RANGE_STUDY_STATUSES,
     RECORD_VERIFICATION_OBSERVED,
+    RECORD_VERIFICATION_VERIFIED,
     RECORD_VERIFICATIONS,
     STUDY_STATUS_STUDIED,
     STUDY_STATUSES,
@@ -53,9 +55,11 @@ def create_study_session(
     start_page=None,
     end_page=None,
     textbook_title=None,
+    learning_workbook_plan_id=None,
     actor_type=ACTOR_TEACHER,
     input_channel=None,
     change_reason=None,
+    commit=True,
 ):
     child = get_child(child_id)
     if child is None:
@@ -69,9 +73,11 @@ def create_study_session(
         start_page=start_page,
         end_page=end_page,
         textbook_title=textbook_title,
+        learning_workbook_plan_id=learning_workbook_plan_id,
         recorded_by_user_id=recorded_by_user_id,
         actor_type=actor_type,
         input_channel=input_channel,
+        require_plan=True,
     )
     _assert_day_status_compatible(
         child_id=payload['child_id'],
@@ -90,7 +96,8 @@ def create_study_session(
         changed_by_user_id=recorded_by_user_id,
         change_reason=change_reason,
     )
-    db.session.commit()
+    if commit:
+        db.session.commit()
     return row
 
 
@@ -103,7 +110,9 @@ def update_study_session(
     start_page=None,
     end_page=None,
     textbook_title=None,
+    learning_workbook_plan_id=None,
     change_reason=None,
+    commit=True,
 ):
     if session is None or getattr(session, 'id', None) is None:
         raise StudyRecordError('학습 세션을 찾을 수 없습니다.', code='session_not_found')
@@ -126,11 +135,24 @@ def update_study_session(
         'start_page': next_start,
         'end_page': next_end,
         'textbook_title': session.textbook_title if textbook_title is None else textbook_title,
+        'learning_workbook_plan_id': (
+            session.learning_workbook_plan_id
+            if learning_workbook_plan_id is None
+            else learning_workbook_plan_id
+        ),
         'recorded_by_user_id': session.recorded_by_user_id,
         'actor_type': session.actor_type,
         'input_channel': session.input_channel,
+        'require_plan': session.learning_workbook_plan_id is not None,
     }
+    if session.learning_workbook_plan_id is None:
+        merged['learning_workbook_plan_id'] = None
     payload = _validated_payload(**merged)
+    if (
+        before.get('record_verification') == RECORD_VERIFICATION_VERIFIED
+        and _content_fields_changed(before, payload)
+    ):
+        payload['record_verification'] = RECORD_VERIFICATION_OBSERVED
     _assert_day_status_compatible(
         child_id=payload['child_id'],
         learning_subject_id=payload['learning_subject_id'],
@@ -143,6 +165,7 @@ def update_study_session(
     session.start_page = payload['start_page']
     session.end_page = payload['end_page']
     session.textbook_title = payload['textbook_title']
+    session.learning_workbook_plan_id = payload['learning_workbook_plan_id']
     session.updated_at = datetime.utcnow()
     _write_change(
         session,
@@ -152,7 +175,8 @@ def update_study_session(
         changed_by_user_id=changed_by_user_id,
         change_reason=change_reason,
     )
-    db.session.commit()
+    if commit:
+        db.session.commit()
     return session
 
 
@@ -176,6 +200,115 @@ def delete_study_session(session, *, changed_by_user_id, change_reason):
     db.session.commit()
 
 
+_CONTENT_KEYS = (
+    'study_status',
+    'start_page',
+    'end_page',
+    'textbook_title',
+    'learning_workbook_plan_id',
+)
+
+
+def _content_fields_changed(before, payload):
+    for key in _CONTENT_KEYS:
+        if before.get(key) != payload.get(key):
+            return True
+    return False
+
+
+def find_subject_day_session(
+    child_id,
+    learning_subject_id,
+    study_date,
+    learning_workbook_plan_id=None,
+):
+    day = _clean_study_date(study_date)
+    rows = (
+        LearningStudySession.query
+        .filter_by(
+            child_id=int(child_id),
+            learning_subject_id=int(learning_subject_id),
+            study_date=day,
+        )
+        .order_by(LearningStudySession.id.desc())
+        .all()
+    )
+    if not rows:
+        return None
+    plan_id = _blank_to_none(learning_workbook_plan_id)
+    if plan_id is not None:
+        plan_pk = int(plan_id)
+        matched = [row for row in rows if row.learning_workbook_plan_id == plan_pk]
+        if matched:
+            return matched[0]
+    return rows[0]
+
+
+def save_study_session_writes(writes, *, changed_by_user_id):
+    """여러 과목 create/update를 한 트랜잭션으로 저장한다. 빈 목록은 아무 것도 쓰지 않는다."""
+    if not writes:
+        return []
+    results = []
+    try:
+        for item in writes:
+            existing = item.get('existing')
+            fields = item['fields']
+            if existing is None:
+                results.append(
+                    create_study_session(commit=False, **fields)
+                )
+            else:
+                results.append(
+                    update_study_session(
+                        existing,
+                        changed_by_user_id=changed_by_user_id,
+                        commit=False,
+                        **fields,
+                    )
+                )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return results
+
+
+def mark_sessions_verified(session_ids, *, child_id, changed_by_user_id):
+    ids = []
+    for raw in session_ids or ():
+        try:
+            ids.append(int(raw))
+        except (TypeError, ValueError) as exc:
+            raise StudyRecordError('확인할 기록이 올바르지 않습니다.', code='verify_not_found') from exc
+    unique_ids = list(dict.fromkeys(ids))
+    if not unique_ids:
+        raise StudyRecordError('확인할 기록을 선택해주세요.', code='verify_selection_required')
+    rows = (
+        LearningStudySession.query
+        .filter(LearningStudySession.id.in_(unique_ids))
+        .filter_by(child_id=int(child_id))
+        .all()
+    )
+    if len(rows) != len(unique_ids):
+        raise StudyRecordError('확인할 기록이 올바르지 않습니다.', code='verify_not_found')
+    by_id = {row.id: row for row in rows}
+    ordered = [by_id[item] for item in unique_ids]
+    try:
+        for row in ordered:
+            update_study_session(
+                row,
+                changed_by_user_id=changed_by_user_id,
+                record_verification=RECORD_VERIFICATION_VERIFIED,
+                change_reason='실제 교재 확인',
+                commit=False,
+            )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return ordered
+
+
 def _validated_payload(
     *,
     child_id,
@@ -189,6 +322,8 @@ def _validated_payload(
     recorded_by_user_id,
     actor_type,
     input_channel,
+    learning_workbook_plan_id=None,
+    require_plan=False,
 ):
     subject = _require_subject(learning_subject_id)
     day = _clean_study_date(study_date)
@@ -210,11 +345,29 @@ def _validated_payload(
     except (TypeError, ValueError) as exc:
         raise StudyRecordError('입력자를 확인할 수 없습니다.', code='user_required') from exc
 
+    start_page = _blank_to_none(start_page)
+    end_page = _blank_to_none(end_page)
+    textbook_title = _blank_to_none(textbook_title)
+    plan = _resolve_session_plan(
+        submitted_plan_id=learning_workbook_plan_id,
+        child_id=int(child_id),
+        subject=subject,
+        study_date=day,
+        require_plan=require_plan,
+    )
+    if plan is not None:
+        textbook_title = plan.textbook_title
+
     if status == STUDY_STATUS_STUDIED:
         start = _clean_page(start_page, '시작 페이지')
         end = _clean_page(end_page, '끝 페이지')
         if start > end:
             raise StudyRecordError('시작 페이지가 끝 페이지보다 클 수 없습니다.', code='page_order')
+        if plan is not None and (start < plan.start_page or end > plan.end_page):
+            raise StudyRecordError(
+                '선택한 교재의 페이지 범위 안에서만 기록할 수 있습니다.',
+                code='plan_page_out_of_range',
+            )
         title = _clean_title(textbook_title)
     else:
         if start_page is not None or end_page is not None:
@@ -232,6 +385,7 @@ def _validated_payload(
         'start_page': start,
         'end_page': end,
         'textbook_title': title,
+        'learning_workbook_plan_id': None if plan is None else plan.id,
         'recorded_by_user_id': user_id,
         'actor_type': actor,
         'input_channel': channel,
@@ -277,6 +431,59 @@ def _assert_day_status_compatible(
         )
 
 
+def _resolve_session_plan(*, submitted_plan_id, child_id, subject, study_date, require_plan):
+    from features.planning.timeline import resolve_canonical_workbook_plan
+
+    child = get_child(child_id)
+    canonical = resolve_canonical_workbook_plan(child, subject.id, study_date)
+    submitted = _blank_to_none(submitted_plan_id)
+    if submitted is not None:
+        plan = _resolve_workbook_plan(
+            submitted,
+            child_id=child_id,
+            subject=subject,
+            study_date=study_date,
+        )
+        if canonical is None or int(plan.id) != int(canonical.id):
+            raise StudyRecordError(
+                '해당 날짜의 등록 교재와 맞지 않습니다.',
+                code='plan_not_canonical',
+            )
+        return plan
+    if require_plan:
+        if canonical is None:
+            raise StudyRecordError(
+                '등록된 교재가 없어 기록할 수 없습니다.',
+                code='plan_required',
+            )
+        return canonical
+    return None
+
+
+def _resolve_workbook_plan(plan_id, *, child_id, subject, study_date):
+    raw = _blank_to_none(plan_id)
+    if raw is None:
+        return None
+    try:
+        plan_pk = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise StudyRecordError('배정 교재를 확인해주세요.', code='invalid_plan') from exc
+    plan = LearningWorkbookPlan.query.get(plan_pk)
+    if plan is None:
+        raise StudyRecordError('배정 교재를 찾을 수 없습니다.', code='plan_not_found')
+    if int(plan.learning_subject_id) != int(subject.id):
+        raise StudyRecordError('선택한 교재가 과목과 맞지 않습니다.', code='plan_subject_mismatch')
+    child = get_child(child_id)
+    if child is not None and child.grade is not None and int(plan.grade) != int(child.grade):
+        raise StudyRecordError('선택한 교재가 학년과 맞지 않습니다.', code='plan_grade_mismatch')
+    if plan.start_date > study_date:
+        raise StudyRecordError(
+            '선택한 교재는 그날 아직 시작되지 않았습니다.',
+            code='plan_not_started',
+        )
+    return plan
+
+
 def _require_subject(learning_subject_id):
     try:
         subject_id = int(learning_subject_id)
@@ -288,13 +495,25 @@ def _require_subject(learning_subject_id):
     return subject
 
 
+def _blank_to_none(raw):
+    if raw is None:
+        return None
+    if isinstance(raw, str) and not raw.strip():
+        return None
+    return raw
+
+
 def _clean_study_date(raw):
     if isinstance(raw, datetime):
         day = raw.date()
     elif isinstance(raw, date):
         day = raw
     else:
-        raise StudyRecordError('기록 날짜가 올바르지 않습니다.', code='invalid_date')
+        text = '' if raw is None else str(raw).strip()
+        try:
+            day = date.fromisoformat(text)
+        except ValueError as exc:
+            raise StudyRecordError('기록 날짜가 올바르지 않습니다.', code='invalid_date') from exc
     if day > kst_today():
         raise StudyRecordError('미래 날짜에는 학습을 기록할 수 없습니다.', code='future_date')
     return day
@@ -340,6 +559,7 @@ def _session_payload(row):
         'child_id': row.child_id,
         'learning_subject_id': row.learning_subject_id,
         'study_date': row.study_date.isoformat() if row.study_date else None,
+        'learning_workbook_plan_id': row.learning_workbook_plan_id,
         'textbook_title': row.textbook_title,
         'study_status': row.study_status,
         'start_page': row.start_page,

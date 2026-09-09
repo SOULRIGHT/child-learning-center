@@ -3,11 +3,19 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 from extensions import db
-from feature_models import CenterStudyCalendar, ChildStudyWeekdays, LearningSubject, LearningWorkbookPlan
+from feature_models import (
+    CenterStudyCalendar,
+    ChildStudyWeekdays,
+    LearningStudySession,
+    LearningSubject,
+    LearningWorkbookPlan,
+    STUDY_STATUS_STUDIED,
+)
 from features.planning.exclusions import PlanningError, parse_exclusion_ranges
 from features.planning.weekdays import (
     CALENDAR_SINGLETON_KEY,
@@ -17,12 +25,32 @@ from features.planning.weekdays import (
     effective_study_weekdays,
     format_weekdays,
 )
+from features.planning.timeline import (
+    assert_sessions_keep_canonical_plan,
+    assert_unique_plan_start_dates,
+    proposed_timeline_entries,
+)
 from features.progress.service import MAX_PAGE, MIN_PAGE, TITLE_MAX, list_active_subjects, normalize_textbook_title
 from features.reading.access import get_child
 
 PLAN_GRADES = tuple(range(1, 7))
 EXCLUSION_STATUS_ESTIMATED = 'estimated'
 EXCLUSION_STATUS_EXACT = 'exact'
+PLAN_IDENTITY_FIELDS = ('grade', 'learning_subject_id', 'textbook_title')
+PLAN_IDENTITY_LOCKED_MESSAGE = (
+    '이미 학습 기록이 연결된 교재는 학년·과목·교재명을 바꿀 수 없습니다. '
+    '다른 교재는 새 계획으로 추가하세요.'
+)
+PLAN_START_DATE_CONFLICT_MESSAGE = (
+    '이미 학습 기록이 있는 날짜보다 늦은 시작일로 바꿀 수 없습니다.'
+)
+PLAN_PAGE_RANGE_CONFLICT_MESSAGE = (
+    '이미 기록된 학습 페이지가 교재 범위를 벗어나도록 바꿀 수 없습니다.'
+)
+PLAN_REFERENCED_DELETE_MESSAGE = (
+    '학습 기록이 연결된 교재 계획은 삭제할 수 없습니다.'
+)
+PLAN_REFERENCED_DELETE_HINT = '학습기록에서 사용 중'
 
 
 def parse_weekdays_from_form(raw_values):
@@ -212,6 +240,7 @@ def workbook_plan_list_rows():
             'plan': plan,
             'exclusion_status': exclusion_status_key(plan),
             'exclusion_label': exclusion_status_label(plan),
+            'referenced': workbook_plan_is_referenced_by_study_session(plan),
         })
     return rows
 
@@ -238,6 +267,11 @@ def create_workbook_plan(
         exclusion_ranges_text=exclusion_ranges_text,
         require_active_subject=True,
     )
+    _assert_canonical_timeline_ok(
+        grade=payload['grade'],
+        learning_subject_id=payload['learning_subject_id'],
+        extra_start_date=payload['start_date'],
+    )
     now = datetime.utcnow()
     plan = LearningWorkbookPlan(
         created_at=now,
@@ -247,6 +281,17 @@ def create_workbook_plan(
     db.session.add(plan)
     _commit_workbook_plan()
     return plan
+
+
+def workbook_plan_is_referenced_by_study_session(plan):
+    if plan is None or getattr(plan, 'id', None) is None:
+        return False
+    return (
+        LearningStudySession.query
+        .filter_by(learning_workbook_plan_id=plan.id)
+        .first()
+        is not None
+    )
 
 
 def update_workbook_plan(
@@ -279,11 +324,124 @@ def update_workbook_plan(
         exclusion_ranges_text=exclusion_ranges_text,
         require_active_subject=require_active,
     )
+    if workbook_plan_is_referenced_by_study_session(plan):
+        for key in PLAN_IDENTITY_FIELDS:
+            if payload[key] != getattr(plan, key):
+                raise PlanningError(
+                    PLAN_IDENTITY_LOCKED_MESSAGE,
+                    code='plan_identity_locked',
+                )
+        _assert_referenced_plan_compatible(plan, payload)
+    _assert_update_timeline(plan, payload)
     for key, value in payload.items():
         setattr(plan, key, value)
     plan.updated_at = datetime.utcnow()
     _commit_workbook_plan()
     return plan
+
+
+def delete_workbook_plan(plan):
+    if plan is None or getattr(plan, 'id', None) is None:
+        raise PlanningError('교재 계획을 찾을 수 없습니다.', code='plan_not_found')
+    if workbook_plan_is_referenced_by_study_session(plan):
+        raise PlanningError(
+            PLAN_REFERENCED_DELETE_MESSAGE,
+            code='plan_referenced',
+        )
+    db.session.delete(plan)
+    try:
+        db.session.commit()
+    except IntegrityError as exc:
+        db.session.rollback()
+        raise PlanningError(
+            PLAN_REFERENCED_DELETE_MESSAGE,
+            code='plan_referenced',
+        ) from exc
+    return True
+
+
+def _assert_canonical_timeline_ok(
+    *,
+    grade,
+    learning_subject_id,
+    extra_start_date=None,
+    override=None,
+    exclude_id=None,
+):
+    entries = proposed_timeline_entries(
+        grade,
+        learning_subject_id,
+        extra_start_date=extra_start_date,
+        override=override,
+        exclude_id=exclude_id,
+    )
+    assert_unique_plan_start_dates(entries)
+    assert_sessions_keep_canonical_plan(entries)
+
+
+def _assert_update_timeline(plan, payload):
+    same_lane = (
+        payload['grade'] == plan.grade
+        and int(payload['learning_subject_id']) == int(plan.learning_subject_id)
+    )
+    if same_lane:
+        _assert_canonical_timeline_ok(
+            grade=payload['grade'],
+            learning_subject_id=payload['learning_subject_id'],
+            override={
+                'id': plan.id,
+                'start_date': payload['start_date'],
+            },
+        )
+        return
+    _assert_canonical_timeline_ok(
+        grade=payload['grade'],
+        learning_subject_id=payload['learning_subject_id'],
+        extra_start_date=payload['start_date'],
+    )
+    _assert_canonical_timeline_ok(
+        grade=plan.grade,
+        learning_subject_id=plan.learning_subject_id,
+        exclude_id=plan.id,
+    )
+
+
+def _assert_referenced_plan_compatible(plan, payload):
+    if payload['start_date'] != plan.start_date:
+        earliest = (
+            db.session.query(func.min(LearningStudySession.study_date))
+            .filter_by(learning_workbook_plan_id=plan.id)
+            .scalar()
+        )
+        if earliest is not None and payload['start_date'] > earliest:
+            raise PlanningError(
+                PLAN_START_DATE_CONFLICT_MESSAGE,
+                code='plan_start_date_conflicts_sessions',
+            )
+    pages_changed = (
+        payload['start_page'] != plan.start_page
+        or payload['end_page'] != plan.end_page
+    )
+    if not pages_changed:
+        return
+    session_start, session_end = (
+        db.session.query(
+            func.min(LearningStudySession.start_page),
+            func.max(LearningStudySession.end_page),
+        )
+        .filter(LearningStudySession.learning_workbook_plan_id == plan.id)
+        .filter(LearningStudySession.study_status == STUDY_STATUS_STUDIED)
+        .filter(LearningStudySession.start_page.isnot(None))
+        .filter(LearningStudySession.end_page.isnot(None))
+        .one()
+    )
+    if session_start is None or session_end is None:
+        return
+    if payload['start_page'] > session_start or payload['end_page'] < session_end:
+        raise PlanningError(
+            PLAN_PAGE_RANGE_CONFLICT_MESSAGE,
+            code='plan_page_range_conflicts_sessions',
+        )
 
 
 def _workbook_plan_payload(

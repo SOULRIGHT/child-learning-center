@@ -58,6 +58,15 @@
                     <td>{{ row.exclusion_label }}</td>
                     <td class="text-end">
                         <a class="btn btn-sm btn-outline-primary" href="{{ url_for('planning.edit_workbook_plan', plan_id=row.plan.id) }}">수정</a>
+                        {% if row.referenced %}
+                        <button type="button" class="btn btn-sm btn-outline-secondary" disabled>삭제 불가</button>
+                        <div class="small text-muted">학습기록에서 사용 중</div>
+                        {% else %}
+                        <form method="post" action="{{ url_for('planning.delete_workbook_plan_route', plan_id=row.plan.id) }}" class="d-inline" onsubmit="return confirm('이 교재 계획을 삭제할까요?');">
+                            <input type="hidden" name="confirm_delete" value="yes">
+                            <button class="btn btn-sm btn-outline-danger" type="submit">삭제</button>
+                        </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}

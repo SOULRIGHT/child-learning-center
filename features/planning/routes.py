@@ -6,6 +6,7 @@ from features.planning.exclusions import PlanningError
 from features.planning.service import (
     PLAN_GRADES,
     create_workbook_plan,
+    delete_workbook_plan,
     get_center_weekdays,
     get_workbook_plan,
     parse_weekdays_from_form,
@@ -13,6 +14,7 @@ from features.planning.service import (
     save_child_study_weekdays,
     update_center_weekdays,
     update_workbook_plan,
+    workbook_plan_is_referenced_by_study_session,
     workbook_plan_list_rows,
 )
 from features.planning.weekdays import WEEKDAY_CHOICES, format_weekdays
@@ -105,7 +107,30 @@ def edit_workbook_plan(plan_id):
         plan=plan,
         subjects=plan_form_subjects(plan),
         grades=PLAN_GRADES,
+        plan_identity_locked=workbook_plan_is_referenced_by_study_session(plan),
     )
+
+
+@planning_bp.route('/settings/workbook-plans/<int:plan_id>/delete', methods=['POST'])
+@login_required
+def delete_workbook_plan_route(plan_id):
+    blocked = _forbid_viewer()
+    if blocked:
+        return blocked
+    plan = get_workbook_plan(plan_id)
+    if plan is None:
+        abort(404)
+    confirm = (request.form.get('confirm_delete') or '').strip().lower()
+    if confirm not in {'yes', 'y', '1', 'on'}:
+        flash('삭제를 확인해주세요.', 'error')
+        return redirect(url_for('planning.edit_workbook_plan', plan_id=plan.id))
+    try:
+        delete_workbook_plan(plan)
+        flash('교재 계획을 삭제했습니다.', 'success')
+        return redirect(url_for('planning.manage_workbook_plans'))
+    except PlanningError as exc:
+        flash(exc.message, 'error')
+        return redirect(url_for('planning.edit_workbook_plan', plan_id=plan.id))
 
 
 @planning_bp.route('/children/<int:child_id>/study-weekdays', methods=['POST'])

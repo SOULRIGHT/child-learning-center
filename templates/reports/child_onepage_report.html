@@ -40,6 +40,11 @@
                style="min-height: 56px; font-size: 1.15rem; border-radius: 14px;">
                 독서 기록하기
             </a>
+            <a href="{{ url_for('reading.viewer_confirm', view_token=report_token, next='study') }}"
+               class="btn btn-primary w-100 mb-2"
+               style="min-height: 56px; font-size: 1.15rem; border-radius: 14px;">
+                학습 페이지 기록하기
+            </a>
             <a href="{{ url_for('reading.viewer_history', view_token=report_token) }}"
                class="btn btn-outline-primary w-100 mb-3"
                style="min-height: 56px; font-size: 1.15rem; border-radius: 14px;">

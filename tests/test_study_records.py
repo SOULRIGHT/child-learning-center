@@ -5,7 +5,7 @@ import importlib.util
 import inspect
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import create_engine, inspect as sa_inspect, text
@@ -70,16 +70,20 @@ FOUNDATION_TABLES = (
 STUDY_FOUNDATION_MIGRATION = Path(__file__).resolve().parents[1] / (
     'migrations/versions/f7c2a19e4b80_create_growth_vnext_study_foundation.py'
 )
+STUDY_PLAN_FK_MIGRATION = Path(__file__).resolve().parents[1] / (
+    'migrations/versions/a2b8c4d6e1f0_add_study_session_workbook_plan_fk.py'
+)
 
 
-def _load_study_foundation_migration():
-    spec = importlib.util.spec_from_file_location(
-        'study_foundation_mig',
-        STUDY_FOUNDATION_MIGRATION,
-    )
+def _load_migration(path, name):
+    spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _load_study_foundation_migration():
+    return _load_migration(STUDY_FOUNDATION_MIGRATION, 'study_foundation_mig')
 
 
 def _schema_invariants(engine, table):
@@ -175,7 +179,46 @@ class StudyRecordTests(unittest.TestCase):
             'input_channel': INPUT_CHANNEL_TEACHER,
         }
         payload.update(kwargs)
+        if 'learning_workbook_plan_id' not in kwargs:
+            payload['learning_workbook_plan_id'] = self._ensure_plan(
+                payload['learning_subject_id'],
+                payload['study_date'],
+                payload.get('textbook_title') or '수학 3-2',
+            ).id
         return create_study_session(**payload)
+
+    def _ensure_plan(self, learning_subject_id, study_date, textbook_title):
+        from features.planning.timeline import canonical_workbook_plan
+        plan = canonical_workbook_plan(
+            grade=self.child.grade,
+            learning_subject_id=learning_subject_id,
+            study_date=study_date,
+        )
+        if plan is not None:
+            return plan
+        return self._add_plan(
+            learning_subject_id=learning_subject_id,
+            textbook_title=textbook_title,
+            start_date=study_date,
+            start_page=1,
+            end_page=200,
+        )
+
+    def _add_plan(self, **overrides):
+        payload = {
+            'grade': 3,
+            'learning_subject_id': self.math.id,
+            'textbook_title': '쎈 수학 5-2',
+            'start_page': 1,
+            'end_page': 200,
+            'start_date': date(2026, 3, 1),
+            'target_completion_date': date(2026, 12, 1),
+        }
+        payload.update(overrides)
+        plan = LearningWorkbookPlan(**payload)
+        db.session.add(plan)
+        db.session.commit()
+        return plan
 
     def _create_status(self, study_status, study_date=None, **kwargs):
         payload = {
@@ -192,6 +235,12 @@ class StudyRecordTests(unittest.TestCase):
                 textbook_title='수학 3-2',
             )
         payload.update(kwargs)
+        if 'learning_workbook_plan_id' not in kwargs:
+            payload['learning_workbook_plan_id'] = self._ensure_plan(
+                payload['learning_subject_id'],
+                payload['study_date'],
+                payload.get('textbook_title') or '수학 3-2',
+            ).id
         return create_study_session(**payload)
 
     def _assert_day_status_conflict(self, first_status, second_status, study_date=None):
@@ -216,31 +265,19 @@ class StudyRecordTests(unittest.TestCase):
         self.assertEqual(row.record_verification, RECORD_VERIFICATION_OBSERVED)
 
     def test_explicit_not_studied_has_no_pages(self):
-        row = create_study_session(
-            child_id=self.child.id,
-            learning_subject_id=self.math.id,
-            study_date=self.today,
-            study_status=STUDY_STATUS_EXPLICIT_NOT_STUDIED,
-            recorded_by_user_id=self.teacher.id,
-            record_verification=RECORD_VERIFICATION_OBSERVED,
-        )
+        row = self._create_status(STUDY_STATUS_EXPLICIT_NOT_STUDIED)
         self.assertEqual(row.study_status, STUDY_STATUS_EXPLICIT_NOT_STUDIED)
         self.assertIsNone(row.start_page)
         self.assertIsNone(row.end_page)
 
     def test_unknown_is_stored_without_pages(self):
-        row = create_study_session(
-            child_id=self.child.id,
-            learning_subject_id=self.math.id,
-            study_date=self.today,
-            study_status=STUDY_STATUS_UNKNOWN,
-            recorded_by_user_id=self.teacher.id,
-        )
+        row = self._create_status(STUDY_STATUS_UNKNOWN)
         self.assertEqual(row.study_status, STUDY_STATUS_UNKNOWN)
         self.assertIsNone(row.start_page)
         self.assertIsNone(row.end_page)
 
     def test_not_studied_rejects_pages(self):
+        self._ensure_plan(self.math.id, self.today, '수학 3-2')
         with self.assertRaises(StudyRecordError) as ctx:
             create_study_session(
                 child_id=self.child.id,
@@ -273,6 +310,7 @@ class StudyRecordTests(unittest.TestCase):
             (STUDY_STATUS_UNKNOWN, RECORD_VERIFICATION_OBSERVED, {}),
             (STUDY_STATUS_UNKNOWN, RECORD_VERIFICATION_VERIFIED, {}),
         )
+        self._add_plan(start_date=date(2026, 1, 1), textbook_title='수학 3-2')
         for offset, (status, verification, extra) in enumerate(combinations):
             row = create_study_session(
                 child_id=self.child.id,
@@ -396,6 +434,148 @@ class StudyRecordTests(unittest.TestCase):
         self.assertEqual(deleted.change_reason, '입력 오류')
         self.assertEqual(deleted.child_id, self.child.id)
 
+    def test_plan_id_and_title_are_kept_in_change_history(self):
+        first = self._add_plan(textbook_title='쎈 수학 5-1', start_date=date(2026, 3, 1))
+        self._add_plan(textbook_title='쎈 수학 5-2', start_date=date(2026, 9, 1))
+        mid = date(2026, 7, 1)
+        row = self._studied(
+            study_date=mid,
+            learning_workbook_plan_id=first.id,
+            textbook_title='다른 표기',
+        )
+        created = LearningStudySessionChange.query.filter_by(
+            session_id=row.id, event_type='created',
+        ).one()
+        self.assertEqual(created.after_payload['learning_workbook_plan_id'], first.id)
+        self.assertEqual(created.after_payload['textbook_title'], '쎈 수학 5-1')
+        updated = update_study_session(
+            row,
+            changed_by_user_id=self.teacher.id,
+            start_page=72,
+            end_page=73,
+            change_reason='페이지 수정',
+        )
+        self.assertEqual(updated.learning_workbook_plan_id, first.id)
+        change = LearningStudySessionChange.query.filter_by(
+            session_id=row.id, event_type='updated',
+        ).one()
+        self.assertEqual(change.before_payload['learning_workbook_plan_id'], first.id)
+        self.assertEqual(change.after_payload['learning_workbook_plan_id'], first.id)
+        self.assertEqual(change.changed_by_user_id, self.teacher.id)
+
+    def test_canonical_timeline_uses_latest_started_plan(self):
+        from features.planning.timeline import canonical_workbook_plan
+        old = self._add_plan(
+            textbook_title='이전 교재',
+            start_date=date(2026, 3, 1),
+            target_completion_date=date(2026, 8, 20),
+        )
+        new = self._add_plan(
+            textbook_title='새 교재',
+            start_date=date(2026, 9, 1),
+            target_completion_date=date(2026, 9, 5),
+        )
+        self.assertEqual(
+            canonical_workbook_plan(
+                grade=3, learning_subject_id=self.math.id, study_date=date(2026, 8, 25),
+            ).id,
+            old.id,
+        )
+        self.assertEqual(
+            canonical_workbook_plan(
+                grade=3, learning_subject_id=self.math.id, study_date=date(2026, 9, 8),
+            ).id,
+            new.id,
+        )
+        row = self._studied(
+            study_date=date(2026, 8, 25),
+            start_page=2,
+            end_page=3,
+        )
+        self.assertEqual(row.learning_workbook_plan_id, old.id)
+        later = self._studied(
+            study_date=date(2026, 9, 8),
+            start_page=2,
+            end_page=3,
+        )
+        self.assertEqual(later.learning_workbook_plan_id, new.id)
+
+    def test_new_session_requires_canonical_plan(self):
+        with self.assertRaises(StudyRecordError) as ctx:
+            create_study_session(
+                child_id=self.child.id,
+                learning_subject_id=self.math.id,
+                study_date=self.today,
+                study_status=STUDY_STATUS_STUDIED,
+                recorded_by_user_id=self.teacher.id,
+                start_page=1,
+                end_page=2,
+                textbook_title='직접 입력',
+            )
+        self.assertEqual(ctx.exception.code, 'plan_required')
+
+    def test_legacy_null_plan_is_not_converted_on_update(self):
+        now = datetime.utcnow()
+        row = LearningStudySession(
+            created_at=now,
+            updated_at=now,
+            child_id=self.child.id,
+            learning_subject_id=self.math.id,
+            study_date=self.today,
+            learning_workbook_plan_id=None,
+            textbook_title='예전 직접입력',
+            study_status=STUDY_STATUS_STUDIED,
+            start_page=10,
+            end_page=11,
+            record_verification=RECORD_VERIFICATION_OBSERVED,
+            recorded_by_user_id=self.teacher.id,
+            actor_type='teacher',
+            input_channel=INPUT_CHANNEL_TEACHER,
+        )
+        db.session.add(row)
+        db.session.commit()
+        self._add_plan(textbook_title='이후 등록 교재', start_date=date(2026, 3, 1))
+        updated = update_study_session(
+            row,
+            changed_by_user_id=self.teacher.id,
+            start_page=12,
+            end_page=13,
+        )
+        self.assertIsNone(updated.learning_workbook_plan_id)
+        self.assertEqual(updated.textbook_title, '예전 직접입력')
+        self.assertEqual((updated.start_page, updated.end_page), (12, 13))
+
+    def test_free_text_title_is_not_fuzzy_matched_to_plan(self):
+        plan = self._add_plan(textbook_title='쎈 수학 5-2', start_date=date(2026, 3, 1))
+        row = self._studied(textbook_title='쎈수학 5-2')
+        self.assertEqual(row.learning_workbook_plan_id, plan.id)
+        self.assertEqual(row.textbook_title, '쎈 수학 5-2')
+
+    def test_verified_content_change_returns_to_observed(self):
+        from features.study.records import mark_sessions_verified
+        row = self._studied()
+        mark_sessions_verified(
+            [row.id],
+            child_id=self.child.id,
+            changed_by_user_id=self.teacher.id,
+        )
+        db.session.refresh(row)
+        self.assertEqual(row.record_verification, RECORD_VERIFICATION_VERIFIED)
+        update_study_session(
+            row,
+            changed_by_user_id=self.teacher.id,
+            start_page=72,
+            end_page=73,
+        )
+        db.session.refresh(row)
+        self.assertEqual(row.record_verification, RECORD_VERIFICATION_OBSERVED)
+        self.assertEqual((row.start_page, row.end_page), (72, 73))
+        changed = LearningStudySessionChange.query.filter_by(
+            session_id=row.id, event_type='updated',
+        ).order_by(LearningStudySessionChange.id.desc()).first()
+        self.assertEqual(changed.after_payload['record_verification'], RECORD_VERIFICATION_OBSERVED)
+        self.assertEqual(changed.changed_by_user_id, self.teacher.id)
+
     def test_delete_requires_reason(self):
         row = self._studied()
         with self.assertRaises(StudyRecordError) as ctx:
@@ -437,6 +617,139 @@ class StudyRecordTests(unittest.TestCase):
         skipped = self._studied(start_page=10, end_page=11)
         self.assertEqual(skipped.end_page, 11)
         self.assertNotEqual(assigned_page_count(plan), 11)
+
+    def test_selected_plan_id_ignores_title_spelling(self):
+        plan = LearningWorkbookPlan(
+            grade=3,
+            learning_subject_id=self.math.id,
+            textbook_title='쎈 수학 5-2',
+            start_page=1,
+            end_page=200,
+            start_date=date(2026, 3, 1),
+            target_completion_date=date(2026, 12, 1),
+        )
+        db.session.add(plan)
+        db.session.commit()
+        row = create_study_session(
+            child_id=self.child.id,
+            learning_subject_id=self.math.id,
+            study_date=self.today,
+            study_status=STUDY_STATUS_STUDIED,
+            recorded_by_user_id=self.teacher.id,
+            start_page=70,
+            end_page=71,
+            textbook_title='쎈수학 5-2',
+            learning_workbook_plan_id=plan.id,
+        )
+        self.assertEqual(row.learning_workbook_plan_id, plan.id)
+        self.assertEqual(row.textbook_title, '쎈 수학 5-2')
+        other = create_study_session(
+            child_id=self.child.id,
+            learning_subject_id=self.math.id,
+            study_date=self.today - timedelta(days=1),
+            study_status=STUDY_STATUS_STUDIED,
+            recorded_by_user_id=self.teacher.id,
+            start_page=72,
+            end_page=73,
+            textbook_title='쎈  수학 5-2',
+            learning_workbook_plan_id=plan.id,
+        )
+        self.assertEqual(other.learning_workbook_plan_id, plan.id)
+        self.assertEqual(other.textbook_title, '쎈 수학 5-2')
+
+    def test_plan_id_is_checked_against_subject_grade_and_start_date(self):
+        korean_plan = self._add_plan(
+            learning_subject_id=self.korean.id,
+            textbook_title='국어 3-2',
+        )
+        grade_plan = self._add_plan(grade=4, textbook_title='수학 4-2')
+        future_plan = self._add_plan(
+            textbook_title='나중에 시작',
+            start_date=self.today,
+        )
+        with self.assertRaises(StudyRecordError) as subject_ctx:
+            self._studied(learning_workbook_plan_id=korean_plan.id)
+        self.assertEqual(subject_ctx.exception.code, 'plan_subject_mismatch')
+        with self.assertRaises(StudyRecordError) as grade_ctx:
+            self._studied(learning_workbook_plan_id=grade_plan.id)
+        self.assertEqual(grade_ctx.exception.code, 'plan_grade_mismatch')
+        with self.assertRaises(StudyRecordError) as start_ctx:
+            self._studied(
+                study_date=self.today - timedelta(days=10),
+                learning_workbook_plan_id=future_plan.id,
+            )
+        self.assertEqual(start_ctx.exception.code, 'plan_not_started')
+        self.assertEqual(LearningStudySession.query.count(), 0)
+        past = self.today - timedelta(days=10)
+        started = self._add_plan(
+            textbook_title='이미 시작',
+            start_date=past - timedelta(days=1),
+        )
+        row = self._studied(
+            study_date=past,
+            learning_workbook_plan_id=started.id,
+        )
+        self.assertEqual(row.learning_workbook_plan_id, started.id)
+        self.assertEqual(row.study_date, past)
+
+    def test_studied_pages_must_stay_inside_selected_plan_range(self):
+        plan = self._add_plan(start_page=10, end_page=100, textbook_title='범위 교재')
+        ok = self._studied(
+            learning_workbook_plan_id=plan.id,
+            start_page=20,
+            end_page=25,
+        )
+        self.assertEqual((ok.start_page, ok.end_page), (20, 25))
+        with self.assertRaises(StudyRecordError) as before_ctx:
+            self._studied(
+                study_date=self.today - timedelta(days=1),
+                learning_workbook_plan_id=plan.id,
+                start_page=5,
+                end_page=12,
+            )
+        self.assertEqual(before_ctx.exception.code, 'plan_page_out_of_range')
+        with self.assertRaises(StudyRecordError) as after_ctx:
+            self._studied(
+                study_date=self.today - timedelta(days=2),
+                learning_workbook_plan_id=plan.id,
+                start_page=90,
+                end_page=125,
+            )
+        self.assertEqual(after_ctx.exception.code, 'plan_page_out_of_range')
+        with self.assertRaises(StudyRecordError) as update_ctx:
+            update_study_session(
+                ok,
+                changed_by_user_id=self.teacher.id,
+                start_page=120,
+                end_page=125,
+            )
+        self.assertEqual(update_ctx.exception.code, 'plan_page_out_of_range')
+        db.session.refresh(ok)
+        self.assertEqual((ok.start_page, ok.end_page), (20, 25))
+        with self.assertRaises(StudyRecordError) as missing_ctx:
+            create_study_session(
+                child_id=self.child.id,
+                learning_subject_id=self.korean.id,
+                study_date=self.today - timedelta(days=3),
+                study_status=STUDY_STATUS_STUDIED,
+                recorded_by_user_id=self.teacher.id,
+                start_page=120,
+                end_page=125,
+                textbook_title='직접 입력',
+            )
+        self.assertEqual(missing_ctx.exception.code, 'plan_required')
+
+    def test_new_write_path_does_not_call_save_progress_entry(self):
+        import features.study.records as study_records
+        import features.study.routes as study_routes
+        import features.study.teacher_input as teacher_input
+        for module in (study_records, teacher_input, study_routes):
+            source = inspect.getsource(module)
+            self.assertNotIn('save_progress_entry', source)
+            self.assertNotIn('DailyPoints', source)
+        self._studied()
+        self.assertEqual(LearningStudySession.query.count(), 1)
+        self.assertEqual(LearningProgressEntry.query.count(), 0)
 
     def test_missing_exclusions_do_not_invent_assigned_count(self):
         plan = LearningWorkbookPlan(
@@ -578,9 +891,15 @@ class StudyFoundationMigrationTests(unittest.TestCase):
                     conn.execute(text(
                         'CREATE TABLE learning_subject (id INTEGER PRIMARY KEY, key VARCHAR(64))'
                     ))
+                    conn.execute(text(
+                        'CREATE TABLE learning_workbook_plan (id INTEGER PRIMARY KEY)'
+                    ))
                     context = MigrationContext.configure(conn)
                     with Operations.context(context):
                         module.upgrade()
+                        _load_migration(
+                            STUDY_PLAN_FK_MIGRATION, 'study_plan_fk_mig'
+                        ).upgrade()
                 migrated = {
                     table: _schema_invariants(engine, table)
                     for table in FOUNDATION_TABLES
@@ -616,6 +935,19 @@ class StudyFoundationMigrationTests(unittest.TestCase):
         self.assertEqual(
             created['center_non_study_day']['defaults']['source'],
             "'center'",
+        )
+        self.assertIn(
+            'learning_workbook_plan_id',
+            created['learning_study_session']['defaults'],
+        )
+        self.assertIn(
+            (
+                ('learning_workbook_plan_id',),
+                'learning_workbook_plan',
+                ('id',),
+                None,
+            ),
+            created['learning_study_session']['fks'],
         )
 
     def test_upgrade_adds_partial_unique_when_table_already_exists(self):

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}학습 페이지 기록{% endblock %}
+{% block page_title %}학습 페이지 기록{% endblock %}
+
+{% block extra_css %}
+<style>
+.study-child { max-width: 860px; margin: 0 auto 2rem; }
+.study-child .btn-lg-touch { min-height: 56px; font-size: 1.1rem; border-radius: 14px; }
+.study-child .form-control, .study-child .form-select { min-height: 48px; font-size: 1.05rem; }
+.study-row { border-radius: 14px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="study-child">
+    <div class="d-flex gap-2 mb-3 flex-wrap">
+        <a href="{{ url_for('viewer_report', view_token=view_token) }}" class="btn btn-outline-secondary">뒤로가기</a>
+        <a href="{{ url_for('reading.viewer_confirm', view_token=view_token) }}" class="btn btn-outline-success">독서 기록하기</a>
+    </div>
+    <p class="text-muted mb-3">{{ child.name }} · 오늘 공부한 과목만 고르면 돼요. 고르지 않은 과목은 저장하지 않아요.</p>
+    <form method="get" action="{{ url_for('study.viewer_form', view_token=view_token) }}" class="mb-3">
+        <label class="form-label" for="study_date">날짜</label>
+        <div class="d-flex gap-2">
+            <input class="form-control" id="study_date" name="study_date" type="date" value="{{ study_date.isoformat() }}" max="{{ kst_today.isoformat() }}">
+            <button class="btn btn-outline-primary" type="submit">날짜 바꾸기</button>
+        </div>
+    </form>
+    <form method="post" action="{{ url_for('study.viewer_save', view_token=view_token) }}" class="js-child-study-form">
+        <input type="hidden" name="study_date" value="{{ study_date.isoformat() }}">
+        {% for row in rows %}
+        <div class="card study-row mb-3" data-row="{{ row.subject_id }}">
+            <div class="card-body">
+                <input type="hidden" name="subject_id" value="{{ row.subject_id }}">
+                <h5 class="mb-1">{{ row.subject_name }}</h5>
+                {% if row.can_input %}
+                <input type="hidden" name="plan_id_{{ row.subject_id }}" value="{{ row.plan.id }}">
+                <p class="text-muted mb-2">{{ row.plan.textbook_title }} ({{ row.plan.start_page }}~{{ row.plan.end_page }}쪽)</p>
+                <div class="d-flex flex-wrap gap-3 mb-2">
+                    <label class="form-check-label">
+                        <input class="form-check-input js-child-status" type="radio" name="study_status_{{ row.subject_id }}" value="studied" {% if row.existing and row.existing.study_status == 'studied' %}checked{% endif %}>
+                        공부함
+                    </label>
+                    <label class="form-check-label">
+                        <input class="form-check-input js-child-status" type="radio" name="study_status_{{ row.subject_id }}" value="explicit_not_studied" {% if row.existing and row.existing.study_status == 'explicit_not_studied' %}checked{% endif %}>
+                        공부하지 않음
+                    </label>
+                    <label class="form-check-label">
+                        <input class="form-check-input js-child-status" type="radio" name="study_status_{{ row.subject_id }}" value="unknown" {% if row.existing and row.existing.study_status == 'unknown' %}checked{% endif %}>
+                        기억 안 남
+                    </label>
+                </div>
+                <div class="row g-2 js-child-pages {% if not row.existing or row.existing.study_status != 'studied' %}d-none{% endif %}">
+                    <div class="col-6">
+                        <label class="form-label" for="start_page_{{ row.subject_id }}">시작 페이지</label>
+                        <input class="form-control js-child-start" id="start_page_{{ row.subject_id }}" name="start_page_{{ row.subject_id }}" type="number" min="{{ row.plan.start_page }}" max="{{ row.plan.end_page }}" value="{{ row.existing.start_page if row.existing and row.existing.start_page else '' }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" for="end_page_{{ row.subject_id }}">끝 페이지</label>
+                        <input class="form-control js-child-end" id="end_page_{{ row.subject_id }}" name="end_page_{{ row.subject_id }}" type="number" min="{{ row.plan.start_page }}" max="{{ row.plan.end_page }}" value="{{ row.existing.end_page if row.existing and row.existing.end_page else '' }}">
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">{{ no_plan_message }}</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% if not rows %}
+        <p class="text-muted">지금은 기록할 학습 과목이 없어요.</p>
+        {% endif %}
+        {% set can_save = rows | selectattr('can_input') | list %}
+        <button class="btn btn-primary btn-lg-touch w-100" type="submit" {% if not can_save %}disabled{% endif %}>저장하기</button>
+        {% if rows and not can_save %}
+        <p class="text-muted small mt-2 mb-0">{{ no_plan_message }}</p>
+        {% endif %}
+    </form>
+</div>
+<script>
+(function () {
+    document.querySelectorAll('.study-row').forEach(function (row) {
+        var pages = row.querySelector('.js-child-pages');
+        var startInput = row.querySelector('.js-child-start');
+        var endInput = row.querySelector('.js-child-end');
+        function sync() {
+            var checked = row.querySelector('.js-child-status:checked');
+            var studied = checked && checked.value === 'studied';
+            if (pages) pages.classList.toggle('d-none', !studied);
+            if (startInput) startInput.disabled = !studied;
+            if (endInput) endInput.disabled = !studied;
+            if (!studied) {
+                if (startInput) startInput.value = startInput.value && studied ? startInput.value : (studied ? startInput.value : '');
+            }
+        }
+        row.querySelectorAll('.js-child-status').forEach(function (input) {
+            input.addEventListener('change', function () {
+                var studied = input.value === 'studied' && input.checked;
+                if (pages) pages.classList.toggle('d-none', !studied);
+                if (startInput) {
+                    startInput.disabled = !studied;
+                    if (!studied) startInput.value = '';
+                }
+                if (endInput) {
+                    endInput.disabled = !studied;
+                    if (!studied) endInput.value = '';
+                }
+            });
+        });
+        sync();
+    });
+})();
+</script>
+{% endblock %}

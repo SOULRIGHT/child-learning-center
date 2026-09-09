@@ -8,6 +8,9 @@
     <div>
         <h4 class="mb-1">교재 계획 수정</h4>
         <p class="text-muted mb-0">목표 완료일, 페이지 범위, 제외 페이지를 고칠 수 있습니다.</p>
+        {% if plan_identity_locked %}
+        <p class="text-muted mb-0 mt-1">이미 학습 기록이 연결된 교재는 학년·과목·교재명을 바꿀 수 없습니다. 다른 교재는 새 계획으로 추가하세요.</p>
+        {% endif %}
     </div>
     <a href="{{ url_for('planning.manage_workbook_plans') }}" class="btn btn-outline-secondary">목록으로</a>
 </div>
@@ -21,6 +24,24 @@
                 <button class="btn btn-primary" type="submit">저장</button>
             </div>
         </form>
+    </div>
+</div>
+<div class="card mt-3 {% if plan_identity_locked %}border-secondary{% else %}border-danger{% endif %}">
+    <div class="card-body">
+        <h5 class="{% if plan_identity_locked %}text-secondary{% else %}text-danger{% endif %}">교재 계획 삭제</h5>
+        {% if plan_identity_locked %}
+        <p class="text-muted mb-2">학습기록에서 사용 중이라 삭제할 수 없습니다. 연결된 학습 기록은 지우거나 비우지 않습니다.</p>
+        <button class="btn btn-outline-secondary" type="button" disabled>삭제 불가</button>
+        {% else %}
+        <p class="text-muted">학습 기록이 없는 계획만 삭제할 수 있습니다. 연결된 학습 기록은 지우거나 비우지 않습니다.</p>
+        <form method="post" action="{{ url_for('planning.delete_workbook_plan_route', plan_id=plan.id) }}" onsubmit="return confirm('이 교재 계획을 삭제할까요?');">
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" value="yes" id="confirm_delete" name="confirm_delete" required>
+                <label class="form-check-label" for="confirm_delete">삭제에 동의합니다</label>
+            </div>
+            <button class="btn btn-outline-danger" type="submit">삭제</button>
+        </form>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

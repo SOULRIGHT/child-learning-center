@@ -457,6 +457,7 @@ VIEWER_ALLOWED_ENDPOINTS = {
     'reading.viewer_confirm',
     'reading.viewer_editor',
     'reading.viewer_history',
+    'study.viewer_form',
     'logout',
 }
 VIEWER_WRITE_ENDPOINTS = {
@@ -466,6 +467,7 @@ VIEWER_WRITE_ENDPOINTS = {
     'reading.viewer_abandon',
     'exemption.viewer_set_reward_mode',
     'devdate.set_activity_date',
+    'study.viewer_save',
 }
 VIEWER_CODE_RE = re.compile(r'(?P<child_id>\d+)-(?P<signature>[0-9a-fA-F]{16})')
 
@@ -1684,6 +1686,7 @@ def child_detail(child_id):
     from features.progress.service import current_progress_for_child, list_progress_input_subjects, kst_today
     from features.exemption.service import child_exemption_snapshot
     from features.planning.service import child_study_weekdays_view
+    from features.study.view import teacher_study_template_vars
 
     return render_template('children/detail.html', 
                          child=child,
@@ -1701,7 +1704,8 @@ def child_detail(child_id):
                          kst_today=kst_today(),
                          exemption_status=child_exemption_snapshot(child_id),
                          study_weekdays=child_study_weekdays_view(child_id),
-                         is_viewer_mode=False)
+                         is_viewer_mode=False,
+                         **teacher_study_template_vars(child))
 
 @app.route('/children/<int:child_id>/points/export/csv')
 @login_required
@@ -2953,6 +2957,7 @@ def points_input(child_id):
     from features.presets.service import list_active_presets
     from features.progress.service import current_progress_for_child, list_progress_input_subjects, kst_today
     from features.exemption.service import child_exemption_snapshot
+    from features.study.view import teacher_study_template_vars
     reading_snapshot = snapshot_for_date(child_id, selected_date)
     reading_policy_v2 = is_general_reading_v2(selected_date)
     manual_presets = list_active_presets()
@@ -2976,7 +2981,8 @@ def points_input(child_id):
                           active_subjects=list_progress_input_subjects(),
                           kst_today=kst_today(),
                           exemption_status=child_exemption_snapshot(child_id, selected_date),
-                          is_viewer_mode=False)
+                          is_viewer_mode=False,
+                          **teacher_study_template_vars(child))
 
 def update_cumulative_points(child_id, commit=True):
     """아동의 누적 포인트를 자동으로 업데이트"""
@@ -6189,6 +6195,7 @@ from features.books.routes import books_bp  # noqa: E402
 from features.reading.routes import reading_bp  # noqa: E402
 from features.presets.routes import presets_bp  # noqa: E402
 from features.progress.routes import progress_bp  # noqa: E402
+from features.study.routes import study_bp  # noqa: E402
 from features.exemption.routes import exemption_bp  # noqa: E402
 from features.devdate.routes import devdate_bp  # noqa: E402
 from features.growth.routes import growth_bp  # noqa: E402
@@ -6199,6 +6206,7 @@ app.register_blueprint(books_bp)
 app.register_blueprint(reading_bp)
 app.register_blueprint(presets_bp)
 app.register_blueprint(progress_bp)
+app.register_blueprint(study_bp)
 app.register_blueprint(exemption_bp)
 app.register_blueprint(devdate_bp)
 app.register_blueprint(growth_bp)
