@@ -87,7 +87,7 @@
                 <div class="nav-item">
                     <a href="{{ url_for('settings_print_children') }}" class="nav-link {% if ep in ['settings_print_children', 'settings_print_child_report'] %}active{% endif %}">
                         <i class="bi bi-printer"></i>
-                        개인 리포트
+                        출력용 리포트
                     </a>
                 </div>
                 <!-- 임시 비활성화: 기존 통계 분석
@@ -107,7 +107,7 @@
                 </div>
                 <!-- 설정 -->
                 <div class="nav-item">
-                    <a href="{{ url_for('settings') }}" class="nav-link {% if (ep.startswith('settings') and ep not in ['settings_print_children', 'settings_print_child_report']) or ep == 'cumulative_points' %}active{% endif %}">
+                    <a href="{{ url_for('settings') }}" class="nav-link {% if (ep.startswith('settings') and ep not in ['settings_print_children', 'settings_print_child_report']) or ep.startswith('setup.') or ep.startswith('planning.') or ep == 'progress.manage_subjects' or ep == 'cumulative_points' %}active{% endif %}">
                         <i class="bi bi-gear"></i>
                         설정
                     </a>

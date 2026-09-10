@@ -629,6 +629,7 @@ def restrict_general_user_from_settings():
         'planning.manage_study_calendar', 'planning.manage_workbook_plans',
         'planning.edit_workbook_plan',
         'planning.manage_subject_weekdays', 'planning.manage_non_study_days',
+        'setup.hub',
     }
 
     if endpoint in settings_endpoints:
@@ -6204,6 +6205,7 @@ from features.devdate.routes import devdate_bp  # noqa: E402
 from features.growth.routes import growth_bp  # noqa: E402
 from features.planning.routes import planning_bp  # noqa: E402
 from features.points.routes import points_internal_bp  # noqa: E402
+from features.setup.routes import setup_bp  # noqa: E402
 
 app.register_blueprint(books_bp)
 app.register_blueprint(reading_bp)
@@ -6215,6 +6217,7 @@ app.register_blueprint(devdate_bp)
 app.register_blueprint(growth_bp)
 app.register_blueprint(planning_bp)
 app.register_blueprint(points_internal_bp)
+app.register_blueprint(setup_bp)
 
 if __name__ == '__main__':
     if os.environ.get('CLC_TESTING') == '1':

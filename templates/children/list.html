@@ -206,11 +206,16 @@ document.addEventListener('DOMContentLoaded', function() {
                             {% endif %}
                         </td>
                         <td class="align-middle text-center" onclick="event.stopPropagation();">
-                            <div class="d-flex justify-content-center gap-2">
+                            <div class="d-flex justify-content-center gap-2 flex-wrap">
                                 <!-- 포인트 기록 (항상 표시, 주요 액션) -->
                                 <a href="{{ url_for('points_input', child_id=child.id) }}"
                                    class="action-btn action-btn-primary" title="포인트 기록">
                                     <span class="material-icons">stars</span>
+                                </a>
+                                <a href="{{ url_for('growth.teacher', child_id=child.id) }}"
+                                   class="action-btn action-btn-neutral" title="성장 리포트"
+                                   data-testid="growth-report-entry">
+                                    <span class="material-icons">insights</span>
                                 </a>
                                 <!-- 태블릿 이상: 추가 버튼들 -->
                                 <a href="{{ url_for('child_detail', child_id=child.id) }}"
@@ -360,6 +365,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             <span class="material-icons" style="font-size:15px;">stars</span>
                         </span>
                         <span><strong>포인트 기록:</strong> 일일 포인트 입력</span>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="action-btn action-btn-neutral" style="pointer-events:none; width:28px; height:28px; min-width:28px; border-radius:8px;">
+                            <span class="material-icons" style="font-size:15px;">insights</span>
+                        </span>
+                        <span><strong>성장 리포트:</strong> 성장 리포트 보기</span>
                     </div>
                 </div>
                 <div class="mb-2">

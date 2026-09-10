@@ -220,7 +220,8 @@ class PlanningAdminTests(unittest.TestCase):
         self.assertIn('학습 계획', html)
         self.assertIn('/settings/study-calendar', html)
         self.assertIn('/settings/workbook-plans', html)
-        self.assertNotIn('learning-subjects', html)
+        self.assertIn('/settings/learning-subjects', html)
+        self.assertIn('/settings/setup', html)
 
     def test_create_workbook_plan_and_normalize_title(self):
         self._login(self.teacher_id)
