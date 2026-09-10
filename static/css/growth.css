@@ -509,8 +509,8 @@
 
 .growth-read-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.7rem 0.85rem;
+  grid-template-columns: minmax(13.5rem, 1.5fr) repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 0.7rem 1rem;
 }
 
 .growth-read-stat {
@@ -523,6 +523,17 @@
   color: #111827;
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
+.growth-read-stat:first-child .growth-read-stat-value {
+  white-space: nowrap;
+}
+
+.growth-read-stat .growth-meta {
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .growth-program-list {
@@ -1009,7 +1020,9 @@
     grid-template-columns: 1fr 1fr;
   }
   .growth-points-hero-block { grid-column: 1 / -1; }
-  .growth-read-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .growth-read-stats {
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  }
 }
 
 @media (max-width: 767.98px) {
