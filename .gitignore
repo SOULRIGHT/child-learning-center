@@ -58,6 +58,7 @@ firebase_env_example.txt
 
 # Logs
 *.log
+logs/
 
 # Backup files
 *.backup

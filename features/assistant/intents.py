@@ -4,14 +4,15 @@ from __future__ import annotations
 from features.assistant.config import can_manage_settings, current_role
 from features.assistant.copy import (
     FALLBACK,
-    GREETING,
-    HELP_SCOPE,
+    DRAWER_NOTICE,
+    GREETING_REPLY,
     NAV_NEED_CHOICE,
     NAV_NEED_NAME,
     NAV_NO_MATCH,
     ONBOARDING_DONE,
     ONBOARDING_UNAVAILABLE,
     PAGE_GENERIC,
+    QUICK_CHILD_SUMMARY,
     QUICK_CONTINUE_SETUP,
     QUICK_EXPLAIN_PAGE,
     QUICK_OPEN_GROWTH,
@@ -22,14 +23,13 @@ from features.assistant.copy import (
     page_description,
 )
 from features.assistant.navigation import (
-    child_public,
     extract_child_query,
     is_explicit_go,
     match_destination_from_text,
     resolve_navigation,
-    search_children,
     spec_for,
 )
+from features.assistant.resolve import resolve_children
 from features.setup.present import attach_setup_hrefs
 from features.setup.status import build_center_setup_status
 
@@ -45,6 +45,20 @@ ONBOARDING_PHRASES = (
     '온보딩',
 )
 EXPLAIN_PHRASES = ('현재 화면', '이 화면', '여기가 어디', '무슨 화면', '화면 설명')
+GREETING_PHRASES = ('안녕하세요', '안녕', '헬로', 'hello', 'hi')
+HELP_HINTS = (
+    '무슨 뜻', '어떤 뜻', '의미', '설명해 줘', '설명해줘', '설명해주세요',
+    '도움말', '뭐야', '무엇인가요', '무슨 의미', '없어도', '수 있어',
+)
+HELP_DEFINITION_HINTS = ('무슨 뜻', '어떤 뜻', '의미', '뭐야', '무엇인가요', '무슨 의미')
+DATA_HINTS = (
+    '어때', '알려줘', '알려 줘', '알려', '얼마나', '요약', '진도', '또래',
+    '비교', '학습일', '포인트', '독서', '완독', '관측', '며칠', '몇 권',
+)
+QUESTION_HINTS = (
+    '어때', '알려', '얼마나', '요약', '무슨', '의미', '뭐야', '며칠',
+    '몇 권', '비교', '또래',
+)
 
 
 def is_onboarding_request(text):
@@ -55,6 +69,37 @@ def is_onboarding_request(text):
 def is_explain_request(text):
     raw = text or ''
     return any(phrase in raw for phrase in EXPLAIN_PHRASES)
+
+
+def is_greeting(text):
+    raw = (text or '').strip().casefold()
+    if not raw:
+        return False
+    compact = raw.replace('!', '').replace('~', '').replace('.', '').strip()
+    return compact in GREETING_PHRASES or compact.rstrip('요') in GREETING_PHRASES
+
+
+def wants_help(text):
+    raw = text or ''
+    return any(phrase in raw for phrase in HELP_HINTS)
+
+
+def is_help_definition(text):
+    raw = text or ''
+    return any(phrase in raw for phrase in HELP_DEFINITION_HINTS)
+
+
+def wants_data(text):
+    raw = text or ''
+    if not any(phrase in raw for phrase in DATA_HINTS):
+        return False
+    if (
+        is_explicit_go(raw)
+        and match_destination_from_text(raw)
+        and not any(phrase in raw for phrase in QUESTION_HINTS)
+    ):
+        return False
+    return True
 
 
 def quick_actions(page_context, role=None):
@@ -73,6 +118,11 @@ def quick_actions(page_context, role=None):
         'intent': 'explain_page',
     })
     if page_context.get('child_id'):
+        actions.append({
+            'id': 'child_summary',
+            'label': QUICK_CHILD_SUMMARY,
+            'intent': 'chat',
+        })
         actions.append({
             'id': 'open_growth',
             'label': QUICK_OPEN_GROWTH,
@@ -109,12 +159,13 @@ def bootstrap_payload(page_context, role=None):
     if can_manage_settings(role):
         status = onboarding_status(role)
     return {
-        'text': GREETING,
+        'text': DRAWER_NOTICE,
         'actions': [],
         'status': status,
         'character_state': 'idle',
         'quick_actions': quick_actions(page_context, role),
         'handled': True,
+        'source_kind': 'system',
     }
 
 
@@ -227,16 +278,24 @@ def _choice_actions(children, destination, auto=False):
     spec = spec_for(destination)
     label_base = spec.label if spec else '화면'
     for child in children:
-        resolved = resolve_navigation(destination, {'child_id': child.id}, role=current_role())
+        if isinstance(child, dict):
+            child_id = child.get('id')
+            name = child.get('name')
+            grade = child.get('grade')
+        else:
+            child_id = getattr(child, 'id', None)
+            name = getattr(child, 'name', '')
+            grade = getattr(child, 'grade', None)
+        resolved = resolve_navigation(destination, {'child_id': child_id}, role=current_role())
         if not resolved.get('ok'):
             continue
         actions.append({
             'type': 'navigate',
-            'label': f"{child.name} ({child.grade}학년) {label_base}",
+            'label': f"{name} ({grade}학년) {label_base}",
             'url': resolved['url'],
             'destination': destination,
             'auto': False,
-            'params': {'child_id': child.id},
+            'params': {'child_id': child_id},
         })
     return actions
 
@@ -282,6 +341,13 @@ def navigate_payload(destination, params=None, *, page_context=None, auto=False,
             'status': None,
             'character_state': 'help',
             'error': 'missing_child',
+            'destination': spec.key,
+            'pending_hint': {
+                'type': 'navigate',
+                'destination': spec.key,
+                'missing': ['child'],
+                'awaiting': 'child',
+            },
             'handled': True,
         }
     return {
@@ -305,7 +371,8 @@ def navigate_from_text(text, page_context, role=None):
     if spec and spec.child_required:
         query = extract_child_query(text)
         if query:
-            matches = search_children(query)
+            resolved = resolve_children(query)
+            matches = resolved.get('matches') or []
             if not matches:
                 return {
                     'text': NAV_NO_MATCH,
@@ -315,25 +382,73 @@ def navigate_from_text(text, page_context, role=None):
                     'error': 'no_child_match',
                     'handled': True,
                 }
-            if len(matches) > 1:
+            if resolved.get('kind') == 'multiple':
                 return {
                     'text': NAV_NEED_CHOICE,
                     'actions': _choice_actions(matches, destination),
                     'status': None,
                     'character_state': 'help',
-                    'candidates': [child_public(child) for child in matches],
+                    'candidates': matches,
+                    'pending_hint': {
+                        'type': 'navigate',
+                        'destination': destination,
+                        'missing': ['child'],
+                        'awaiting': 'child',
+                    },
                     'handled': True,
                 }
-            params['child_id'] = matches[0].id
+            if resolved.get('needs_confirmation') or resolved.get('kind') == 'fuzzy':
+                child = matches[0]
+                grade = child.get('grade')
+                name = child.get('name')
+                ask = (
+                    f'{grade}학년 {name}을 말씀하시는 건가요?'
+                    if grade not in (None, '')
+                    else f'{name}을 말씀하시는 건가요?'
+                )
+                return {
+                    'text': ask,
+                    'actions': [
+                        {
+                            'type': 'reply',
+                            'label': f'네, {name}이에요',
+                            'content': '응',
+                        },
+                        {
+                            'type': 'reply',
+                            'label': '다른 아동 찾기',
+                            'content': '아니',
+                        },
+                    ],
+                    'status': None,
+                    'character_state': 'help',
+                    'pending_hint': {
+                        'type': 'navigate',
+                        'destination': destination,
+                        'awaiting': 'child_confirmation',
+                        'candidate_child_id': child.get('id'),
+                        'candidate_nickname': name,
+                    },
+                    'handled': True,
+                }
+            params['child_id'] = matches[0]['id']
         elif (page_context or {}).get('child_id'):
             params['child_id'] = page_context['child_id']
-    return navigate_payload(
+    payload = navigate_payload(
         destination,
         params,
         page_context=page_context,
         auto=auto,
         role=role,
     )
+    if payload.get('error') == 'missing_child':
+        payload['pending_hint'] = {
+            'type': 'navigate',
+            'destination': destination,
+            'missing': ['child'],
+            'awaiting': 'child',
+        }
+    return payload
 
 
 def interpret_user_text(text, page_context, role=None):
@@ -345,11 +460,27 @@ def interpret_user_text(text, page_context, role=None):
         return onboarding_payload(role)
     if is_explain_request(raw):
         return explain_page_payload(page_context)
+    if is_greeting(raw):
+        return {
+            'text': GREETING_REPLY,
+            'actions': [],
+            'status': None,
+            'character_state': 'idle',
+            'handled': False,
+        }
+    if wants_help(raw) and not is_explicit_go(raw):
+        return _unhandled()
+    if wants_data(raw):
+        return _unhandled()
     nav = navigate_from_text(raw, page_context, role=role)
     if nav is not None:
         return nav
+    return _unhandled()
+
+
+def _unhandled():
     return {
-        'text': f'{HELP_SCOPE} {FALLBACK}',
+        'text': FALLBACK,
         'actions': [],
         'status': None,
         'character_state': 'idle',

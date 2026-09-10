@@ -5,7 +5,16 @@
      aria-labelledby="teacherAssistantTitle">
     <div class="offcanvas-header assistant-drawer-header">
         <h2 class="offcanvas-title fs-6 mb-0" id="teacherAssistantTitle">조교</h2>
-        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="닫기"></button>
+        <span class="assistant-question-count"
+              data-assistant-role="question-count"
+              data-testid="assistant-question-count">대화 0 / 10</span>
+        <div class="assistant-header-actions">
+            <button type="button"
+                    class="assistant-reset"
+                    data-assistant-role="reset"
+                    data-testid="assistant-reset">처음으로</button>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="닫기"></button>
+        </div>
     </div>
     <div class="assistant-character-stage"
          data-testid="assistant-character-stage"
@@ -16,8 +25,19 @@
     <div class="offcanvas-body assistant-drawer-body">
         <div class="assistant-onboarding" data-assistant-role="onboarding" hidden></div>
         <div class="assistant-conversation" data-assistant-role="conversation" aria-live="polite"></div>
+        <div class="assistant-limit" data-assistant-role="limit-banner" data-testid="assistant-limit-banner" hidden>
+            <p class="assistant-limit-text">이번 대화의 질문을 모두 사용했습니다.</p>
+            <button type="button"
+                    class="assistant-action"
+                    data-assistant-role="new-conversation"
+                    data-testid="assistant-new-conversation">새 대화 시작</button>
+        </div>
         <div class="assistant-quick-actions" data-assistant-role="quick-actions"></div>
         <p class="assistant-error" data-assistant-role="error" hidden></p>
+        <div class="assistant-recovery" data-assistant-role="recovery" hidden>
+            <button type="button" class="assistant-action" data-assistant-role="retry" data-testid="assistant-retry">다시 시도</button>
+            <button type="button" class="assistant-action" data-assistant-role="reset">처음으로</button>
+        </div>
     </div>
     <form class="assistant-composer" data-assistant-role="composer">
         <label class="visually-hidden" for="teacherAssistantInput">메시지</label>

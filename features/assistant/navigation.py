@@ -110,7 +110,11 @@ _NAME_STRIP = (
     '포인트 입력', '포인트 이력', '포인트 상세', '포인트',
     '학습 진도', '진도',
     '열어줘', '가줘', '보여줘', '해주세요', '해줘', '열어', '이동해줘', '이동',
-    '화면', '페이지',
+    '알려줘', '알려 줘', '알려', '어때', '얼마나', '요약', '비교', '또래',
+    '무슨 뜻', '의미', '화면', '페이지',
+    '쎈수학', '수학', '국어',
+    '며칠', '몇 권', '화면도', '그리고', '주고',
+    '교재 계획', '교재계획', '학습요일', '기본 학습요일',
 )
 
 
@@ -181,7 +185,12 @@ def resolve_navigation(destination, params=None, *, role):
     child_id = params.get('child_id')
     if spec.child_required:
         if child_id in (None, '', False):
-            return {'ok': False, 'error': 'missing_child', 'message': NAV_NEED_CHILD}
+            return {
+                'ok': False,
+                'error': 'missing_child',
+                'message': NAV_NEED_CHILD,
+                'destination': spec.key,
+            }
         child = lookup_child(child_id)
         if child is None:
             return {'ok': False, 'error': 'invalid_child', 'message': NAV_INVALID_CHILD}

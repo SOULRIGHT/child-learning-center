@@ -1,7 +1,8 @@
 """교사 대상 짧은 조교 문구. 유아틱/장문 essay 금지."""
 
 GREETING = '무엇을 도와드릴까요?'
-HELP_SCOPE = '지금은 화면 이동과 센터 설정 안내를 도와드릴 수 있어요.'
+GREETING_REPLY = '안녕하세요. 학습·포인트·독서 기록이나 화면 이동을 도와드릴게요.'
+HELP_SCOPE = '지금은 화면 이동, 센터 설정 안내, 학습·포인트·독서 기록 확인을 도와드릴 수 있어요.'
 SETUP_CONTINUE = '센터 설정을 순서대로 확인할 수 있어요.'
 SETUP_FORBIDDEN = '이 설정은 현재 계정에서 열 수 없습니다.'
 NAV_UNKNOWN = '그 화면은 열 수 있는 목록에 없습니다.'
@@ -15,7 +16,8 @@ ONBOARDING_UNAVAILABLE = '지금은 센터 설정 안내를 불러오지 못했�
 ONBOARDING_DONE = '필요한 센터 설정은 확인된 상태입니다. 설정 화면에서 한 번 더 살펴볼 수 있어요.'
 PROVIDER_ERROR = '조교 응답을 가져오지 못했습니다. 기존 화면은 그대로 사용할 수 있어요.'
 DISABLED = '조교를 사용할 수 없습니다.'
-FALLBACK = '화면 이동이나 센터 설정 안내가 필요하면 말씀해 주세요. 학습·포인트 숫자 질문은 아직 연결되지 않았습니다.'
+FALLBACK = '확인하고 싶은 아동 기록이나 화면을 짧게 말씀해 주세요.'
+ASK_RETRY = '응답을 가져오지 못했습니다.'
 OPENING_GROWTH = '성장 리포트로 이동할게요.'
 OPENING_READING = '독서 기록으로 이동할게요.'
 OPENING_GENERIC = '해당 화면으로 이동할게요.'
@@ -24,6 +26,29 @@ QUICK_CONTINUE_SETUP = '센터 설정 이어서 하기'
 QUICK_EXPLAIN_PAGE = '현재 화면 설명'
 QUICK_OPEN_GROWTH = '아동 성장 리포트 열기'
 QUICK_OPEN_READING = '독서 기록 열기'
+QUICK_CHILD_SUMMARY = '현재 아동 학습 요약'
+MSG_UNAVAILABLE = '지금 확인할 수 있는 기록이 없습니다.'
+MSG_NO_HELP = '관련 안내 문서를 찾지 못했습니다.'
+MSG_NEED_CHILD_FACTS = '어느 아동의 기록을 볼까요? 이름을 알려 주세요.'
+FUZZY_CONFIRM = '{grade}학년 {name}을 말씀하시는 건가요?'
+CONFIRM_YES = '네, {name}이에요'
+CONFIRM_OTHER = '다른 아동 찾기'
+NO_RANK_REPLY = '순위나 백분위는 제공하지 않습니다. 같은 기준의 또래 중앙값만 참고할 수 있어요.'
+NO_RAW_READING_REPLY = '감상문 원문은 조교가 보여 드릴 수 없어요. 필요하면 독서 기록 화면에서 확인해 주세요.'
+POLICY_SCOPE_REPLY = '조교는 허용된 조회 및 화면 이동 기능만 사용할 수 있습니다.'
+DRAWER_NOTICE = (
+    '아동의 학습·포인트·독서 기록을 확인하고, '
+    '센터 설정을 안내하거나 필요한 화면으로 이동할 수 있어요. '
+    '한 대화에서는 최대 10번 질문할 수 있습니다.'
+)
+QUESTION_LIMIT_REPLY = '이번 대화의 질문을 모두 사용했습니다.'
+NEW_CONVERSATION = '새 대화 시작'
+TOOL_ROUND_LIMIT_NOTE = '지금은 여기까지 확인한 내용만 말씀드릴게요. 더 필요하면 이어서 질문해 주세요.'
+CAPABILITY_REPLY = (
+    '아동 찾기, 성장·학습 진도·수행률·완료예상 조회, 또래 중앙값 참고, '
+    '포인트·독서 공개 요약, 센터 설정 상태, 화면 이동, 운영 안내, 근거 표시를 도와드릴 수 있어요. '
+    '데이터 수정, 순위, 감상문 원문, 자유 DB 조회, Growth/Reading AI 자동 실행은 할 수 없습니다.'
+)
 
 PAGE_DESCRIPTIONS = {
     'dashboard': '센터의 오늘 현황을 한눈에 보는 화면입니다.',
@@ -35,6 +60,7 @@ PAGE_DESCRIPTIONS = {
     'points_list': '포인트 기록을 확인하고 입력 화면으로 이동할 수 있습니다.',
     'points_input': '선택한 아동의 하루 포인트를 기록하는 화면입니다.',
     'points_history': '선택한 아동의 포인트 변경 이력을 확인하는 화면입니다.',
+    'child_point_analysis': '선택한 아동의 포인트 상세를 확인하는 화면입니다.',
     'reading.teacher_editor': '선택한 아동의 독서 기록을 입력하는 화면입니다.',
     'reading.teacher_history': '선택한 아동의 독서 이력을 확인하는 화면입니다.',
     'progress.history': '선택한 아동의 학습 진도 이력을 확인하는 화면입니다.',

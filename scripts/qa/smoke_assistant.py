@@ -80,6 +80,28 @@ def run_authenticated_steps(page: Page, *, base_url: str, state: dict) -> list[t
         raise StepFailure('child_growth_nav', f'did not navigate to growth: {page.url}')
     mark('child_growth_nav')
 
+    _goto(page, f'{base_url}/dashboard', 'help_rag_no_nav')
+    _open_drawer(page)
+    page.fill('#teacherAssistantInput', '기본 학습요일이 무슨 뜻이야?')
+    page.locator('[data-assistant-role="send"]').click()
+    page.get_by_text('월~금', exact=False).wait_for(timeout=8000)
+    if '/settings/' in (page.url or ''):
+        raise StepFailure('help_rag_no_nav', f'help question navigated away: {page.url}')
+    help_chip = page.locator('[data-testid="assistant-sources"] .assistant-source.is-help')
+    if help_chip.count() < 1:
+        raise StepFailure('help_rag_no_nav', 'help source chip missing')
+    mark('help_rag_no_nav')
+
+    _goto(page, f'{base_url}/children/{child_id}', 'child_facts_sources')
+    _open_drawer(page)
+    page.fill('#teacherAssistantInput', '학습 요약 알려줘')
+    page.locator('[data-assistant-role="send"]').click()
+    last = page.locator('.assistant-bubble.is-assistant').last
+    last.locator('.assistant-source.is-data').first.wait_for(timeout=8000)
+    if last.locator('.assistant-source.is-help').count() != 0:
+        raise StepFailure('child_facts_sources', 'data answer showed help sources')
+    mark('child_facts_sources')
+
     page.set_viewport_size({'width': 390, 'height': 844})
     _goto(page, f'{base_url}/dashboard', 'mobile_sheet')
     _open_drawer(page)

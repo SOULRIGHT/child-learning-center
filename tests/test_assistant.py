@@ -31,7 +31,10 @@ from features.setup.status import STATUS_USING_DEFAULT, build_center_setup_statu
 from features.study.calendar import save_subject_study_weekdays  # noqa: E402
 
 AS_OF = date(2026, 9, 10)
-FLAG_ON = {TEACHER_ASSISTANT_ENABLED_ENV: 'true'}
+FLAG_ON = {
+    TEACHER_ASSISTANT_ENABLED_ENV: 'true',
+    'TEACHER_ASSISTANT_PROVIDER': 'fake',
+}
 
 
 def _boot_json(html):
@@ -118,6 +121,11 @@ class VisibilityTests(AssistantCase):
         self.assertIn('data-testid="teacher-assistant-drawer"', html)
         self.assertIn('assistant-character-stage', html)
         self.assertIn('id="assistant-page-context"', html)
+        boot = _boot_json(html)
+        self.assertIsNotNone(boot)
+        self.assertTrue(boot.get('storage_scope'))
+        self.assertEqual(boot.get('question_limit'), 10)
+        self.assertIn('/assistant/feedback', boot.get('feedback_url') or '')
 
     def test_general_user_sees_launcher(self):
         self._login(self.general)
@@ -164,7 +172,9 @@ class ApiTests(AssistantCase):
             page_context={'endpoint': 'dashboard'},
         )
         self.assertEqual(first.text, second.text)
-        self.assertIn('화면 이동', first.text)
+        self.assertIn('안녕하세요', first.text)
+        self.assertNotIn('아직 연결되지 않았습니다', first.text)
+        self.assertNotIn('지금은 화면 이동, 센터 설정 안내', first.text)
 
     def test_provider_failure_does_not_break_page(self):
         self._login(self.teacher)
@@ -404,10 +414,20 @@ class SessionUiTests(AssistantCase):
     def test_session_storage_and_child_reset_code_path(self):
         js = (PROJECT_ROOT / 'static' / 'js' / 'assistant.js').read_text(encoding='utf-8')
         self.assertIn('sessionStorage.getItem(STORAGE_KEY)', js)
-        self.assertIn("clc.teacherAssistant.v1", js)
+        self.assertIn("clc.teacherAssistant.v2", js)
+        self.assertIn('function resetConversation', js)
         self.assertIn('function isolateChild', js)
+        self.assertIn('function bindScope', js)
+        isolate_start = js.index('function isolateChild')
+        isolate_end = js.index('function isChildScoped')
+        isolate = js[isolate_start:isolate_end]
+        self.assertNotIn('childMessages = []', isolate)
         self.assertIn('state.childMessages = []', js)
         self.assertIn('generalMessages', js)
+        self.assertIn('storageScope', js)
+        self.assertIn('if (state.storageScope !== scope)', js)
+        login = (PROJECT_ROOT / 'templates' / 'login.html').read_text(encoding='utf-8')
+        self.assertIn("sessionStorage.removeItem('clc.teacherAssistant.v2')", login)
 
     def test_mobile_and_character_hook_have_no_blank_placeholder(self):
         css = (PROJECT_ROOT / 'static' / 'css' / 'assistant.css').read_text(encoding='utf-8')

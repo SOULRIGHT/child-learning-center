@@ -190,6 +190,11 @@
     
     // 직접 Firebase Auth 사용 (UI 제거)
     document.addEventListener('DOMContentLoaded', function() {
+        try {
+            sessionStorage.removeItem('clc.teacherAssistant.v2');
+        } catch (err) {
+            /* ignore */
+        }
         // 커스텀 로그인 폼 생성
         const container = document.getElementById('firebaseui-auth-container');
         container.innerHTML = `

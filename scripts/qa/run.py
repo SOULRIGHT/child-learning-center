@@ -97,7 +97,7 @@ def _print_report(suite: str, results: list[tuple[str, str]], error: str | None,
         'step5': 'STEP 5 BROWSER QA',
         'step6': 'STEP 6 BROWSER QA',
         'step7': 'STEP 7 BROWSER QA',
-        'assistant': 'ASSISTANT 8C2 BROWSER QA',
+        'assistant': 'ASSISTANT 8C3 BROWSER QA',
     }.get(suite, f'{suite.upper()} BROWSER QA')
     print(title)
     for name, status in results:
@@ -259,6 +259,8 @@ def run_suite(suite: str) -> int:
     env.pop('CLC_ALLOW_GROWTH_SEED', None)
     if suite == 'assistant':
         env['TEACHER_ASSISTANT_ENABLED'] = 'true'
+        env['TEACHER_ASSISTANT_PROVIDER'] = 'fake'
+        env.pop('TEACHER_ASSISTANT_LIVE', None)
     if suite == 'step7':
         env['CLC_QA_SEED'] = 'preview'
         env['CLC_QA_SUITE'] = 'step7'

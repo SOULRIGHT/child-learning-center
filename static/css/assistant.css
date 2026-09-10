@@ -56,6 +56,69 @@ body:has(.assistant-drawer.showing) .sidebar-toggle {
 .assistant-drawer-header {
     flex: 0 0 auto;
     border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.assistant-question-count {
+    margin-left: 0.35rem;
+    color: #6b7280;
+    font-size: 0.72rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.assistant-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: auto;
+}
+
+.assistant-limit {
+    margin: 0.35rem 0 0.6rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #f9fafb;
+}
+
+.assistant-limit-text {
+    margin: 0 0 0.45rem;
+    font-size: 0.82rem;
+    color: #374151;
+}
+
+.assistant-feedback {
+    display: flex;
+    gap: 0.25rem;
+    margin-top: 0.4rem;
+}
+
+.assistant-feedback-btn {
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    border-radius: 999px;
+    padding: 0.05rem 0.45rem;
+    font-size: 0.78rem;
+    line-height: 1.3;
+    color: #4b5563;
+}
+
+.assistant-feedback-btn.is-selected {
+    border-color: #93c5fd;
+    background: #eff6ff;
+}
+
+.assistant-reset {
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    color: #374151;
+    border-radius: 999px;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.75rem;
+    font-weight: 600;
 }
 
 .assistant-character-stage {
@@ -68,6 +131,46 @@ body:has(.assistant-drawer.showing) .sidebar-toggle {
     width: 3.25rem;
     height: 3.25rem;
     margin: 0.5rem 1rem 0;
+}
+
+.assistant-character-stage.is-filled img,
+.assistant-character-stage.is-filled video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.assistant-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+}
+
+.assistant-source {
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    color: #374151;
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.assistant-source.is-help {
+    border-color: #c7d2fe;
+    color: #3730a3;
+}
+
+.assistant-source.is-data {
+    border-color: #bbf7d0;
+    color: #166534;
+}
+
+.assistant-source.is-missing {
+    border-color: #e5e7eb;
+    color: #6b7280;
+    font-weight: 500;
 }
 
 .assistant-character-stage:not(.is-filled),
@@ -177,6 +280,12 @@ body:has(.assistant-drawer.showing) .sidebar-toggle {
     font-size: 0.85rem;
     margin: 0;
     overflow-wrap: anywhere;
+}
+
+.assistant-recovery {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
 }
 
 .assistant-composer {
