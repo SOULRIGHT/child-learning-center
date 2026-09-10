@@ -1,5 +1,5 @@
 # Lightweight Browser QA. Does not run the unittest suite.
-# Usage: .\scripts\qa.ps1 step3|step4|step5|step6|step7|preview
+# Usage: .\scripts\qa.ps1 step3|step4|step5|step6|step7|assistant|preview
 param(
     [Parameter(Position = 0)]
     [string]$Suite
@@ -13,8 +13,8 @@ $env:PYTHONIOENCODING = 'utf-8'
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Root = Split-Path -Parent $ScriptDir
 
-if ($Suite -ne 'step3' -and $Suite -ne 'step4' -and $Suite -ne 'step5' -and $Suite -ne 'step6' -and $Suite -ne 'step7' -and $Suite -ne 'preview') {
-    Write-Host 'Usage: .\scripts\qa.ps1 step3|step4|step5|step6|step7|preview'
+if ($Suite -ne 'step3' -and $Suite -ne 'step4' -and $Suite -ne 'step5' -and $Suite -ne 'step6' -and $Suite -ne 'step7' -and $Suite -ne 'assistant' -and $Suite -ne 'preview') {
+    Write-Host 'Usage: .\scripts\qa.ps1 step3|step4|step5|step6|step7|assistant|preview'
     exit 2
 }
 

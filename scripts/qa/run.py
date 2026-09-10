@@ -1,6 +1,6 @@
 """Browser QA orchestrator. Does not run the unittest suite.
 
-Usage: python scripts/qa/run.py step3|step4|step5|step6|step7|preview
+Usage: python scripts/qa/run.py step3|step4|step5|step6|step7|assistant|preview
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from tests.helpers import (  # noqa: E402
 )
 
 QA_SECRET = 'clc-step0-test-secret'
-USAGE = 'Usage: python scripts/qa/run.py step3|step4|step5|step6|step7|preview'
+USAGE = 'Usage: python scripts/qa/run.py step3|step4|step5|step6|step7|assistant|preview'
 
 
 def _pick_port() -> int:
@@ -97,6 +97,7 @@ def _print_report(suite: str, results: list[tuple[str, str]], error: str | None,
         'step5': 'STEP 5 BROWSER QA',
         'step6': 'STEP 6 BROWSER QA',
         'step7': 'STEP 7 BROWSER QA',
+        'assistant': 'ASSISTANT 8C2 BROWSER QA',
     }.get(suite, f'{suite.upper()} BROWSER QA')
     print(title)
     for name, status in results:
@@ -157,6 +158,8 @@ def _run_browser(suite: str, base_url: str, state: dict, artifacts_dir: Path) ->
         from smoke_step6 import run_authenticated_steps  # noqa: WPS433
     elif suite == 'step7':
         from smoke_step7 import run_authenticated_steps  # noqa: WPS433
+    elif suite == 'assistant':
+        from smoke_assistant import run_authenticated_steps  # noqa: WPS433
     else:
         raise RuntimeError(f'Unsupported QA suite: {suite}')
 
@@ -228,7 +231,7 @@ def _run_browser(suite: str, base_url: str, state: dict, artifacts_dir: Path) ->
 
 
 def run_suite(suite: str) -> int:
-    if suite not in ('step3', 'step4', 'step5', 'step6', 'step7'):
+    if suite not in ('step3', 'step4', 'step5', 'step6', 'step7', 'assistant'):
         print(USAGE)
         return 2
     if HELPERS_ROOT != PROJECT_ROOT:
@@ -254,6 +257,8 @@ def run_suite(suite: str) -> int:
     env.pop('FLASK_ENV', None)
     env.pop('FLASK_DEBUG', None)
     env.pop('CLC_ALLOW_GROWTH_SEED', None)
+    if suite == 'assistant':
+        env['TEACHER_ASSISTANT_ENABLED'] = 'true'
     if suite == 'step7':
         env['CLC_QA_SEED'] = 'preview'
         env['CLC_QA_SUITE'] = 'step7'
@@ -323,7 +328,7 @@ def run_step3() -> int:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2 or argv[1] not in ('step3', 'step4', 'step5', 'step6', 'step7', 'preview'):
+    if len(argv) != 2 or argv[1] not in ('step3', 'step4', 'step5', 'step6', 'step7', 'assistant', 'preview'):
         print(USAGE)
         return 2
     if argv[1] == 'preview':

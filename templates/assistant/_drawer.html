@@ -1,0 +1,32 @@
+<div class="offcanvas offcanvas-end assistant-drawer"
+     tabindex="-1"
+     id="teacherAssistantDrawer"
+     data-testid="teacher-assistant-drawer"
+     aria-labelledby="teacherAssistantTitle">
+    <div class="offcanvas-header assistant-drawer-header">
+        <h2 class="offcanvas-title fs-6 mb-0" id="teacherAssistantTitle">조교</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="닫기"></button>
+    </div>
+    <div class="assistant-character-stage"
+         data-testid="assistant-character-stage"
+         data-assistant-role="character-stage"
+         data-assistant-stage="idle"
+         hidden>
+    </div>
+    <div class="offcanvas-body assistant-drawer-body">
+        <div class="assistant-onboarding" data-assistant-role="onboarding" hidden></div>
+        <div class="assistant-conversation" data-assistant-role="conversation" aria-live="polite"></div>
+        <div class="assistant-quick-actions" data-assistant-role="quick-actions"></div>
+        <p class="assistant-error" data-assistant-role="error" hidden></p>
+    </div>
+    <form class="assistant-composer" data-assistant-role="composer">
+        <label class="visually-hidden" for="teacherAssistantInput">메시지</label>
+        <textarea id="teacherAssistantInput"
+                  class="assistant-input"
+                  rows="1"
+                  maxlength="2000"
+                  placeholder="도움이 필요하면 적어 주세요"
+                  data-assistant-role="input"></textarea>
+        <button type="submit" class="assistant-send" data-assistant-role="send">보내기</button>
+    </form>
+</div>

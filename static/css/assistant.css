@@ -1,0 +1,232 @@
+/* Teacher assistant shell. Growth page CSS와 분리. */
+
+.assistant-launcher {
+    position: fixed;
+    right: 1.1rem;
+    bottom: 1.1rem;
+    z-index: 1030;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 0;
+    border-radius: 999px;
+    padding: 0.55rem 0.85rem 0.55rem 0.65rem;
+    background: #1d4ed8;
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(29, 78, 216, 0.28);
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.assistant-launcher:hover,
+.assistant-launcher:focus-visible {
+    background: #1e40af;
+    color: #fff;
+}
+
+.assistant-launcher-icon {
+    width: 1.65rem;
+    height: 1.65rem;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.assistant-drawer {
+    width: 420px;
+    max-width: 100vw;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    z-index: 1070;
+}
+
+body:has(.assistant-drawer.show) .offcanvas-backdrop,
+body:has(.assistant-drawer.showing) .offcanvas-backdrop {
+    z-index: 1065;
+}
+
+body:has(.assistant-drawer.show) .sidebar-toggle,
+body:has(.assistant-drawer.showing) .sidebar-toggle {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.assistant-drawer-header {
+    flex: 0 0 auto;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.assistant-character-stage {
+    display: none;
+}
+
+.assistant-character-stage.is-filled {
+    display: grid;
+    place-items: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    margin: 0.5rem 1rem 0;
+}
+
+.assistant-character-stage:not(.is-filled),
+.assistant-character-stage[hidden] {
+    display: none;
+    height: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+}
+
+.assistant-drawer-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.assistant-onboarding {
+    border: 1px solid #dbeafe;
+    background: #eff6ff;
+    border-radius: 12px;
+    padding: 0.85rem 0.9rem;
+    min-width: 0;
+}
+
+.assistant-onboarding-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #1d4ed8;
+    margin-bottom: 0.25rem;
+}
+
+.assistant-onboarding-next {
+    font-size: 0.9rem;
+    color: #1f2937;
+    overflow-wrap: anywhere;
+}
+
+.assistant-conversation {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    min-width: 0;
+}
+
+.assistant-bubble {
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    border-radius: 12px;
+    padding: 0.7rem 0.8rem;
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
+.assistant-bubble.is-assistant {
+    background: #f8fafc;
+    color: #1f2937;
+}
+
+.assistant-bubble.is-user {
+    background: #dbeafe;
+    color: #1e3a8a;
+    align-self: flex-end;
+}
+
+.assistant-bubble-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.55rem;
+}
+
+.assistant-quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.assistant-chip,
+.assistant-action {
+    border: 1px solid #bfdbfe;
+    background: #fff;
+    color: #1d4ed8;
+    border-radius: 999px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.assistant-chip:hover,
+.assistant-action:hover,
+.assistant-chip:focus-visible,
+.assistant-action:focus-visible {
+    background: #eff6ff;
+    color: #1e40af;
+}
+
+.assistant-error {
+    color: #b91c1c;
+    font-size: 0.85rem;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.assistant-composer {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem 1rem;
+    border-top: 1px solid #e5e7eb;
+    background: #fff;
+    min-width: 0;
+}
+
+.assistant-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    resize: none;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    max-height: 6rem;
+}
+
+.assistant-send {
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 10px;
+    background: #2563eb;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 0.55rem 0.8rem;
+}
+
+body:has(.assistant-drawer.show) .assistant-launcher,
+body:has(.assistant-drawer.showing) .assistant-launcher {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+@media (max-width: 767.98px) {
+    .assistant-drawer {
+        width: 100vw;
+        height: 100%;
+        max-height: 100%;
+    }
+
+    .assistant-launcher {
+        right: 0.85rem;
+        bottom: 0.85rem;
+    }
+}

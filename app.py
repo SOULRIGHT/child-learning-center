@@ -6206,6 +6206,7 @@ from features.growth.routes import growth_bp  # noqa: E402
 from features.planning.routes import planning_bp  # noqa: E402
 from features.points.routes import points_internal_bp  # noqa: E402
 from features.setup.routes import setup_bp  # noqa: E402
+from features.assistant.routes import assistant_bp  # noqa: E402
 
 app.register_blueprint(books_bp)
 app.register_blueprint(reading_bp)
@@ -6218,6 +6219,7 @@ app.register_blueprint(growth_bp)
 app.register_blueprint(planning_bp)
 app.register_blueprint(points_internal_bp)
 app.register_blueprint(setup_bp)
+app.register_blueprint(assistant_bp)
 
 if __name__ == '__main__':
     if os.environ.get('CLC_TESTING') == '1':
