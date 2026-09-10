@@ -216,7 +216,9 @@ class GrowthAIRouteTests(unittest.TestCase):
         self.assertIn('성장 해석을 꼼꼼하게 마무리하고 있어요', body)
         self.assertIn('거의 다 준비됐어요. 잠시만 기다려주세요.', body)
         self.assertIn('data-stage="organize"', body)
-        self.assertIn('prefers-reduced-motion', body)
+        self.assertIn('/static/css/growth.css', body)
+        css = (PROJECT_ROOT / 'static' / 'css' / 'growth.css').read_text(encoding='utf-8')
+        self.assertIn('prefers-reduced-motion', css)
         self.assertNotIn('현재 AWS', body)
         self.assertNotIn('fake percentage', body)
         loading = body.split('data-ai-panel="loading"', 1)[1].split('data-ai-panel="success"', 1)[0]

@@ -218,6 +218,7 @@ def _observed_progress_view(payload):
     observed_count = progress.get('observed_page_count')
     latest = progress.get('latest_observed_end_page')
     ratio_available = ratio is not None and covered is not None and denom is not None
+    percent = None
     if ratio_available:
         percent = int(round(float(ratio) * 100))
         pages_display = f'{int(covered)} / {int(denom)}페이지'
@@ -245,6 +246,7 @@ def _observed_progress_view(payload):
         'textbook_title': (progress.get('plan') or {}).get('textbook_title'),
         'pages_display': pages_display,
         'ratio_display': ratio_display,
+        'ratio_percent': percent,
         'ratio_available': ratio_available,
         'latest_display': None if latest is None else f'{OBSERVED_POSITION_NOTE} {int(latest)}p',
         'forecast_available': forecast_available,
@@ -521,6 +523,9 @@ def canonical_peer_view(payload, *, child_label, median_label, format_value, blo
     else:
         status_label = PEER_NONE_LABEL
     sample = payload.get('peer_sample_count')
+    child_value = payload.get('child_value')
+    median_value = payload.get('peer_median') if show_median else None
+    child_bar_pct, median_bar_pct = _peer_bar_pcts(child_value, median_value)
     return {
         'label': block_label,
         'child_label': child_label,
@@ -530,13 +535,50 @@ def canonical_peer_view(payload, *, child_label, median_label, format_value, blo
         'reason': payload.get('reason'),
         'show_median': show_median,
         'child_display': child_display,
-        'median_display': format_value(payload.get('peer_median')) if show_median else None,
+        'median_display': format_value(median_value) if show_median else None,
+        'child_bar_pct': child_bar_pct,
+        'median_bar_pct': median_bar_pct,
         'n_display': (
             f'비교 {int(sample)}명' if show_median and sample is not None else None
         ),
         'status_label': status_label,
         'metric': payload.get('metric'),
     }
+
+
+def _looks_like_ratio(value):
+    if value is None:
+        return False
+    number = float(value)
+    return 0 <= number <= 1.0001
+
+
+def _ratio_bar_pct(value):
+    if value is None:
+        return None
+    return max(0, min(100, int(round(float(value) * 100))))
+
+
+def _relative_bar_pcts(child_value, median_value):
+    if child_value is None or median_value is None:
+        return None, None
+    peak = max(float(child_value), float(median_value), 0.0)
+    if peak <= 0:
+        return 0, 0
+    return (
+        int(round(float(child_value) / peak * 100)),
+        int(round(float(median_value) / peak * 100)),
+    )
+
+
+def _peer_bar_pcts(child_value, median_value):
+    if child_value is None:
+        return None, None
+    if _looks_like_ratio(child_value) and (
+        median_value is None or _looks_like_ratio(median_value)
+    ):
+        return _ratio_bar_pct(child_value), _ratio_bar_pct(median_value)
+    return _relative_bar_pcts(child_value, median_value)
 
 
 def _percent_text(value):

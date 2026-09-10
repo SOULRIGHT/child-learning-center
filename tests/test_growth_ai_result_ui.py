@@ -9,7 +9,7 @@ from tests.helpers import PROJECT_ROOT
 class GrowthAiResultUiTests(unittest.TestCase):
     def test_result_hierarchy_and_js_fillers(self):
         html = (PROJECT_ROOT / 'templates' / 'growth' / '_ai_card.html').read_text(encoding='utf-8')
-        css = (PROJECT_ROOT / 'templates' / 'growth' / 'report.html').read_text(encoding='utf-8')
+        css = (PROJECT_ROOT / 'static' / 'css' / 'growth.css').read_text(encoding='utf-8')
         js = (PROJECT_ROOT / 'static' / 'js' / 'growth-ai.js').read_text(encoding='utf-8')
         copy_src = (PROJECT_ROOT / 'features' / 'growth' / 'ai' / 'copy.py').read_text(encoding='utf-8')
         self.assertIn('growth-ai-priority', html)

@@ -4,419 +4,75 @@
 {% block page_title %}{{ child.name }}의 성장 리포트{% endblock %}
 
 {% block extra_css %}
-<style>
-  .growth-dash { max-width: 100%; }
-  .growth-header {
-    background: #fff;
-    border-radius: 16px;
-    box-shadow: var(--card-shadow);
-    padding: 1.25rem 1.5rem;
-  }
-  .growth-window-chip {
-    display: inline-block;
-    background: var(--light-blue);
-    color: var(--secondary-blue);
-    border-radius: 999px;
-    padding: 0.2rem 0.75rem;
-    font-size: 0.85rem;
-    font-weight: 600;
-  }
-  .growth-window-chip.is-prev { background: #f3f4f6; color: #4b5563; }
-  .growth-insight-card {
-    border: 0;
-    border-radius: 16px;
-    box-shadow: var(--card-shadow);
-    border-left: 4px solid var(--primary-blue);
-  }
-  .growth-insight-increase { border-left-color: #059669; }
-  .growth-insight-decrease { border-left-color: #d97706; }
-  .growth-insight-other { border-left-color: #7c3aed; }
-  .growth-cat {
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    color: #6b7280;
-    text-transform: none;
-  }
-  .growth-kpi {
-    border: 0;
-    border-radius: 16px;
-    box-shadow: var(--card-shadow);
-    height: 100%;
-  }
-  .growth-kpi .kpi-value { font-size: 1.6rem; font-weight: 700; color: #111827; }
-  .growth-delta-up { color: #059669; font-weight: 600; }
-  .growth-delta-down { color: #6b7280; font-weight: 600; }
-  .growth-delta-flat { color: #9ca3af; font-weight: 600; }
-  .growth-panel {
-    border: 0;
-    border-radius: 16px;
-    box-shadow: var(--card-shadow);
-    height: 100%;
-  }
-  .growth-panel-reading { border-top: 3px solid #059669; }
-  .growth-panel-progress { border-top: 3px solid #0ea5e9; }
-  .growth-panel-points { border-top: 3px solid #d97706; }
-  .growth-panel-compare { border-top: 3px solid var(--primary-blue); }
-  .growth-bar-track {
-    height: 8px;
-    background: #e5e7eb;
-    border-radius: 999px;
-    overflow: hidden;
-  }
-  .growth-bar-fill { height: 100%; border-radius: 999px; }
-  .growth-bar-prev { background: #93c5fd; }
-  .growth-bar-curr { background: var(--primary-blue); }
-  .growth-stars {
-    position: relative;
-    display: inline-block;
-    color: #e5e7eb;
-    letter-spacing: 0.08em;
-    font-size: 1.05rem;
-    line-height: 1;
-  }
-  .growth-stars-fill {
-    position: absolute;
-    left: 0;
-    top: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    color: #f59e0b;
-  }
-  .growth-snap {
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 1rem;
-    height: 100%;
-    background: #f8fafc;
-  }
-  .growth-learn-label {
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: #6b7280;
-  }
-  .growth-learn-value {
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: #111827;
-  }
-  .growth-learn-block {
-    margin-top: 0.85rem;
-    padding-top: 0.85rem;
-    border-top: 1px solid #e5e7eb;
-  }
-  .growth-learn-secondary { font-size: 0.9rem; color: #374151; }
-  .growth-muted { font-size: 0.85rem; color: #6b7280; }
-  .growth-empty {
-    border-radius: 16px;
-    background: #fff;
-    box-shadow: var(--card-shadow);
-    padding: 1.25rem 1.5rem;
-  }
-  .growth-chart-wrap { height: 220px; }
-  .growth-ai-card {
-    border: 0;
-    border-radius: 16px;
-    box-shadow: var(--card-shadow);
-    border-left: 4px solid #7c3aed;
-  }
-  .growth-ai-mascot-slot {
-    position: relative;
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-  }
-  .growth-ai-mascot-slot.is-header {
-    width: 56px;
-    height: 56px;
-  }
-  .growth-ai-mascot-slot.is-loading {
-    width: 88px;
-    height: 88px;
-    margin-bottom: 0.75rem;
-  }
-  .growth-ai-mascot-asset,
-  .growth-ai-mascot-placeholder,
-  .growth-ai-mascot-scene {
-    width: 100%;
-    height: 100%;
-  }
-  .growth-ai-mascot-placeholder { position: relative; }
-  .growth-ai-mascot-scene {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    transition: opacity 0.4s ease;
-  }
-  .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene[data-ai-mascot-scene="0"],
-  #growth-ai-card[data-ai-focus-step="0"] .growth-ai-mascot-scene[data-ai-mascot-scene="0"],
-  #growth-ai-card[data-ai-focus-step="1"] .growth-ai-mascot-scene[data-ai-mascot-scene="1"],
-  #growth-ai-card[data-ai-focus-step="2"] .growth-ai-mascot-scene[data-ai-mascot-scene="2"],
-  #growth-ai-card[data-ai-focus-step="3"] .growth-ai-mascot-scene[data-ai-mascot-scene="3"] {
-    opacity: 1;
-  }
-  #growth-ai-card[data-ai-state="loading"] .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene {
-    opacity: 0;
-  }
-  #growth-ai-card[data-ai-state="loading"] .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene.is-focus,
-  #growth-ai-card[data-ai-state="loading"][data-ai-focus-step="0"] .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene[data-ai-mascot-scene="0"],
-  #growth-ai-card[data-ai-state="loading"][data-ai-focus-step="1"] .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene[data-ai-mascot-scene="1"],
-  #growth-ai-card[data-ai-state="loading"][data-ai-focus-step="2"] .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene[data-ai-mascot-scene="2"],
-  #growth-ai-card[data-ai-state="loading"][data-ai-focus-step="3"] .growth-ai-mascot-slot.is-header .growth-ai-mascot-scene[data-ai-mascot-scene="3"] {
-    opacity: 1;
-  }
-  .growth-ai-process {
-    list-style: none;
-    padding: 0;
-    margin: 0.75rem 0 0.75rem;
-  }
-  .growth-ai-process li {
-    position: relative;
-    padding: 0.35rem 0 0.35rem 1.1rem;
-    color: #6b7280;
-    font-size: 0.92rem;
-  }
-  .growth-ai-process li::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0.7rem;
-    width: 0.45rem;
-    height: 0.45rem;
-    border-radius: 50%;
-    background: #c4b5fd;
-  }
-  .growth-ai-process li.is-focus {
-    color: #4c1d95;
-    font-weight: 600;
-  }
-  .growth-ai-process li.is-focus::before {
-    background: #7c3aed;
-    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.12);
-  }
-  .growth-ai-status-panel {
-    padding-top: 0.25rem;
-  }
-  .growth-ai-hint { font-size: 0.85rem; color: #6b7280; }
-  .growth-ai-steps { font-size: 0.9rem; color: #4b5563; }
-  .growth-ai-result {
-    max-width: 920px;
-  }
-  .growth-ai-section {
-    margin-top: 1.35rem;
-  }
-  .growth-ai-section-title {
-    font-size: 0.92rem;
-    font-weight: 700;
-    color: #5b21b6;
-    margin-bottom: 0.55rem;
-  }
-  .growth-ai-priority {
-    margin-top: 0.35rem;
-    padding: 1rem 1.1rem;
-    border-radius: 14px;
-    background: #f5f3ff;
-    border: 1px solid #ddd6fe;
-    border-left: 4px solid #7c3aed;
-  }
-  .growth-ai-priority-text {
-    font-size: 1.12rem;
-    font-weight: 600;
-    line-height: 1.55;
-    color: #1f2937;
-  }
-  .growth-ai-prose {
-    font-size: 1.05rem;
-    line-height: 1.7;
-    color: #374151;
-    max-width: 42rem;
-  }
-  .growth-ai-actions {
-    display: grid;
-    gap: 0.7rem;
-  }
-  .growth-ai-action-card {
-    display: flex;
-    gap: 0.8rem;
-    align-items: flex-start;
-    padding: 0.85rem 0.95rem;
-    border-radius: 12px;
-    background: #faf8ff;
-    border: 1px solid #ede9fe;
-  }
-  .growth-ai-action-num {
-    flex: 0 0 1.7rem;
-    width: 1.7rem;
-    height: 1.7rem;
-    border-radius: 999px;
-    background: #7c3aed;
-    color: #fff;
-    font-size: 0.85rem;
-    font-weight: 700;
-    display: grid;
-    place-items: center;
-    margin-top: 0.1rem;
-  }
-  .growth-ai-action-card p {
-    font-size: 1.02rem;
-    line-height: 1.6;
-    color: #1f2937;
-  }
-  .growth-ai-check {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-  .growth-ai-check li {
-    position: relative;
-    padding: 0.4rem 0 0.4rem 1.85rem;
-    font-size: 1.02rem;
-    line-height: 1.6;
-    color: #1f2937;
-  }
-  .growth-ai-check li::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0.7rem;
-    width: 0.95rem;
-    height: 0.95rem;
-    border: 2px solid #7c3aed;
-    border-radius: 4px;
-    background: #fff;
-  }
-  .growth-ai-obs-fold > summary {
-    cursor: pointer;
-    font-weight: 600;
-    color: #4c1d95;
-    list-style: none;
-  }
-  .growth-ai-obs-fold > summary::-webkit-details-marker { display: none; }
-  .growth-ai-obs-fold > summary::before {
-    content: "▸";
-    display: inline-block;
-    margin-right: 0.35rem;
-  }
-  .growth-ai-obs-fold[open] > summary::before { content: "▾"; }
-  .growth-ai-obs { margin: 0.65rem 0 0; padding-left: 1.1rem; }
-  .growth-ai-obs li {
-    font-size: 1.02rem;
-    line-height: 1.6;
-    margin-bottom: 0.35rem;
-  }
-  .growth-ai-hidden { display: none !important; }
-  .growth-ai-feedback-btns { display: flex; gap: 0.5rem; }
-  .growth-ai-evidence-group {
-    border-top: 1px solid #eee;
-    padding: 0.65rem 0;
-  }
-  .growth-ai-evidence-group > summary,
-  .growth-ai-evidence-items > summary,
-  [data-ai-role="evidence-wrap"] > summary {
-    cursor: pointer;
-  }
-  .growth-ai-compact,
-  .growth-ai-evidence-list {
-    display: grid;
-    grid-template-columns: minmax(7rem, 42%) 1fr;
-    gap: 0.3rem 0.8rem;
-    margin: 0.6rem 0 0.35rem;
-  }
-  .growth-ai-compact dt,
-  .growth-ai-evidence-list dt {
-    color: #6b7280;
-    font-weight: 500;
-  }
-  .growth-ai-compact dd,
-  .growth-ai-evidence-list dd { margin: 0; }
-  @keyframes growth-ai-breathe {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-3px); }
-  }
-  @keyframes growth-ai-card-shift {
-    0%, 100% { transform: translate(0, 0); }
-    50% { transform: translate(3px, -4px); }
-  }
-  @keyframes growth-ai-dots {
-    0%, 80%, 100% { opacity: 0.25; }
-    40% { opacity: 1; }
-  }
-  @keyframes growth-ai-scan {
-    0%, 100% { transform: translate(-2px, 2px); }
-    50% { transform: translate(3px, -3px); }
-  }
-  @keyframes growth-ai-pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.04); }
-  }
-  #growth-ai-card[data-ai-state="loading"] .growth-ai-mascot-slot.is-loading,
-  #growth-ai-card[data-ai-state="loading"] .growth-ai-mascot-asset {
-    animation: growth-ai-breathe 3.5s ease-in-out infinite;
-  }
-  #growth-ai-card[data-ai-focus-step="0"] .growth-ai-motion-card {
-    animation: growth-ai-card-shift 3.5s ease-in-out infinite;
-  }
-  #growth-ai-card[data-ai-focus-step="1"] .growth-ai-motion-dot.d1 { animation: growth-ai-dots 1.4s infinite; }
-  #growth-ai-card[data-ai-focus-step="1"] .growth-ai-motion-dot.d2 { animation: growth-ai-dots 1.4s 0.2s infinite; }
-  #growth-ai-card[data-ai-focus-step="1"] .growth-ai-motion-dot.d3 { animation: growth-ai-dots 1.4s 0.4s infinite; }
-  #growth-ai-card[data-ai-focus-step="2"] .growth-ai-motion-glass {
-    animation: growth-ai-scan 3.5s ease-in-out infinite;
-    transform-box: fill-box;
-    transform-origin: center;
-  }
-  #growth-ai-card[data-ai-focus-step="3"] .growth-ai-motion-shield {
-    animation: growth-ai-pulse 3.5s ease-in-out infinite;
-    transform-box: fill-box;
-    transform-origin: center;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .growth-ai-mascot-slot,
-    .growth-ai-mascot-asset,
-    .growth-ai-motion-card,
-    .growth-ai-motion-dot,
-    .growth-ai-motion-glass,
-    .growth-ai-motion-shield,
-    .growth-ai-process li.is-focus::before {
-      animation: none !important;
-    }
-    .growth-ai-mascot-scene { transition: none; }
-    .growth-ai-process li { color: #4b5563; font-weight: 500; }
-    .growth-ai-process li::before { background: #a78bfa; box-shadow: none; }
-  }
-  @media (max-width: 767.98px) {
-    .growth-header .btn { width: 100%; }
-    .growth-chart-wrap { height: 200px; }
-    .growth-ai-priority-text { font-size: 1.05rem; }
-    .growth-ai-prose,
-    .growth-ai-action-card p,
-    .growth-ai-check li { font-size: 1rem; }
-  }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/growth.css') }}">
 {% endblock %}
 
 {% block content %}
+{% macro peer_compare(peer) -%}
+<div class="growth-peer">
+    {% if peer.child_display %}
+    <div class="growth-pair-row">
+        <span>{{ peer.child_label }}</span>
+        <span class="growth-pair-value">{{ peer.child_display }}</span>
+    </div>
+    {% endif %}
+    {% if peer.show_median %}
+    <div class="growth-pair-row">
+        <span>{{ peer.median_label }}</span>
+        <span class="growth-pair-value">{{ peer.median_display }}</span>
+    </div>
+    {% if peer.n_display %}
+    <div class="growth-meta">{{ peer.n_display }}</div>
+    {% endif %}
+    {% else %}
+    <div class="growth-muted">{{ peer.status_label }}</div>
+    {% endif %}
+</div>
+{%- endmacro %}
+
+{% macro empty_strip(text) -%}
+<p class="growth-note">
+    <i class="bi bi-info-circle" aria-hidden="true"></i>
+    <span>{{ text }}</span>
+</p>
+{%- endmacro %}
+
+{% macro rating_block(title, rating) -%}
+<div>
+    <div class="growth-learn-label">{{ title }}</div>
+    {% if rating.average is not none %}
+    <div class="growth-stars" aria-hidden="true">
+        ★★★★★
+        <span class="growth-stars-fill" style="width: {{ (rating.average / 5 * 100) }}%">★★★★★</span>
+    </div>
+    <div>{{ rating.out_of_five }} <span class="growth-muted">(n={{ rating.sample_count }})</span></div>
+    {% else %}
+    <div class="text-muted">평가 기록 없음</div>
+    {% endif %}
+</div>
+{%- endmacro %}
+
 <div class="growth-dash">
-    <div class="growth-header mb-4">
-        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <header class="growth-pagehead">
+        <div class="growth-pagehead-row">
             <div>
-                <h3 class="mb-1">{{ child.name }}의 성장 리포트</h3>
-                <p class="text-muted mb-2">최근 30일의 활동을 이전 30일과 비교했습니다.</p>
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span class="growth-window-chip">{{ current_window.start }} ~ {{ current_window.end }}</span>
-                    <span class="growth-muted">vs</span>
-                    <span class="growth-window-chip is-prev">{{ previous_window.start }} ~ {{ previous_window.end }}</span>
-                </div>
+                <p class="growth-asof">기준일 {{ as_of }} · 최근 30일의 활동을 이전 30일과 비교했습니다.</p>
+                <p class="growth-windows">
+                    <strong>{{ current_window.start }} ~ {{ current_window.end }}</strong>
+                    <span> vs </span>
+                    <span>{{ previous_window.start }} ~ {{ previous_window.end }}</span>
+                </p>
                 {% if dev_as_of_overridden %}
                 <p class="small text-info mb-0 mt-2">개발 기준일: {{ as_of }}</p>
                 {% endif %}
             </div>
             {% if not is_viewer_mode %}
-            <div class="d-flex flex-wrap gap-2">
-                <a class="btn btn-primary" href="{{ url_for('points_input', child_id=child.id) }}">포인트 입력</a>
-                <a class="btn btn-outline-primary" href="{{ url_for('settings_print_child_report', child_id=child.id) }}">원본 리포트</a>
-                <a class="btn btn-outline-secondary" href="{{ url_for('child_detail', child_id=child.id) }}">아동 상세</a>
+            <div class="d-flex flex-wrap gap-2 growth-actions">
+                <a class="btn btn-primary btn-sm" href="{{ url_for('points_input', child_id=child.id) }}">포인트 입력</a>
+                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('settings_print_child_report', child_id=child.id) }}">원본 리포트</a>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('child_detail', child_id=child.id) }}">아동 상세</a>
                 <div class="dropdown">
-                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">더보기</button>
+                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">더보기</button>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="{{ url_for('child_point_analysis', child_id=child.id) }}">포인트 상세</a></li>
                         <li><a class="dropdown-item" href="{{ url_for('reading.teacher_history', child_id=child.id) }}">독서 기록</a></li>
@@ -427,27 +83,57 @@
             </div>
             {% endif %}
         </div>
-    </div>
+    </header>
 
     {% if ai %}
-    {% include "growth/_ai_card.html" %}
+    <section class="growth-section growth-ai-overall">
+        {% include "growth/_ai_card.html" %}
+    </section>
     {% endif %}
 
-    <section class="mb-4">
-        <h5 class="mb-3">발견된 변화</h5>
+    <section class="growth-section" data-testid="growth-summary" aria-labelledby="growth-summary-title">
+        <h2 class="growth-section-title" id="growth-summary-title">지금 한눈에</h2>
+        <div class="growth-summary-strip">
+            {% for kpi in kpis %}
+            {% set kpi_icon = 'bi-book' if kpi.key == 'reading_days' else ('bi-journal-check' if kpi.key == 'completed_count' else 'bi-star') %}
+            <article class="growth-stat growth-stat-{{ kpi.key }}">
+                <div class="growth-stat-icon" aria-hidden="true"><i class="bi {{ kpi_icon }}"></i></div>
+                <div class="growth-stat-body">
+                    <div class="growth-stat-label">{{ kpi.label }}</div>
+                    <div class="growth-stat-value">{% if kpi.current_display %}{{ kpi.current_display }}{% else %}—{% endif %}</div>
+                    {% if kpi.comparison_available %}
+                    <div class="growth-stat-sub">{{ kpi.comparison_display }}</div>
+                    <div class="growth-stat-sub growth-delta-{{ kpi.tone }}">
+                        {% if kpi.delta == 0 %}
+                        {{ kpi.change_display }}
+                        {% else %}
+                        {% if kpi.tone == 'up' %}↑ {% endif %}{% if kpi.tone == 'down' %}↓ {% endif %}{{ kpi.change_display }}
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="growth-stat-sub">{{ kpi.comparison_unavailable_label }}</div>
+                    {% endif %}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="growth-section" aria-labelledby="growth-insights-title">
+        <h2 class="growth-section-title" id="growth-insights-title">발견된 변화</h2>
         {% if insights %}
         <div class="row g-3">
             {% for item in insights %}
-            <div class="col-12 col-md-6 col-xl-4">
+            <div class="col-12 col-lg-6">
                 <div class="card h-100 growth-insight-card {% if item.direction == 'increase' %}growth-insight-increase{% elif item.direction == 'decrease' %}growth-insight-decrease{% else %}growth-insight-other{% endif %}">
-                    <div class="card-body">
+                    <div class="card-body py-3">
                         <div class="growth-cat mb-1">{{ item.category_label }}</div>
-                        <p class="fw-semibold mb-3">{{ item.headline }}</p>
+                        <p class="fw-semibold mb-2">{{ item.headline }}</p>
                         {% if item.comparison_short or item.comparison_line %}
-                        <p class="fs-5 mb-1">{{ item.comparison_short or item.comparison_line }}</p>
+                        <p class="mb-1">{{ item.comparison_short or item.comparison_line }}</p>
                         {% endif %}
                         {% if item.delta_line %}
-                        <p class="mb-3 {% if item.direction == 'increase' %}growth-delta-up{% elif item.direction == 'decrease' %}growth-delta-down{% else %}growth-delta-flat{% endif %}">{{ item.delta_line }}</p>
+                        <p class="mb-2 {% if item.direction == 'increase' %}growth-delta-up{% elif item.direction == 'decrease' %}growth-delta-down{% else %}growth-delta-flat{% endif %}">{{ item.delta_line }}</p>
                         {% endif %}
                         <details>
                             <summary>분석 근거 보기</summary>
@@ -479,327 +165,109 @@
             {% endfor %}
         </div>
         {% elif empty_reason == 'insufficient' %}
-        <div class="growth-empty">{{ ui_labels.period_records_insufficient }}</div>
+        {{ empty_strip(ui_labels.period_records_insufficient) }}
         {% else %}
-        <div class="growth-empty">최근 기록에서는 기준을 넘는 뚜렷한 변화가 발견되지 않았습니다.</div>
+        {{ empty_strip('최근 기록에서는 기준을 넘는 뚜렷한 변화가 발견되지 않았습니다.') }}
         {% endif %}
     </section>
 
-    <section class="mb-4">
-        <h5 class="mb-3">핵심 지표</h5>
-        <div class="row g-3">
-            {% for kpi in kpis %}
-            <div class="col-12 col-sm-6 col-xl-3">
-                <div class="card growth-kpi">
-                    <div class="card-body">
-                        <div class="growth-muted mb-1">{{ kpi.label }}</div>
-                        <div class="kpi-value">{% if kpi.current_display %}{{ kpi.current_display }}{% else %}—{% endif %}</div>
-                        {% if kpi.comparison_available %}
-                        <div class="growth-muted">{{ kpi.comparison_display }}</div>
-                        <div class="growth-delta-{{ kpi.tone }}">
-                            {% if kpi.delta == 0 %}
-                            → {{ kpi.change_display }}
-                            {% else %}
-                            {% if kpi.tone == 'up' %}↑{% else %}↓{% endif %}
-                            {{ kpi.change_display }}
-                            {% endif %}
-                        </div>
-                        {% else %}
-                        <div class="growth-muted">{{ kpi.comparison_unavailable_label }}</div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </section>
-
-    <section class="mb-4">
-        <div class="row g-3">
-            <div class="col-12 col-xl-7">
-                <div class="card growth-panel growth-panel-compare">
-                    <div class="card-body">
-                        <h5 class="mb-3">최근 vs 이전 기간</h5>
-                        {% if charts.activity_bars %}
-                            {% for bar in charts.activity_bars %}
-                            <div class="{% if not loop.last %}mb-3{% endif %}">
-                                <div class="d-flex justify-content-between small mb-1">
-                                    <span>{{ bar.label }}</span>
-                                    <span>{{ bar.previous_display }} → {{ bar.current_display }}</span>
-                                </div>
-                                <div class="growth-bar-track mb-1"><div class="growth-bar-fill growth-bar-prev" style="width: {{ bar.previous_pct }}%"></div></div>
-                                <div class="growth-bar-track"><div class="growth-bar-fill growth-bar-curr" style="width: {{ bar.current_pct }}%"></div></div>
-                            </div>
-                            {% endfor %}
-                        {% else %}
-                        <p class="text-muted mb-0">{{ ui_labels.period_records_insufficient }}</p>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-            <div class="col-12 col-xl-5">
-                <div class="card growth-panel growth-panel-points">
-                    <div class="card-body">
-                        <h5 class="mb-3">{{ ui_labels.period_points_chart_title }}</h5>
-                        {% if charts.points %}
-                        <div class="growth-chart-wrap">
-                            <canvas id="growthPointsChart" aria-label="이전 기간과 최근 기간 포인트 비교"></canvas>
-                        </div>
-                        {% else %}
-                        <p class="text-muted mb-0">{{ ui_labels.period_points_records_insufficient }}</p>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="mb-4">
-        <h5 class="mb-3">독서</h5>
-        <div class="row g-3">
-            <div class="col-12 col-lg-6">
-                <div class="card growth-panel growth-panel-reading">
-                    <div class="card-body">
-                        <h6 class="mb-3">독서 활동</h6>
-                        <div class="mb-3">
-                            <div class="growth-muted">독서 기록일</div>
-                            {% if reading.reading_days_comparable %}
-                            <div>이전 {{ reading.reading_days_previous }}일 → 최근 {{ reading.reading_days_current }}일</div>
-                            {% else %}
-                            <div>최근 {{ reading.reading_days_current }}일</div>
-                            <div class="growth-muted">{{ reading.period_comparison_unavailable_label }}</div>
-                            {% endif %}
-                        </div>
-                        <div>
-                            <div class="growth-muted">완독</div>
-                            {% if reading.completed_comparable %}
-                            <div>이전 {{ reading.completed_count_previous }}권 → 최근 {{ reading.completed_count_current }}권</div>
-                            {% else %}
-                            <div>최근 {{ reading.completed_count_current }}권</div>
-                            <div class="growth-muted">{{ reading.period_comparison_unavailable_label }}</div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-12 col-lg-6">
-                <div class="card growth-panel growth-panel-reading">
-                    <div class="card-body">
-                        <h6 class="mb-3">완독 구성</h6>
-                        {% for program in reading.programs %}
-                        <div class="d-flex justify-content-between {% if not loop.last %}mb-2{% endif %}">
-                            <span>{{ program.label }}</span>
-                            {% if reading.completed_comparable %}
-                            <span>이전 {{ program.previous }}권 → 최근 {{ program.current }}권</span>
-                            {% else %}
-                            <span>최근 {{ program.current }}권</span>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-                        {% if not reading.completed_comparable %}
-                        <div class="growth-muted mt-2">{{ reading.period_comparison_unavailable_label }}</div>
-                        {% endif %}
-                        <hr>
-                        {% if reading.difficulty.average is not none %}
-                        <div class="mb-3">
-                            <div class="growth-muted">체감 난이도</div>
-                            <div class="growth-stars" aria-hidden="true">
-                                ★★★★★
-                                <span class="growth-stars-fill" style="width: {{ (reading.difficulty.average / 5 * 100) }}%">★★★★★</span>
-                            </div>
-                            <div>{{ reading.difficulty.out_of_five }} <span class="growth-muted">(n={{ reading.difficulty.sample_count }})</span></div>
-                        </div>
-                        {% else %}
-                        <div class="mb-3">
-                            <div class="growth-muted">체감 난이도</div>
-                            <div class="text-muted">평가 기록 없음</div>
-                        </div>
-                        {% endif %}
-                        {% if reading.fun.average is not none %}
-                        <div>
-                            <div class="growth-muted">재미</div>
-                            <div class="growth-stars" aria-hidden="true">
-                                ★★★★★
-                                <span class="growth-stars-fill" style="width: {{ (reading.fun.average / 5 * 100) }}%">★★★★★</span>
-                            </div>
-                            <div>{{ reading.fun.out_of_five }} <span class="growth-muted">(n={{ reading.fun.sample_count }})</span></div>
-                        </div>
-                        {% else %}
-                        <div>
-                            <div class="growth-muted">재미</div>
-                            <div class="text-muted">평가 기록 없음</div>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-            <div class="col-12">
-                <div class="card growth-panel growth-panel-reading" data-testid="growth-reading-analysis">
-                    <div class="card-body">
-                        <h6 class="mb-3">독서 원문 분석 자료</h6>
-                        {% set analysis = reading.analysis %}
-                        {% if analysis %}
-                        <div class="mb-3" data-testid="growth-reading-sufficiency" data-sufficiency="{{ analysis.sufficiency }}">
-                            <div class="growth-muted">원문 표본</div>
-                            <div>최근 {{ analysis.recent_count }}건 · 이전 {{ analysis.previous_count }}건</div>
-                            <div class="growth-muted">
-                                {% if analysis.sufficiency == 'major' %}주요 변화 분석 가능
-                                {% elif analysis.sufficiency == 'limited' %}제한적 분석
-                                {% else %}기간 변화 결론을 내릴 기록이 부족합니다
-                                {% endif %}
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <div class="growth-muted">원문 있는 기록</div>
-                            <div>{{ analysis.text_record_count }}건</div>
-                            {% if analysis.character_count and analysis.character_count.recent_median is not none %}
-                            <div class="growth-muted mt-2">최근 원문 글자 수 중앙값 {{ analysis.character_count.recent_median }} · 문장 수 중앙값 {{ analysis.sentence_count.recent_median }}</div>
-                            {% endif %}
-                            {% if analysis.completion_duration_median is not none %}
-                            <div class="growth-muted">완독 기간 중앙값 {{ analysis.completion_duration_median }}일</div>
-                            {% endif %}
-                        </div>
-                        <div class="mb-3" data-testid="growth-reading-recent">
-                            <div class="growth-muted">최근 독서 기록</div>
-                            {% if analysis.recent_records %}
-                            <ul class="mb-0">
-                                {% for item in analysis.recent_records[:5] %}
-                                <li>{{ item.date }} · {{ item.book_title or '제목 없음' }} · {{ item.status_label }}</li>
-                                {% endfor %}
-                            </ul>
-                            {% else %}
-                            <div class="text-muted">원문이 있는 최근 기록이 없습니다.</div>
-                            {% endif %}
-                        </div>
-                        {% else %}
-                        <div class="text-muted">독서 원문 분석 자료를 계산하지 못했습니다.</div>
-                        {% endif %}
-                        <div data-testid="growth-reading-ai" data-ai-state="{{ reading.ai.state if reading.ai else 'unavailable' }}">
-                            <div class="growth-muted">독서 원문 분석</div>
-                            {% if reading.ai and reading.ai.state == 'current' %}
-                            <div>현재 분석</div>
-                            {% elif reading.ai and reading.ai.state == 'limited' %}
-                            <div>제한적 분석</div>
-                            {% elif reading.ai and reading.ai.stale %}
-                            <div>이전 분석입니다. 다시 분석이 필요합니다.</div>
-                            {% elif reading.ai and reading.ai.state == 'insufficient' %}
-                            <div>데이터 부족</div>
-                            {% elif reading.ai and reading.ai.state == 'none' %}
-                            <div>아직 분석 없음</div>
-                            {% else %}
-                            <div>원문 분석을 표시할 수 없습니다.</div>
-                            {% endif %}
-                            {% if reading.ai and reading.ai.message %}
-                            <div class="growth-muted">{{ reading.ai.message }}</div>
-                            {% endif %}
-                            {% if reading.ai and reading.ai.output and reading.ai.output.observations %}
-                            <ul class="mt-2 mb-2">
-                                {% for item in reading.ai.output.observations %}
-                                <li>{{ item.observation }}</li>
-                                {% endfor %}
-                            </ul>
-                            {% endif %}
-                            {% if not is_viewer_mode and reading.ai and reading.ai.enabled %}
-                            <form method="post" action="{{ url_for('growth.generate_reading_ai', child_id=child.id) }}" class="mt-3" data-testid="reading-ai-form">
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="checkbox" value="1" id="reading-reviewed" name="reading_reviewed" data-testid="reading-ai-confirm" required>
-                                    <label class="form-check-label" for="reading-reviewed">현재 선택된 독서 기록을 검토했습니다</label>
-                                </div>
-                                <button type="submit" class="btn btn-outline-success" data-testid="reading-ai-analyze">
-                                    {% if reading.ai.stale %}다시 분석{% else %}독서 원문 분석{% endif %}
-                                </button>
-                            </form>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="mb-4" data-growth-learning>
-        <h5 class="mb-3">학습 진도</h5>
+    <section class="growth-section" data-growth-learning aria-labelledby="growth-learning-title">
+        <h2 class="growth-section-title" id="growth-learning-title">학습</h2>
+        <p class="growth-section-note">관측 기반 진도는 학습 기록 기준입니다.</p>
+        <details class="growth-help">
+            <summary>관측 기반 진도 안내</summary>
+            <p>교재 시작부터 모든 페이지가 기록되어 있다고 가정하지 않습니다.</p>
+        </details>
         <div class="row g-3">
             {% for card in learning.subjects %}
-            <div class="col-12 col-md-6 col-xl-4">
-                <div class="growth-snap" data-learning-subject="{{ card.key }}">
-                    <div class="fw-semibold mb-1">{{ card.label }}</div>
-                    {% if card.textbook_title %}
-                    <div>{{ card.textbook_title }}</div>
-                    {% endif %}
+            <div class="col-12 col-lg-6">
+                {% set sparse_subject = not card.observed_progress or not card.observed_progress.ratio_available %}
+                <article class="growth-subject{% if sparse_subject %} is-sparse{% endif %}" data-learning-subject="{{ card.key }}">
+                    <header class="growth-subject-head">
+                        <h3 class="growth-subject-name">{{ card.label }}</h3>
+                        {% if card.textbook_title %}
+                        <p class="growth-subject-book">{{ card.textbook_title }}</p>
+                        {% endif %}
+                    </header>
                     {% if card.observed_progress %}
-                    <div class="growth-learn-block" data-testid="observed-progress-{{ card.key }}" data-vs-target="{{ card.observed_progress.vs_target }}">
+                    <div class="growth-metric is-primary" data-testid="observed-progress-{{ card.key }}" data-vs-target="{{ card.observed_progress.vs_target }}">
                         <div class="growth-learn-label">{{ card.observed_progress.label }}</div>
-                        <div>{{ card.observed_progress.pages_display }}</div>
+                        <div class="growth-metric-hero">{{ card.observed_progress.pages_display }}</div>
                         {% if card.observed_progress.ratio_available %}
-                        <div class="growth-learn-secondary">{{ card.observed_progress.ratio_display }}</div>
+                        <div class="growth-percent">{{ card.observed_progress.ratio_display }}</div>
+                        {% if card.observed_progress.ratio_percent is not none %}
+                        <div class="growth-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ card.observed_progress.ratio_percent }}" aria-label="{{ card.observed_progress.label }} {{ card.observed_progress.ratio_display }}">
+                            <span style="width: {{ card.observed_progress.ratio_percent }}%"></span>
+                        </div>
+                        {% endif %}
                         {% else %}
                         <div class="growth-muted">진도율 {{ card.observed_progress.ratio_display }}</div>
                         {% endif %}
                         {% if card.observed_progress.latest_display %}
-                        <div class="growth-muted">{{ card.observed_progress.latest_display }}</div>
+                        <div class="growth-meta">{{ card.observed_progress.latest_display }}</div>
                         {% endif %}
-                        <div class="growth-muted">{{ card.observed_progress.hint }}</div>
-                        <div class="mt-2">완료예상</div>
-                        {% if card.observed_progress.forecast_available %}
-                        <div data-testid="observed-forecast-range">{{ card.observed_progress.forecast_display }}</div>
-                        {% else %}
-                        <div data-testid="observed-forecast-unavailable">
-                            {{ card.observed_progress.forecast_display }}
-                            {% if card.observed_progress.forecast_reason_label %}
-                            · {{ card.observed_progress.forecast_reason_label }}
+                    <div class="growth-split">
+                        <div class="growth-split-cell">
+                            <div class="growth-learn-label">완료예상</div>
+                            {% if card.observed_progress.forecast_available %}
+                            <div class="growth-split-value" data-testid="observed-forecast-range">{{ card.observed_progress.forecast_display }}</div>
+                            {% else %}
+                            <div class="growth-split-value is-muted" data-testid="observed-forecast-unavailable">
+                                {{ card.observed_progress.forecast_display }}
+                                {% if card.observed_progress.forecast_reason_label %}
+                                · {{ card.observed_progress.forecast_reason_label }}
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            <div class="growth-meta">목표 대비 {{ card.observed_progress.vs_target_label }}</div>
+                        </div>
+                        {% if card.performance_peer %}
+                        <div class="growth-split-cell">
+                            <div class="growth-learn-label">{{ card.performance_peer.label }}</div>
+                            {% if card.performance_peer.child_display %}
+                            <div class="growth-split-value">{{ card.performance_peer.child_display }}</div>
+                            {% else %}
+                            <div class="growth-split-value is-muted">{{ card.performance_peer.status_label }}</div>
                             {% endif %}
                         </div>
                         {% endif %}
-                        <div class="growth-learn-secondary">목표 대비 {{ card.observed_progress.vs_target_label }}</div>
+                    </div>
                     </div>
                     {% endif %}
-                    {% if card.performance_peer %}
-                    <div class="growth-learn-block" data-testid="canonical-peer-performance-{{ card.key }}" data-display-tier="{{ card.performance_peer.display_tier }}">
-                        <div class="growth-learn-label">{{ card.performance_peer.label }}</div>
-                        {% if card.performance_peer.child_display %}
-                        <div>{{ card.performance_peer.child_label }} {{ card.performance_peer.child_display }}</div>
+                    {% if card.performance_peer or card.coverage_peer %}
+                    <div class="growth-peer-block">
+                        <div class="growth-learn-label">또래 참고</div>
+                        {% if card.performance_peer %}
+                        <div data-testid="canonical-peer-performance-{{ card.key }}" data-display-tier="{{ card.performance_peer.display_tier }}">
+                            <div class="growth-peer-kicker">{{ card.performance_peer.label }}</div>
+                            {{ peer_compare(card.performance_peer) }}
+                        </div>
                         {% endif %}
-                        {% if card.performance_peer.show_median %}
-                        <div class="growth-learn-secondary">{{ card.performance_peer.median_label }} {{ card.performance_peer.median_display }}</div>
-                        <div class="growth-muted">{{ card.performance_peer.n_display }}</div>
-                        {% else %}
-                        <div class="growth-muted">{{ card.performance_peer.status_label }}</div>
-                        {% endif %}
-                    </div>
-                    {% endif %}
-                    {% if card.coverage_peer %}
-                    <div class="growth-learn-block" data-testid="canonical-peer-coverage-{{ card.key }}" data-display-tier="{{ card.coverage_peer.display_tier }}">
-                        <div class="growth-learn-label">{{ card.coverage_peer.label }}</div>
-                        {% if card.coverage_peer.child_display %}
-                        <div>{{ card.coverage_peer.child_label }} {{ card.coverage_peer.child_display }}</div>
-                        {% endif %}
-                        {% if card.coverage_peer.show_median %}
-                        <div class="growth-learn-secondary">{{ card.coverage_peer.median_label }} {{ card.coverage_peer.median_display }}</div>
-                        <div class="growth-muted">{{ card.coverage_peer.n_display }}</div>
-                        {% else %}
-                        <div class="growth-muted">{{ card.coverage_peer.status_label }}</div>
+                        {% if card.coverage_peer %}
+                        <div data-testid="canonical-peer-coverage-{{ card.key }}" data-display-tier="{{ card.coverage_peer.display_tier }}">
+                            <div class="growth-peer-kicker">{{ card.coverage_peer.label }}</div>
+                            {{ peer_compare(card.coverage_peer) }}
+                        </div>
                         {% endif %}
                     </div>
                     {% endif %}
-                </div>
+                </article>
             </div>
             {% endfor %}
         </div>
     </section>
 
-    <section class="mb-4">
-        <h5 class="mb-3">포인트</h5>
-        <div class="row g-3">
-            <div class="col-12 col-md-4">
-                <div class="card growth-panel growth-panel-points">
-                    <div class="card-body">
-                        <div class="growth-muted">최근 기간</div>
-                        <div class="fs-4 fw-bold">{{ points.period_points_current_display or '—' }}</div>
+    <section class="growth-section" aria-labelledby="growth-points-title">
+        <h2 class="growth-section-title" id="growth-points-title">포인트</h2>
+        <div class="growth-panel">
+            <div class="card-body">
+                <div class="growth-points-layout{% if charts.points %} has-chart{% endif %}">
+                    <div class="growth-points-hero-block">
+                        <h3 class="growth-panel-title">최근 기간</h3>
+                        <div class="growth-points-hero">{{ points.period_points_current_display or '—' }}</div>
                         {% if points.period_points_comparable %}
-                        <div class="growth-muted mt-2">이전 기간</div>
-                        <div>{{ points.period_points_previous_display or '—' }}</div>
-                        <div class="mt-2">
+                        <div class="growth-muted">이전 기간 {{ points.period_points_previous_display or '—' }}</div>
+                        <div class="growth-meta">
                             {% if points.period_points_delta == 0 %}
                             변화 없음
                             {% else %}
@@ -807,62 +275,249 @@
                             {% endif %}
                         </div>
                         {% else %}
-                        <div class="growth-muted mt-2">{{ points.period_comparison_unavailable_label }}</div>
+                        <div class="growth-muted">{{ points.period_comparison_unavailable_label }}</div>
                         {% endif %}
                     </div>
-                </div>
-            </div>
-            <div class="col-12 col-md-4">
-                <div class="card growth-panel growth-panel-points">
-                    <div class="card-body" data-testid="canonical-peer-points" data-display-tier="{{ points.peer.display_tier if points.peer else 'none' }}">
+                    <div class="growth-points-peer" data-testid="canonical-peer-points" data-display-tier="{{ points.peer.display_tier if points.peer else 'none' }}">
                         <div class="growth-learn-label">{{ points.peer.label if points.peer else '분석기간 총 포인트' }}</div>
-                        {% if points.peer and points.peer.child_display %}
-                        <div>{{ points.peer.child_label }} {{ points.peer.child_display }}</div>
-                        {% endif %}
-                        {% if points.peer and points.peer.show_median %}
-                        <div class="growth-learn-secondary">{{ points.peer.median_label }} {{ points.peer.median_display }}</div>
-                        <div class="growth-muted">{{ points.peer.n_display }}</div>
+                        {% if points.peer %}
+                        {{ peer_compare(points.peer) }}
                         {% else %}
-                        <div class="growth-muted">{{ points.peer.status_label if points.peer else ui_labels.peer_none }}</div>
+                        <div class="growth-muted">{{ ui_labels.peer_none }}</div>
                         {% endif %}
                     </div>
-                </div>
-            </div>
-            <div class="col-12 col-md-4">
-                <div class="card growth-panel growth-panel-points">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between mb-2"><span>최근 포인트 기록일</span><span>{{ points.activity_days_current }}일</span></div>
-                        <div class="d-flex justify-content-between"><span>수동 포인트</span><span>{{ points.manual_points_sum_current_display or '—' }}</span></div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-12 col-md-4">
-                <div class="card growth-panel growth-panel-points">
-                    <div class="card-body">
-                        <div class="growth-muted">기준일 누적</div>
+                    <div class="growth-points-meta">
+                        <div class="growth-kv">
+                            <div class="growth-kv-row"><span>최근 포인트 기록일</span><span>{{ points.activity_days_current }}일</span></div>
+                            <div class="growth-kv-row"><span>수동 포인트</span><span>{{ points.manual_points_sum_current_display or '—' }}</span></div>
+                            <div class="growth-kv-row">
+                                <span>기준일 누적</span>
+                                {% if points.cumulative_unavailable %}
+                                <span>확인 불가</span>
+                                {% else %}
+                                <span>{{ points.cumulative_display }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
                         {% if points.cumulative_unavailable %}
-                        <div class="fs-5 fw-semibold">확인 불가</div>
                         <div class="visually-hidden">과거 누적값 확인 불가</div>
-                        {% else %}
-                        <div class="fs-4 fw-bold">{{ points.cumulative_display }}</div>
                         {% endif %}
                     </div>
+                    {% if charts.points %}
+                    <div class="growth-points-chart">
+                        <h3 class="growth-panel-title">{{ ui_labels.period_points_chart_title }}</h3>
+                        <div class="growth-chart-wrap">
+                            <canvas id="growthPointsChart" aria-label="이전 기간과 최근 기간 포인트 비교"></canvas>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="growth-points-unavailable">
+                        <div class="growth-learn-label mb-2">{{ ui_labels.period_points_chart_title }}</div>
+                        {{ empty_strip(ui_labels.period_points_records_insufficient) }}
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </section>
 
-    {% if not is_viewer_mode %}
-    <section class="mb-2">
-        <h5 class="mb-3">원본 기록 보기</h5>
-        <div class="d-flex flex-wrap gap-2">
-            <a class="btn btn-outline-primary" href="{{ url_for('points_input', child_id=child.id) }}">포인트 입력</a>
-            <a class="btn btn-outline-primary" href="{{ url_for('child_point_analysis', child_id=child.id) }}">포인트 상세</a>
-            <a class="btn btn-outline-success" href="{{ url_for('reading.teacher_history', child_id=child.id) }}">독서 기록</a>
-            <a class="btn btn-outline-success" href="{{ url_for('reading.teacher_editor', child_id=child.id) }}">독서 입력</a>
-            <a class="btn btn-outline-primary" href="{{ url_for('progress.history', child_id=child.id) }}">학습 진도</a>
-            <a class="btn btn-outline-primary" href="{{ url_for('settings_print_child_report', child_id=child.id) }}">출력용 리포트</a>
+    <section class="growth-section" aria-labelledby="growth-reading-title">
+        <h2 class="growth-section-title" id="growth-reading-title">독서</h2>
+        <div class="row g-3">
+            <div class="col-12 col-lg-6">
+                <div class="growth-panel">
+                    <div class="card-body">
+                        <h3 class="growth-panel-title">독서 활동</h3>
+                        <div class="growth-facts">
+                            <div>
+                                <div class="growth-learn-label">독서 기록일</div>
+                                {% if reading.reading_days_comparable %}
+                                <div class="growth-fact-value">최근 {{ reading.reading_days_current }}일</div>
+                                <div class="growth-meta">이전 {{ reading.reading_days_previous }}일</div>
+                                {% else %}
+                                <div class="growth-fact-value">최근 {{ reading.reading_days_current }}일</div>
+                                <div class="growth-meta">{{ reading.period_comparison_unavailable_label }}</div>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <div class="growth-learn-label">완독</div>
+                                {% if reading.completed_comparable %}
+                                <div class="growth-fact-value">최근 {{ reading.completed_count_current }}권</div>
+                                <div class="growth-meta">이전 {{ reading.completed_count_previous }}권</div>
+                                {% else %}
+                                <div class="growth-fact-value">최근 {{ reading.completed_count_current }}권</div>
+                                <div class="growth-meta">{{ reading.period_comparison_unavailable_label }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="growth-program-list mt-3">
+                            <div class="growth-learn-label mb-2">완독 구성</div>
+                            {% for program in reading.programs %}
+                            <div class="growth-kv-row">
+                                <span>{{ program.label }}</span>
+                                {% if reading.completed_comparable %}
+                                <span>이전 {{ program.previous }}권 → 최근 {{ program.current }}권</span>
+                                {% else %}
+                                <span>최근 {{ program.current }}권</span>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                            {% if not reading.completed_comparable %}
+                            <div class="growth-meta mt-2">{{ reading.period_comparison_unavailable_label }}</div>
+                            {% endif %}
+                        </div>
+                        {% if charts.activity_bars %}
+                        <div class="mt-3">
+                            <h4 class="growth-learn-label mb-2">최근 vs 이전 기간</h4>
+                            {% for bar in charts.activity_bars %}
+                            <div class="{% if not loop.last %}mb-3{% endif %}">
+                                <div class="d-flex justify-content-between small mb-1">
+                                    <span>{{ bar.label }}</span>
+                                    <span>{{ bar.previous_display }} → {{ bar.current_display }}</span>
+                                </div>
+                                <div class="growth-bar-track mb-1" aria-hidden="true"><div class="growth-bar-fill growth-bar-prev" style="width: {{ bar.previous_pct }}%"></div></div>
+                                <div class="growth-bar-track" aria-hidden="true"><div class="growth-bar-fill growth-bar-curr" style="width: {{ bar.current_pct }}%"></div></div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="mt-3">{{ empty_strip(ui_labels.period_records_insufficient) }}</div>
+                        {% endif %}
+                        <div class="growth-facts mt-3">
+                            {{ rating_block('체감 난이도', reading.difficulty) }}
+                            {{ rating_block('재미', reading.fun) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-lg-6">
+                <div class="growth-panel" data-testid="growth-reading-analysis">
+                    <div class="card-body">
+                        <h3 class="growth-panel-title">독서 원문 분석 자료</h3>
+                        {% set analysis = reading.analysis %}
+                        {% if analysis %}
+                        <div class="mb-3" data-testid="growth-reading-sufficiency" data-sufficiency="{{ analysis.sufficiency }}">
+                            <div class="growth-read-stats">
+                                <div class="growth-read-stat">
+                                    <div class="growth-learn-label">원문 표본</div>
+                                    <div class="growth-read-stat-value">최근 {{ analysis.recent_count }}건 · 이전 {{ analysis.previous_count }}건</div>
+                                    <div class="growth-meta">
+                                        {% if analysis.sufficiency == 'major' %}주요 변화 분석 가능
+                                        {% elif analysis.sufficiency == 'limited' %}제한적 분석
+                                        {% else %}기간 변화 결론을 내릴 기록이 부족합니다
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="growth-read-stat">
+                                    <div class="growth-learn-label">원문 있는 기록</div>
+                                    <div class="growth-read-stat-value">{{ analysis.text_record_count }}건</div>
+                                </div>
+                                {% if analysis.character_count and analysis.character_count.recent_median is not none %}
+                                <div class="growth-read-stat">
+                                    <div class="growth-learn-label">글자 수 중앙값</div>
+                                    <div class="growth-read-stat-value">{{ analysis.character_count.recent_median }}자</div>
+                                </div>
+                                {% endif %}
+                                {% if analysis.sentence_count and analysis.sentence_count.recent_median is not none %}
+                                <div class="growth-read-stat">
+                                    <div class="growth-learn-label">문장 수 중앙값</div>
+                                    <div class="growth-read-stat-value">{{ analysis.sentence_count.recent_median }}문장</div>
+                                </div>
+                                {% endif %}
+                                {% if analysis.completion_duration_median is not none %}
+                                <div class="growth-read-stat">
+                                    <div class="growth-learn-label">완독 기간 중앙값</div>
+                                    <div class="growth-read-stat-value">{{ analysis.completion_duration_median }}일</div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div data-testid="growth-reading-recent">
+                            <div class="growth-learn-label mb-2">최근 독서 기록</div>
+                            {% if analysis.recent_records %}
+                            <div class="growth-reading-rows">
+                                {% for item in analysis.recent_records[:5] %}
+                                <div class="growth-reading-row">
+                                    <span class="growth-reading-date">{{ item.date }}</span>
+                                    <span class="growth-reading-title">{{ item.book_title or '제목 없음' }}</span>
+                                    <span class="growth-reading-status">{{ item.status_label }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="text-muted">원문이 있는 최근 기록이 없습니다.</div>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <div class="text-muted">독서 원문 분석 자료를 계산하지 못했습니다.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
         </div>
+        <article class="growth-ai-secondary mt-3">
+            <div data-testid="growth-reading-ai" data-ai-state="{{ reading.ai.state if reading.ai else 'unavailable' }}">
+                <h3 class="growth-reading-ai-title">독서 원문 분석</h3>
+                <p class="growth-muted mb-2">제출된 원문 기록을 분석한 결과입니다. 정량 기록은 그대로 볼 수 있습니다.</p>
+                {% if reading.ai and not reading.ai.enabled %}
+                <p class="growth-note"><i class="bi bi-info-circle" aria-hidden="true"></i><span>분석 기능 꺼짐</span></p>
+                {% endif %}
+                {% if reading.ai and reading.ai.state == 'current' %}
+                <div class="growth-muted">현재 분석</div>
+                {% elif reading.ai and reading.ai.state == 'limited' %}
+                <div class="growth-muted">제한적 분석</div>
+                {% elif reading.ai and reading.ai.stale %}
+                <p class="growth-note">이전 분석입니다. 다시 분석이 필요합니다.</p>
+                {% elif reading.ai and reading.ai.state == 'insufficient' %}
+                <div class="growth-muted">데이터 부족</div>
+                {% elif reading.ai and reading.ai.state == 'none' %}
+                <div class="growth-muted">아직 분석 없음</div>
+                {% elif reading.ai and not reading.ai.enabled %}
+                {% else %}
+                <div class="growth-muted">원문 분석을 표시할 수 없습니다.</div>
+                {% endif %}
+                {% if reading.ai and reading.ai.message %}
+                <div class="growth-muted">{{ reading.ai.message }}</div>
+                {% endif %}
+                {% if reading.ai and reading.ai.output and reading.ai.output.observations %}
+                <ul class="mt-2 mb-2">
+                    {% for item in reading.ai.output.observations %}
+                    <li>{{ item.observation }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                {% if not is_viewer_mode and reading.ai and reading.ai.enabled %}
+                <form method="post" action="{{ url_for('growth.generate_reading_ai', child_id=child.id) }}" class="mt-3" data-testid="reading-ai-form">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" value="1" id="reading-reviewed" name="reading_reviewed" data-testid="reading-ai-confirm" required>
+                        <label class="form-check-label" for="reading-reviewed">현재 선택된 독서 기록을 검토했습니다</label>
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary btn-sm" data-testid="reading-ai-analyze">
+                        {% if reading.ai.stale %}다시 분석{% else %}독서 원문 분석{% endif %}
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </article>
+    </section>
+
+    {% if not is_viewer_mode %}
+    <section class="growth-section growth-source" aria-labelledby="growth-source-title">
+        <h2 class="growth-section-title" id="growth-source-title">원본 기록 보기</h2>
+        <nav class="growth-source-nav" aria-label="원본 기록 보기">
+            <div class="growth-source-group" aria-label="기록">
+                <a class="growth-source-link" href="{{ url_for('child_point_analysis', child_id=child.id) }}"><i class="bi bi-bar-chart" aria-hidden="true"></i>포인트 상세</a>
+                <a class="growth-source-link" href="{{ url_for('reading.teacher_history', child_id=child.id) }}"><i class="bi bi-book" aria-hidden="true"></i>독서 기록</a>
+                <a class="growth-source-link" href="{{ url_for('progress.history', child_id=child.id) }}"><i class="bi bi-journal-text" aria-hidden="true"></i>학습 진도</a>
+            </div>
+            <div class="growth-source-group" aria-label="입력">
+                <a class="growth-source-link" href="{{ url_for('points_input', child_id=child.id) }}"><i class="bi bi-pencil-square" aria-hidden="true"></i>포인트 입력</a>
+                <a class="growth-source-link" href="{{ url_for('reading.teacher_editor', child_id=child.id) }}"><i class="bi bi-journal-plus" aria-hidden="true"></i>독서 입력</a>
+            </div>
+            <div class="growth-source-group" aria-label="기타">
+                <a class="growth-source-link" href="{{ url_for('settings_print_child_report', child_id=child.id) }}"><i class="bi bi-printer" aria-hidden="true"></i>출력용 리포트</a>
+            </div>
+        </nav>
     </section>
     {% endif %}
 </div>
@@ -885,9 +540,9 @@ document.addEventListener('DOMContentLoaded', function () {
             datasets: [{
                 label: '포인트',
                 data: charts.points.values,
-                backgroundColor: ['#93c5fd', '#d97706'],
-                borderRadius: 8,
-                maxBarThickness: 56
+                backgroundColor: ['#93c5fd', '#2563eb'],
+                borderRadius: 4,
+                maxBarThickness: 48
             }]
         },
         options: {

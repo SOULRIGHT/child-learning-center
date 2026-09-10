@@ -2,15 +2,18 @@
 {% set evidence_groups = ai.evidence_groups if ai and ai.evidence_groups else none %}
 {% set evidence_items = ai.evidence if ai and ai.evidence else [] %}
 {% set evidence_total = evidence_groups.total if evidence_groups else (evidence_items|length) %}
-<section class="mb-4" id="growth-ai-card" data-ai-state="{{ ai_state }}" data-ai-focus-step="0" data-stage="organize">
+<section class="mb-0" id="growth-ai-card" data-ai-state="{{ ai_state }}" data-ai-focus-step="0" data-stage="organize">
     <div class="card growth-ai-card">
         <div class="card-body">
-            <div class="d-flex align-items-start gap-3 mb-3">
-                {% set mascot_variant = 'header' %}
-                {% include "growth/_ai_mascot.html" %}
+            <div class="growth-ai-head d-flex align-items-start gap-3 mb-3">
+                <div class="growth-ai-mark" aria-hidden="true"><i class="bi bi-stars"></i></div>
                 <div>
-                    <h5 class="mb-1">AI 성장 해석</h5>
-                    <p class="growth-ai-hint mb-0" data-ai-role="subtitle">교사의 관찰을 돕는 참고자료입니다.</p>
+                    <h2 class="growth-ai-title mb-1" id="growth-ai-title">AI 성장 해석</h2>
+                    <p class="growth-ai-meta mb-0">
+                        <span class="growth-ai-state-label" data-ai-role="status-label"></span>
+                        <span class="growth-ai-asof">기준일 {{ as_of }}</span>
+                    </p>
+                    <p class="growth-ai-hint mb-0 growth-ai-subtitle" data-ai-role="subtitle">교사의 관찰을 돕는 참고자료입니다.</p>
                 </div>
             </div>
 
@@ -20,31 +23,27 @@
             </div>
 
             <div data-ai-panel="idle" class="{% if ai_state != 'idle' %}growth-ai-hidden{% endif %}">
-                <p style="white-space: pre-line;">독서·학습·포인트 데이터를 바탕으로
-최근 성장 흐름을 AI가 함께 살펴봐요.
-
-생성된 해석은 사실 확인과 안전성 검사를 거친 뒤 표시됩니다.</p>
-                <p class="growth-ai-hint">AI 해석은 교사의 관찰을 돕는 참고자료입니다.</p>
-                <p class="growth-ai-hint">새로운 AI 해석은 계정당 하루 최대 30회 생성할 수 있어요.</p>
+                <p class="mb-3">독서·학습·포인트 기록을 함께 살펴봅니다.</p>
                 <button type="button" class="btn btn-primary" data-ai-action="generate">AI 성장 해석 만들기</button>
             </div>
 
             <div data-ai-panel="loading" class="growth-ai-hidden">
                 <div class="growth-ai-loading">
-                    {% set mascot_variant = 'loading' %}
-                    {% include "growth/_ai_mascot.html" %}
-                    <p class="fw-semibold mb-1">AI 성장 해석을 준비하고 있어요</p>
-                    <p class="mb-2">잠시만 기다려주세요!</p>
-                    <p class="growth-ai-hint" style="white-space: pre-line;">성장 데이터를 정리하고
-AI 해석과 검증을 차례대로 진행하고 있어요.</p>
-                    <p class="growth-ai-hint mb-2" data-ai-role="eta">보통 5~10초 정도 걸려요.</p>
+                    <div class="growth-ai-character-stage{% if ai_mascot and ai_mascot.kind %} is-filled{% endif %}" data-ai-role="character-stage">
+                        {% set mascot_variant = 'loading' %}
+                        {% include "growth/_ai_mascot.html" %}
+                    </div>
+                    <div class="growth-ai-loading-copy">
+                        <p class="fw-semibold mb-1">분석을 준비하고 있어요</p>
+                        <p class="growth-ai-hint mb-1" data-ai-role="eta">보통 5~10초 정도 걸려요.</p>
+                        <p class="growth-ai-steps mb-0" data-ai-role="cycle">성장 데이터를 차근차근 정리하고 있어요...</p>
+                    </div>
                     <ol class="growth-ai-process" data-ai-role="process">
                         <li data-ai-step="0">성장 데이터 정리</li>
                         <li data-ai-step="1">AI가 기록의 흐름 해석</li>
                         <li data-ai-step="2">사실이 맞는지 확인</li>
                         <li data-ai-step="3">안전하게 보여드릴 수 있는지 확인</li>
                     </ol>
-                    <p class="growth-ai-steps mb-0" data-ai-role="cycle">성장 데이터를 차근차근 정리하고 있어요...</p>
                     <div class="growth-ai-hidden mt-2" data-ai-role="waiting">
                         <p class="fw-semibold mb-1" data-ai-role="waiting-title">성장 해석을 꼼꼼하게 마무리하고 있어요...</p>
                         <p class="growth-ai-hint mb-0" data-ai-role="waiting-hint">거의 다 준비됐어요. 잠시만 기다려주세요.</p>
@@ -66,6 +65,8 @@ AI 해석과 검증을 차례대로 진행하고 있어요.</p>
                     <h6 class="growth-ai-section-title">가장 먼저 볼 변화</h6>
                     <p class="growth-ai-priority-text mb-0" data-ai-role="summary">{% if ai and ai.interpretation %}{{ ai.interpretation.priority_insight or ai.interpretation.summary }}{% endif %}</p>
                 </div>
+                <details class="growth-ai-more">
+                    <summary>자세히 보기</summary>
                 <div data-ai-role="interpretation-wrap" class="growth-ai-section{% if not ai or not ai.interpretation or not ai.interpretation.interpretation %} growth-ai-hidden{% endif %}">
                     <h6 class="growth-ai-section-title">왜 중요하게 보나요?</h6>
                     <p class="growth-ai-prose mb-0" data-ai-role="interpretation">{% if ai and ai.interpretation %}{{ ai.interpretation.interpretation }}{% endif %}</p>
@@ -161,6 +162,7 @@ AI 해석과 검증을 차례대로 진행하고 있어요.</p>
                     </div>
                     <p class="growth-ai-hint mt-2 growth-ai-hidden" data-ai-role="feedback-done">의견을 남겨 주셔서 감사합니다.</p>
                 </div>
+                </details>
                 </div>
             </div>
 

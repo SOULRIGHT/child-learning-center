@@ -508,5 +508,7 @@ class GrowthLearningUiTests(unittest.TestCase):
 
     def test_responsive_subject_grid_classes(self):
         html = self._html()
-        self.assertIn('col-12 col-md-6 col-xl-4', html)
-        self.assertNotIn('col-md-4', html.split('data-growth-learning', 1)[1][:400])
+        learning = html.split('data-growth-learning', 1)[1]
+        self.assertIn('col-12 col-lg-6', learning)
+        self.assertNotIn('col-md-4', learning[:400])
+        self.assertNotIn('col-xl-4', learning.split('</section>', 1)[0])

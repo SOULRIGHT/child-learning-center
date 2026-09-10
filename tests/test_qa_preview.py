@@ -127,6 +127,9 @@ class PreviewSeedTests(unittest.TestCase):
         self.assertNotIn(SENTINEL_REVIEW, html)
         self.assertIn('data-testid="observed-forecast-range"', html)
         self.assertNotIn('data-ai-state="current"', html)
+        self.assertIn('role="progressbar"', html)
+        self.assertIn('data-testid="growth-summary"', html)
+        self.assertIn('id="growth-ai-title"', html)
 
         sparse = self.client.get(f'/children/{sparse_id}/growth')
         self.assertEqual(sparse.status_code, 200)

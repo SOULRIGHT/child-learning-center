@@ -50,7 +50,7 @@
     function setPresentationStage(name) {
         const card = document.getElementById('growth-ai-card');
         if (card) card.setAttribute('data-stage', name);
-        document.querySelectorAll('[data-ai-role="mascot-slot"]').forEach(function (el) {
+        document.querySelectorAll('[data-ai-role="mascot-slot"], [data-ai-role="character-stage"]').forEach(function (el) {
             el.setAttribute('data-stage', name);
         });
     }

@@ -201,12 +201,14 @@ class GrowthStep8ASemanticsTests(unittest.TestCase):
         self.assertIn(PERIOD_POINTS_CHART_TITLE, html)
         self.assertIn(PERIOD_POINTS_RECORDS_INSUFFICIENT_LABEL, html)
         self.assertNotIn('비교할 수 있는 포인트 기록이 아직 충분하지 않습니다.', html)
-        self.assertIn('내 기록 270점', html)
-        self.assertNotIn('비교 자료 부족', html.split('핵심 지표', 1)[1].split('학습 진도', 1)[0])
+        points_peer = html.split('data-testid="canonical-peer-points"', 1)[1].split('최근 포인트 기록일', 1)[0]
+        self.assertIn('내 기록', points_peer)
+        self.assertIn('270점', points_peer)
+        summary = html.split('data-testid="growth-summary"', 1)[1].split('data-growth-learning', 1)[0]
+        self.assertNotIn('비교 자료 부족', summary)
         self.assertNotEqual(PERIOD_COMPARISON_UNAVAILABLE_LABEL, PEER_NONE_LABEL)
         self.assertNotEqual(PERIOD_POINTS_RECORDS_INSUFFICIENT_LABEL, PEER_NONE_LABEL)
         self.assertNotEqual(PERIOD_RECORDS_INSUFFICIENT_LABEL, PEER_NONE_LABEL)
-        points_peer = html.split('data-testid="canonical-peer-points"', 1)[1][:800]
         self.assertNotIn(PERIOD_COMPARISON_UNAVAILABLE_LABEL, points_peer)
         self.assertNotIn(PERIOD_POINTS_RECORDS_INSUFFICIENT_LABEL, points_peer)
         self.assertNotIn(PERIOD_RECORDS_INSUFFICIENT_LABEL, points_peer)
@@ -259,7 +261,7 @@ class GrowthStep8ASemanticsTests(unittest.TestCase):
 
     def test_unavailable_is_not_rendered_as_zero(self):
         html = self._html()
-        math_html = html.split('data-learning-subject="math"', 1)[1]
+        math_html = html.split('data-learning-subject="math"', 1)[1].split('data-learning-subject="', 1)[0]
         self.assertIn('관측 기반 진도', math_html)
         self.assertIn('N/A', math_html)
         self.assertIn('교재 계획 없음', math_html)
@@ -419,3 +421,62 @@ class GrowthStep8ASemanticsTests(unittest.TestCase):
         reading = {row['label']: row['value'] for row in by_key['reading']['compact']}
         self.assertEqual(reading['최근 30일'], '활동 8일')
         self.assertEqual(reading['독서 관찰'], '문장 길이가 줄었습니다')
+
+    def test_step8b_information_hierarchy_and_compact_empty(self):
+        html = self._html()
+        self.assertIn('data-testid="growth-summary"', html)
+        self.assertIn('지금 한눈에', html)
+        self.assertIn('id="growth-learning-title">학습</h2>', html)
+        self.assertIn('id="growth-points-title">포인트</h2>', html)
+        self.assertIn('id="growth-reading-title">독서</h2>', html)
+        self.assertIn('id="growth-ai-title">AI 성장 해석</h2>', html)
+        self.assertIn('static/css/growth.css', html)
+        self.assertIn('id="growth-ai-card"', html)
+        self.assertIn('data-ai-action="generate"', html)
+        self.assertLess(html.find('id="growth-ai-card"'), html.find('data-testid="growth-summary"'))
+        self.assertLess(html.find('id="growth-reading-title"'), html.find('data-testid="growth-reading-ai"'))
+        self.assertGreater(html.find('data-testid="growth-reading-ai"'), html.find('data-testid="growth-reading-analysis"'))
+        self.assertNotIn('href="#growth-ai-card"', html)
+        self.assertIn('growth-ai-character-stage', html)
+        self.assertIn('class="growth-note"', html)
+        self.assertNotIn('class="growth-empty"', html)
+        self.assertNotIn('class="card growth-kpi"', html)
+        summary = html.split('data-testid="growth-summary"', 1)[1].split('id="growth-insights-title"', 1)[0]
+        self.assertNotIn('최근 학습 진도 기록', summary)
+        self.assertIn('data-testid="growth-reading-recent"', html)
+        reading_recent = html.split('data-testid="growth-reading-recent"', 1)[1][:1200]
+        self.assertNotIn('in_progress', reading_recent)
+
+    def test_step8b_progress_bar_keeps_canonical_values(self):
+        plan = self._plan()
+        self._session(plan, date(2026, 12, 1), 1, 145)
+        html = self._html()
+        math_html = html.split('data-learning-subject="math"', 1)[1].split('data-learning-subject="', 1)[0]
+        self.assertIn('145 / 200페이지', math_html)
+        self.assertIn('학습 기록 기준 72%', math_html)
+        self.assertIn('role="progressbar"', math_html)
+        self.assertIn('aria-valuenow="72"', math_html)
+        self.assertIn('관측 기반 진도', math_html)
+        self.assertNotIn('전체 진도', math_html)
+        self.assertNotIn('교재 시작부터 모든 페이지가 기록되어 있다고 가정하지 않습니다.', math_html)
+        self.assertNotIn('growth-pair-bar', math_html)
+        self.assertEqual(math_html.count('role="progressbar"'), 1)
+
+    def test_step8b_source_nav_keeps_routes(self):
+        html = self._html()
+        source = html.split('id="growth-source-title"', 1)[1].split('id="growth-chart-data"', 1)[0]
+        child_id = self.child.id
+        self.assertIn(f'href="/points/child/{child_id}"', source)
+        self.assertIn(f'href="/children/{child_id}/reading/history"', source)
+        self.assertIn(f'href="/children/{child_id}/progress"', source)
+        self.assertIn(f'href="/points/input/{child_id}"', source)
+        self.assertIn(f'href="/children/{child_id}/reading"', source)
+        self.assertIn(f'href="/settings/print/child/{child_id}"', source)
+        self.assertIn('포인트 상세', source)
+        self.assertIn('독서 기록', source)
+        self.assertIn('학습 진도', source)
+        self.assertIn('포인트 입력', source)
+        self.assertIn('독서 입력', source)
+        self.assertIn('출력용 리포트', source)
+        self.assertNotIn('btn-primary', source)
+        self.assertNotIn('btn-outline-primary', source)
