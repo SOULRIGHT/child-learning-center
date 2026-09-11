@@ -29,7 +29,7 @@ INJECTION_MARKERS = (
     'sql 직접',
     '권한 우회',
 )
-ZERO_CLAIM = re.compile(r'0점|0으로 계산')
+ZERO_CLAIM = re.compile(r'0으로 계산')
 
 
 def is_rank_request(text):
@@ -120,12 +120,19 @@ def _looks_like_dump(text):
 
 
 def _claimed_zero_for_unavailable(text, tool_results):
-    if not ZERO_CLAIM.search(text or ''):
-        return False
+    cleaned = text or ''
     for item in tool_results or ():
         result = item.get('result') or {}
         for fact in result.get('facts') or ():
-            if fact.get('available') is False:
+            if fact.get('available') is not False:
+                continue
+            if ZERO_CLAIM.search(cleaned):
+                return True
+            label = str(fact.get('label') or '').strip()
+            if label and re.search(
+                re.escape(label) + r'.{0,16}(?:0점|0일|0권|0%|0페이지|0건)',
+                cleaned,
+            ):
                 return True
     return False
 

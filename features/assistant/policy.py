@@ -95,11 +95,11 @@ def _bind_child_arg(args, *, page_context, conversation_state):
         else:
             args['child_id'] = child.id
             return args
-    page_child = lookup_child((page_context or {}).get('child_id'))
-    if page_child is not None:
-        args['child_id'] = page_child.id
-        return args
     convo_child = lookup_child((conversation_state or {}).get('active_child_id'))
     if convo_child is not None:
         args['child_id'] = convo_child.id
+        return args
+    page_child = lookup_child((page_context or {}).get('child_id'))
+    if page_child is not None:
+        args['child_id'] = page_child.id
     return args

@@ -6,7 +6,6 @@ from features.assistant.copy import (
     FALLBACK,
     DRAWER_NOTICE,
     GREETING_REPLY,
-    NAV_NEED_CHOICE,
     NAV_NEED_NAME,
     NAV_NO_MATCH,
     ONBOARDING_DONE,
@@ -54,6 +53,7 @@ HELP_DEFINITION_HINTS = ('무슨 뜻', '어떤 뜻', '의미', '뭐야', '무엇
 DATA_HINTS = (
     '어때', '알려줘', '알려 줘', '알려', '얼마나', '요약', '진도', '또래',
     '비교', '학습일', '포인트', '독서', '완독', '관측', '며칠', '몇 권',
+    '정보 좀', '정보좀', '어떻게 돼', '기록 보여', '요즘 어때',
 )
 QUESTION_HINTS = (
     '어때', '알려', '얼마나', '요약', '무슨', '의미', '뭐야', '며칠',
@@ -374,52 +374,38 @@ def navigate_from_text(text, page_context, role=None):
             resolved = resolve_children(query)
             matches = resolved.get('matches') or []
             if not matches:
-                return {
-                    'text': NAV_NO_MATCH,
-                    'actions': [],
-                    'status': None,
-                    'character_state': 'help',
-                    'error': 'no_child_match',
-                    'handled': True,
-                }
-            if resolved.get('kind') == 'multiple':
-                return {
-                    'text': NAV_NEED_CHOICE,
-                    'actions': _choice_actions(matches, destination),
-                    'status': None,
-                    'character_state': 'help',
-                    'candidates': matches,
-                    'pending_hint': {
-                        'type': 'navigate',
-                        'destination': destination,
-                        'missing': ['child'],
-                        'awaiting': 'child',
-                    },
-                    'handled': True,
-                }
-            if resolved.get('needs_confirmation') or resolved.get('kind') == 'fuzzy':
-                child = matches[0]
-                grade = child.get('grade')
-                name = child.get('name')
-                ask = (
-                    f'{grade}학년 {name}을 말씀하시는 건가요?'
-                    if grade not in (None, '')
-                    else f'{name}을 말씀하시는 건가요?'
+                page_child = (page_context or {}).get('child_id')
+                if page_child and len(query.replace(' ', '')) < 2:
+                    params['child_id'] = page_child
+                else:
+                    return {
+                        'text': NAV_NO_MATCH,
+                        'actions': [],
+                        'status': None,
+                        'character_state': 'help',
+                        'error': 'no_child_match',
+                        'handled': True,
+                    }
+            elif resolved.get('kind') == 'multiple':
+                from features.assistant.conversation import choice_payload, pending_need_child
+                pending = pending_need_child(destination=destination)
+                hint_state = {'pending_action': pending}
+                payload = choice_payload(
+                    hint_state,
+                    matches,
+                    pending=pending,
+                    query=query,
+                    match_type=resolved.get('match_type'),
                 )
+                payload['pending_hint'] = hint_state.get('pending_action')
+                return payload
+            elif resolved.get('needs_confirmation') or resolved.get('kind') == 'fuzzy':
+                from features.assistant.conversation import confirmation_actions, confirmation_text
+                child = matches[0]
+                name = child.get('name')
                 return {
-                    'text': ask,
-                    'actions': [
-                        {
-                            'type': 'reply',
-                            'label': f'네, {name}이에요',
-                            'content': '응',
-                        },
-                        {
-                            'type': 'reply',
-                            'label': '다른 아동 찾기',
-                            'content': '아니',
-                        },
-                    ],
+                    'text': confirmation_text(child),
+                    'actions': confirmation_actions(name),
                     'status': None,
                     'character_state': 'help',
                     'pending_hint': {
@@ -431,7 +417,8 @@ def navigate_from_text(text, page_context, role=None):
                     },
                     'handled': True,
                 }
-            params['child_id'] = matches[0]['id']
+            elif matches:
+                params['child_id'] = matches[0]['id']
         elif (page_context or {}).get('child_id'):
             params['child_id'] = page_context['child_id']
     payload = navigate_payload(

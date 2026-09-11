@@ -28,12 +28,25 @@ from features.assistant.config import (
     TEACHER_ASSISTANT_PROVIDER_ENV,
     assistant_provider_name,
 )
-from features.assistant.copy import SETUP_FORBIDDEN
-from features.assistant.facts import growth_facts_for_child
+from features.assistant.copy import (
+    CONTEXT_REPAIR_FALLBACK,
+    FALLBACK,
+    MSG_FOCUS_UNAVAILABLE,
+    POINT_AVERAGE_UNSUPPORTED,
+    SETUP_FORBIDDEN,
+)
+from features.assistant.facts import compact_facts, facts_matching_focus, growth_facts_for_child
 from features.assistant.help import search_help
-from features.assistant.openai_provider import OpenAIAssistantProvider
-from features.assistant.provider import FakeAssistantProvider, get_assistant_provider
-from features.assistant.tools import ALLOWED_TOOLS, execute_tool
+from features.assistant.navigation import (
+    classify_remainder_domain,
+    extract_child_query,
+    split_child_request,
+)
+from features.assistant.openai_provider import OpenAIAssistantProvider, SYSTEM_PROMPT
+from features.assistant.persona import MUON_NAME, MUON_NAME_EN
+from features.assistant.provider import FakeAssistantProvider, compose_from_tools, get_assistant_provider
+from features.assistant.safety import sanitize_output
+from features.assistant.tools import ALLOWED_TOOLS, TOOL_SCHEMAS, dump_tool_result, execute_tool
 from features.growth.ai.runtime import build_current_packet
 from features.progress.service import ensure_default_subjects
 
@@ -175,6 +188,35 @@ class FactsToolTests(AssistantToolsCase):
             if fact['available'] is False:
                 self.assertIsNone(fact.get('value'))
 
+    def test_point_average_is_not_a_canonical_capability(self):
+        self._daily(date(2026, 9, 2), korean=120)
+        result = execute_tool(
+            'get_points_facts',
+            {
+                'child_id': self.child.id,
+                'requested_metric': 'average',
+            },
+            page_context={'endpoint': 'dashboard'},
+            role='돌봄선생님',
+        )
+        self.assertTrue(result['ok'])
+        self.assertFalse(result['metric_supported'])
+        self.assertEqual(result['requested_metric'], 'average')
+        self.assertIn('평균', result['capability_note'])
+        self.assertFalse(any('평균' in (fact.get('label') or '') for fact in result['facts']))
+
+        with app.test_request_context('/'):
+            completion = compose_from_tools([{
+                'name': 'get_points_facts',
+                'arguments': {
+                    'child_id': self.child.id,
+                    'requested_metric': 'average',
+                },
+                'result': result,
+            }])
+        self.assertEqual(completion.text, POINT_AVERAGE_UNSUPPORTED)
+        self.assertNotIn('확인하고 싶은 아동 기록', completion.text)
+
     def test_reading_facts_exclude_review_text(self):
         self._reading(date(2026, 9, 3))
         payload = growth_facts_for_child(self.child.id, as_of=AS_OF, topic='reading')
@@ -195,6 +237,392 @@ class FactsToolTests(AssistantToolsCase):
         got = {fact['evidence_id'] for fact in payload['facts']}
         self.assertTrue(got)
         self.assertTrue(got <= expected_ids)
+
+    def test_reading_facts_use_korean_presentation_without_internal_keys(self):
+        packet = {
+            'scope': {},
+            'supporting_facts': {
+                'reading': {
+                    'activity_days': {
+                        'current': _fact('reading.activity_days.current', 0, unit='day'),
+                        'previous': _fact('reading.activity_days.previous', 13, unit='day'),
+                        'delta': _fact('reading.activity_days.delta', -13, unit='day'),
+                    },
+                    'completions': {
+                        'current': _fact('reading.completions.current', 0, unit='book'),
+                        'previous': _fact('reading.completions.previous', 4, unit='book'),
+                    },
+                    'analysis': {
+                        'recent_count': _fact('reading.analysis.recent_count', 0),
+                    },
+                },
+            },
+        }
+        facts = compact_facts(packet, topic='reading')
+        by_id = {fact['evidence_id']: fact for fact in facts}
+        self.assertEqual(by_id['reading.activity_days.current']['label'], '최근 기간 독서 활동')
+        self.assertEqual(by_id['reading.activity_days.current']['display_value'], '0일')
+        self.assertEqual(by_id['reading.activity_days.previous']['display_value'], '13일')
+        self.assertEqual(by_id['reading.activity_days.delta']['display_value'], '13일 감소')
+        self.assertEqual(by_id['reading.completions.current']['display_value'], '0권')
+        self.assertEqual(by_id['reading.completions.previous']['display_value'], '4권')
+        self.assertEqual(by_id['reading.analysis.recent_count']['label'], '최근 기간 독서 기록')
+        self.assertEqual(by_id['reading.analysis.recent_count']['display_value'], '0건')
+
+        result = {
+            'ok': True,
+            'child': {'id': self.child.id, 'name': self.child.name, 'grade': self.child.grade},
+            'facts': facts,
+        }
+        with app.test_request_context('/'):
+            completion = compose_from_tools([{
+                'name': 'get_reading_facts',
+                'arguments': {'child_id': self.child.id},
+                'result': result,
+            }])
+        provider_payload = dump_tool_result(result)
+        visible = completion.text + provider_payload
+        self.assertNotIn('activity_days', visible)
+        self.assertNotIn('reading.completions', visible)
+        self.assertNotIn('reading_completions_current', visible)
+        self.assertIn('독서 활동', completion.text)
+        self.assertIn('13일 → 0일', completion.text)
+        self.assertNotIn('변화 기간', completion.text)
+        self.assertNotIn('성장 자료', completion.text)
+        self.assertLessEqual(len(completion.sources), 5)
+
+    def test_nickname_domain_words_stay_in_child_query(self):
+        self.assertEqual(extract_child_query('시드-독서감소 정보 좀'), '시드-독서감소')
+        self.assertEqual(extract_child_query('시드-포인트하위 정보 좀'), '시드-포인트하위')
+        self.assertEqual(extract_child_query('시드-진도증가 정보 좀'), '시드-진도증가')
+        split = split_child_request('시드-독서감소 포인트 알려줘')
+        self.assertEqual(split['child_query'], '시드-독서감소')
+        self.assertIn('포인트', split['remainder'])
+        self.assertIsNone(classify_remainder_domain(split_child_request('시드-포인트하위 정보 좀')['remainder']))
+        self.assertEqual(
+            classify_remainder_domain(split_child_request('시드-포인트하위 독서 알려줘')['remainder'])['kind'],
+            'reading',
+        )
+        self.assertEqual(
+            classify_remainder_domain(split_child_request('시드-독서감소 포인트 알려줘')['remainder'])['kind'],
+            'points',
+        )
+        self.assertEqual(
+            classify_remainder_domain(split_child_request('시드-진도증가 수학 알려줘')['remainder'])['kind'],
+            'learning',
+        )
+
+    def test_point_summary_is_readable_and_avoids_internal_labels(self):
+        facts = [
+            {
+                'evidence_id': 'points.period_total.current',
+                'label': '최근 기간 포인트',
+                'value': 1700,
+                'display_value': '1,700점',
+                'available': True,
+            },
+            {
+                'evidence_id': 'points.period_total.previous',
+                'label': '이전 기간 포인트',
+                'value': 300,
+                'display_value': '300점',
+                'available': True,
+            },
+            {
+                'evidence_id': 'points.period_total.delta',
+                'label': '포인트 변화',
+                'value': 1400,
+                'display_value': '1,400점 증가',
+                'available': True,
+            },
+            {
+                'evidence_id': 'points.cumulative_as_of',
+                'label': '현재 누적 포인트',
+                'value': 2500,
+                'display_value': '2,500점',
+                'available': True,
+            },
+        ]
+        with app.test_request_context('/'):
+            completion = compose_from_tools([{
+                'name': 'get_points_facts',
+                'arguments': {'child_id': self.child.id},
+                'result': {
+                    'ok': True,
+                    'child': {'id': self.child.id, 'name': '시드-포인트하위'},
+                    'facts': facts,
+                },
+            }])
+        self.assertIn('\n', completion.text)
+        self.assertIn('1,700점', completion.text)
+        self.assertIn('이전 기간', completion.text)
+        self.assertIn('변화', completion.text)
+        self.assertNotIn('변화 기간 포인트', completion.text)
+        self.assertNotIn('성장 자료', completion.text)
+        self.assertLessEqual(len(completion.sources), 5)
+        labels = [item.get('label') for item in completion.sources]
+        self.assertEqual(len(labels), len(set(labels)))
+
+    def test_focused_metric_does_not_dump_unrelated_facts(self):
+        facts = [
+            {
+                'evidence_id': 'reading.recommended.completions.current',
+                'label': '최근 기간 추천도서 완독',
+                'value': 0,
+                'display_value': '0권',
+                'available': True,
+            },
+            {
+                'evidence_id': 'reading.recommended.completions.previous',
+                'label': '이전 기간 추천도서 완독',
+                'value': 1,
+                'display_value': '1권',
+                'available': True,
+            },
+            {
+                'evidence_id': 'reading.recommended.completions.delta',
+                'label': '추천도서 완독 변화',
+                'value': -1,
+                'display_value': '1권 감소',
+                'available': True,
+            },
+            {
+                'evidence_id': 'reading.activity_days.current',
+                'label': '최근 기간 독서 활동',
+                'value': 0,
+                'display_value': '0일',
+                'available': True,
+            },
+        ]
+        with app.test_request_context('/'):
+            completion = compose_from_tools([{
+                'name': 'get_reading_facts',
+                'arguments': {'child_id': self.child.id, 'focus': '추천도서 완독 변화는?'},
+                'result': {
+                    'ok': True,
+                    'child': {'id': self.child.id, 'name': self.child.name},
+                    'facts': facts,
+                    'focus': '추천도서 완독 변화는?',
+                },
+            }], user_text='추천도서 완독 변화는?')
+        self.assertIn('추천도서 완독', completion.text)
+        self.assertNotIn('독서 활동', completion.text)
+        self.assertLess(completion.text.count('\n'), 4)
+        self.assertLessEqual(len(completion.sources), 3)
+
+    def test_learning_facts_do_not_include_point_composition(self):
+        packet = {
+            'scope': {},
+            'supporting_facts': {
+                'points': {
+                    'composition': {
+                        'subjects': {
+                            'math': {
+                                'points': {
+                                    'current': _fact(
+                                        'points.composition.subjects.math.points.current', 2000,
+                                    ),
+                                    'previous': _fact(
+                                        'points.composition.subjects.math.points.previous', 1900,
+                                    ),
+                                },
+                                'active_days': {
+                                    'current': _fact(
+                                        'points.composition.subjects.math.active_days.current', 13,
+                                    ),
+                                },
+                            },
+                        },
+                    },
+                },
+                'learning': {
+                    'subjects': {
+                        'math': {
+                            'subject_key': 'math',
+                            'subject_label': '수학',
+                            'performance': {
+                                'current': {
+                                    'expected_days': _fact(
+                                        'learning.math.performance.expected_days.current', 10,
+                                    ),
+                                    'studied_days': _fact(
+                                        'learning.math.performance.studied_days.current', 1,
+                                    ),
+                                    'rate': _fact(
+                                        'learning.math.performance.rate.current', 0.1,
+                                    ),
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        learning = compact_facts(packet, topic='learning', subject_key='math')
+        ids = [fact['evidence_id'] for fact in learning]
+        self.assertTrue(ids)
+        self.assertTrue(all(item.startswith('learning.math.') for item in ids))
+        self.assertFalse(any(item.startswith('points.') for item in ids))
+        self.assertFalse(any(fact.get('label') == '성장 자료' for fact in learning))
+        by_id = {fact['evidence_id']: fact for fact in learning}
+        self.assertEqual(by_id['learning.math.performance.expected_days.current']['label'], '최근 수학 예정 학습일')
+        self.assertEqual(by_id['learning.math.performance.studied_days.current']['label'], '최근 수학 학습일')
+
+        points = compact_facts(packet, topic='points')
+        point_ids = [fact['evidence_id'] for fact in points]
+        self.assertIn('points.composition.subjects.math.points.current', point_ids)
+        self.assertIn('points.composition.subjects.math.active_days.current', point_ids)
+        by_point = {fact['evidence_id']: fact for fact in points}
+        self.assertEqual(
+            by_point['points.composition.subjects.math.points.current']['label'],
+            '최근 기간 수학 포인트',
+        )
+        self.assertEqual(
+            by_point['points.composition.subjects.math.active_days.current']['label'],
+            '최근 기간 수학 포인트 활동일',
+        )
+        self.assertFalse(any(fact.get('label') == '성장 자료' for fact in points))
+
+    def test_focused_metric_does_not_repeat_full_summary(self):
+        facts = [
+            {
+                'evidence_id': 'reading.activity_days.current',
+                'label': '최근 기간 독서 활동',
+                'available': True,
+                'value': 2,
+                'display_value': '2일',
+            },
+            {
+                'evidence_id': 'reading.recommended.completions.current',
+                'label': '최근 기간 추천도서 완독',
+                'available': True,
+                'value': 3,
+                'display_value': '3권',
+            },
+            {
+                'evidence_id': 'reading.recommended.completions.previous',
+                'label': '이전 기간 추천도서 완독',
+                'available': True,
+                'value': 5,
+                'display_value': '5권',
+            },
+            {
+                'evidence_id': 'reading.recommended.completions.delta',
+                'label': '추천도서 완독 변화',
+                'available': True,
+                'value': -2,
+                'display_value': '2권 감소',
+            },
+        ]
+        focused = facts_matching_focus(facts, '추천도서 완독 변화는?')
+        self.assertTrue(any(item['evidence_id'].endswith('.delta') for item in focused))
+        self.assertFalse(any(item['evidence_id'] == 'reading.activity_days.current' for item in focused))
+        with app.test_request_context('/'):
+            completion = compose_from_tools([{
+                'name': 'get_reading_facts',
+                'arguments': {'child_id': self.child.id},
+                'result': {
+                    'ok': True,
+                    'child': {'id': self.child.id, 'name': self.child.name},
+                    'facts': facts,
+                },
+            }], user_text='추천도서 완독 변화는?')
+        self.assertIn('추천도서 완독', completion.text)
+        self.assertIn('2권 감소', completion.text)
+        self.assertNotIn('최근 기간 독서 활동', completion.text)
+        self.assertNotIn('확인된 기록입니다', completion.text)
+
+    def test_missing_metric_is_not_invented(self):
+        with app.test_request_context('/'):
+            completion = compose_from_tools([{
+                'name': 'get_reading_facts',
+                'arguments': {'child_id': self.child.id, 'focus': '없는지표변화'},
+                'result': {
+                    'ok': True,
+                    'child': {'id': self.child.id, 'name': self.child.name},
+                    'facts': [{
+                        'evidence_id': 'reading.activity_days.current',
+                        'label': '최근 기간 독서 활동',
+                        'available': True,
+                        'value': 2,
+                        'display_value': '2일',
+                    }],
+                    'focus': '없는지표변화',
+                    'focus_unmatched': True,
+                },
+            }], user_text='없는지표변화는?')
+        self.assertEqual(completion.text, MSG_FOCUS_UNAVAILABLE)
+        self.assertNotIn('2일', completion.text)
+
+    def test_navigate_success_text_matches_action(self):
+        with app.test_request_context('/'):
+            completion = compose_from_tools([{
+                'name': 'navigate',
+                'arguments': {'destination': 'points_detail'},
+                'result': {
+                    'ok': True,
+                    'url': '/children/1/points',
+                    'destination': 'points_detail',
+                    'label': '포인트 상세',
+                    'child': {'id': self.child.id, 'name': self.child.name},
+                },
+            }], user_text='그럼 포인트 화면으로 가줘')
+        self.assertNotEqual(completion.text, FALLBACK)
+        self.assertIn('포인트 상세 화면으로 이동할게요', completion.text)
+        self.assertTrue(completion.actions)
+        self.assertEqual(completion.actions[0]['destination'], 'points_detail')
+
+    def test_unavailable_presentation_is_not_zero(self):
+        packet = {
+            'scope': {},
+            'supporting_facts': {
+                'reading': {
+                    'activity_days': {
+                        'current': {
+                            'evidence_id': 'reading.activity_days.current',
+                            'available': False,
+                            'status': 'insufficient_history',
+                            'unit': 'day',
+                        },
+                    },
+                },
+            },
+        }
+        fact = compact_facts(packet, topic='reading')[0]
+        self.assertIsNone(fact['value'])
+        self.assertNotEqual(fact['unavailable_reason'], '0')
+        dumped = dump_tool_result({'ok': True, 'facts': [fact]})
+        self.assertNotIn('0일', dumped)
+
+    def test_available_zero_does_not_mask_unrelated_point_summary(self):
+        tool_results = [{
+            'name': 'get_points_facts',
+            'result': {
+                'ok': True,
+                'facts': [
+                    {
+                        'label': '최근 추가 포인트',
+                        'available': True,
+                        'value': 0,
+                    },
+                    {
+                        'label': '이전 기간 포인트',
+                        'available': False,
+                        'value': None,
+                    },
+                ],
+            },
+        }]
+        text = '최근 추가 포인트: 0점\n이전 기간 포인트: 비교 자료 부족'
+        self.assertEqual(sanitize_output(text, tool_results=tool_results), text)
+        invalid = '이전 기간 포인트: 0점'
+        self.assertNotEqual(sanitize_output(invalid, tool_results=tool_results), invalid)
+
+    def test_search_child_schema_requires_extracted_child_query(self):
+        schema = next(item for item in TOOL_SCHEMAS if item.get('name') == 'search_child')
+        params = schema['parameters']
+        self.assertEqual(params['required'], ['query', 'continuation'])
+        self.assertIn('child_query', params['properties']['query']['description'])
 
 
 class HelpAndRoutingTests(AssistantToolsCase):
@@ -334,6 +762,173 @@ class ProviderBoundaryTests(AssistantToolsCase):
         self.assertEqual(calls[0]['store'], False)
         self.assertIn('tools', calls[0])
 
+    def test_search_child_continuation_runs_canonical_tool_after_exact(self):
+        self._progress(date(2026, 9, 1), page=40)
+
+        class Responses:
+            def __init__(self):
+                self.queue = [
+                    SimpleNamespace(
+                        output=[SimpleNamespace(
+                            type='function_call',
+                            name='search_child',
+                            arguments=json.dumps({
+                                'query': '민수',
+                                'continuation': 'get_learning_facts',
+                                'subject_key': 'math',
+                            }),
+                            call_id='search',
+                            model_dump=lambda: {
+                                'type': 'function_call',
+                                'name': 'search_child',
+                                'arguments': json.dumps({
+                                    'query': '민수',
+                                    'continuation': 'get_learning_facts',
+                                    'subject_key': 'math',
+                                }),
+                                'call_id': 'search',
+                            },
+                        )],
+                        output_text='',
+                    ),
+                    SimpleNamespace(output=[], output_text='민수의 수학 학습 기록입니다.'),
+                ]
+
+            def create(self, **_kwargs):
+                return self.queue.pop(0)
+
+        provider = OpenAIAssistantProvider(
+            client=SimpleNamespace(responses=Responses()),
+            api_key='test-key',
+            model='test-model',
+        )
+        self._login(self.teacher)
+        with app.test_request_context('/'):
+            completion = provider.complete(
+                messages=[{'role': 'user', 'content': '민수 수학 진도 알려줘'}],
+                page_context={'endpoint': 'dashboard'},
+            )
+        self.assertEqual(
+            [item['name'] for item in completion.tool_results],
+            ['search_child', 'get_learning_facts'],
+        )
+        self.assertTrue(completion.sources)
+
+    def test_point_average_request_continues_to_explicit_unsupported_result(self):
+        self.child.name = '시드-난이도재미유지'
+        db.session.commit()
+        self._daily(date(2026, 9, 2), korean=120)
+
+        class Responses:
+            def __init__(self):
+                self.queue = [
+                    SimpleNamespace(
+                        output=[SimpleNamespace(
+                            type='function_call',
+                            name='search_child',
+                            arguments=json.dumps({
+                                'query': '시드-난이도재미유지',
+                                'continuation': 'get_points_facts',
+                                'requested_metric': 'average',
+                            }),
+                            call_id='search',
+                            model_dump=lambda: {
+                                'type': 'function_call',
+                                'name': 'search_child',
+                                'arguments': json.dumps({
+                                    'query': '시드-난이도재미유지',
+                                    'continuation': 'get_points_facts',
+                                    'requested_metric': 'average',
+                                }),
+                                'call_id': 'search',
+                            },
+                        )],
+                        output_text='',
+                    ),
+                    SimpleNamespace(output=[], output_text=''),
+                ]
+
+            def create(self, **_kwargs):
+                return self.queue.pop(0)
+
+        provider = OpenAIAssistantProvider(
+            client=SimpleNamespace(responses=Responses()),
+            api_key='test-key',
+            model='test-model',
+        )
+        self._login(self.teacher)
+        with app.test_request_context('/'):
+            completion = provider.complete(
+                messages=[{
+                    'role': 'user',
+                    'content': '시드-난이도재미유지 아동 포인트기록 평균보여줘',
+                }],
+                page_context={'endpoint': 'dashboard'},
+            )
+        self.assertEqual(
+            [item['name'] for item in completion.tool_results],
+            ['search_child', 'get_points_facts'],
+        )
+        self.assertEqual(
+            completion.tool_results[-1]['arguments']['requested_metric'],
+            'average',
+        )
+        self.assertEqual(completion.text, POINT_AVERAGE_UNSUPPORTED)
+
+    def test_muon_identity_and_point_vocabulary_are_in_provider_contract(self):
+        self.assertIn(MUON_NAME, SYSTEM_PROMPT)
+        self.assertIn(MUON_NAME_EN, SYSTEM_PROMPT)
+        self.assertIn('고정값', SYSTEM_PROMPT)
+        self.assertIn('말했잖아', SYSTEM_PROMPT)
+        points = next(item for item in TOOL_SCHEMAS if item.get('name') == 'get_points_facts')
+        description = points['description']
+        for phrase in ('포인트 기록', '포인트 요약', '포인트 통계', '포인트 평균'):
+            self.assertIn(phrase, description)
+
+    def test_standalone_nickname_gets_natural_record_clarification(self):
+        result = execute_tool(
+            'search_child',
+            {'query': '민수', 'continuation': 'search_only'},
+            page_context={'endpoint': 'dashboard'},
+            role='돌봄선생님',
+        )
+        completion = compose_from_tools([{
+            'name': 'search_child',
+            'arguments': {'query': '민수', 'continuation': 'search_only'},
+            'result': result,
+        }])
+        self.assertIn('민수 아동을 확인했어요', completion.text)
+        self.assertIn('어떤 기록을 볼까요?', completion.text)
+        self.assertIn('학습, 포인트, 독서, 성장 기록', completion.text)
+        self.assertNotIn('확인하고 싶은 아동 기록', completion.text)
+
+    def test_empty_provider_output_after_repair_uses_contextual_fallback(self):
+        class Responses:
+            def create(self, **_kwargs):
+                return SimpleNamespace(output=[], output_text='')
+
+        provider = OpenAIAssistantProvider(
+            client=SimpleNamespace(responses=Responses()),
+            api_key='test-key',
+            model='test-model',
+        )
+        completion = provider.complete(
+            messages=[
+                {
+                    'role': 'user',
+                    'content': '시드-난이도재미유지 아동 포인트기록 평균보여줘',
+                },
+                {
+                    'role': 'assistant',
+                    'content': '요청을 제대로 처리하지 못했어요.',
+                },
+                {'role': 'user', 'content': '말했잖아이미'},
+            ],
+            page_context={'endpoint': 'dashboard'},
+        )
+        self.assertEqual(completion.text, CONTEXT_REPAIR_FALLBACK)
+        self.assertNotIn('확인하고 싶은 아동 기록', completion.text)
+
     def test_provider_failure_does_not_break_page(self):
         self._login(self.teacher)
         with patch('features.assistant.runtime.get_assistant_provider') as get_provider:
@@ -456,6 +1051,18 @@ class RuntimeFixTests(AssistantToolsCase):
         page = self.client.get('/dashboard')
         self.assertEqual(page.status_code, 200)
         self.assertIn('data-testid="assistant-reset"', page.get_data(as_text=True))
+
+
+def _fact(evidence_id, value=None, *, available=True, unit=None):
+    fact = {
+        'evidence_id': evidence_id,
+        'available': available,
+    }
+    if available:
+        fact['value'] = value
+    if unit:
+        fact['unit'] = unit
+    return fact
 
 
 def _walk_ids(node):

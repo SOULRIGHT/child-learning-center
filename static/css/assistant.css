@@ -236,6 +236,23 @@ body:has(.assistant-drawer.showing) .sidebar-toggle {
     color: #1f2937;
 }
 
+.assistant-fact-p {
+    margin: 0 0 0.45rem;
+}
+
+.assistant-fact-p:last-child {
+    margin-bottom: 0;
+}
+
+.assistant-fact-list {
+    margin: 0.1rem 0 0.55rem;
+    padding-left: 1.15rem;
+}
+
+.assistant-fact-list li {
+    margin: 0.12rem 0;
+}
+
 .assistant-bubble.is-user {
     background: #dbeafe;
     color: #1e3a8a;

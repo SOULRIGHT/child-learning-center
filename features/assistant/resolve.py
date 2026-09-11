@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from difflib import SequenceMatcher
+import unicodedata
 
 from features.assistant.navigation import child_public
 from features.reading.access import model_named
@@ -15,7 +16,11 @@ MIN_FUZZY_LEN = 3
 
 
 def normalize_nickname(value):
-    return ' '.join(str(value or '').split()).strip()
+    text = unicodedata.normalize('NFKC', str(value or ''))
+    for dash in ('‐', '‑', '‒', '–', '—', '―'):
+        text = text.replace(dash, '-')
+    text = ' '.join(text.split()).strip()
+    return text.replace(' -', '-').replace('- ', '-')
 
 
 def resolve_children(query):
@@ -34,7 +39,7 @@ def resolve_children(query):
     if len(exact) == 1:
         return _result('exact', exact)
     if len(exact) > 1:
-        return _result('multiple', exact)
+        return _result('multiple', exact, match_type='exact')
 
     if len(text) >= MIN_PARTIAL_LEN:
         partial = (
@@ -46,7 +51,7 @@ def resolve_children(query):
         if len(partial) == 1:
             return _result('partial', partial)
         if len(partial) > 1:
-            return _result('multiple', partial)
+            return _result('multiple', partial, match_type='partial')
 
     if len(text) < MIN_FUZZY_LEN:
         return _result('none', [])
@@ -73,15 +78,78 @@ def resolve_children(query):
         return _result('fuzzy', [scored[0][1]], needs_confirmation=True)
     close = [child for ratio, child in scored if ratio >= FUZZY_MIN_RATIO][:SEARCH_LIMIT]
     if len(close) > 1:
-        return _result('multiple', close)
+        return _result('multiple', close, match_type='fuzzy')
     return _result('none', [])
 
 
-def _result(kind, children, *, needs_confirmation=False):
+def select_child_resolution(results):
+    """여러 LLM search 요청 중 resolver 단계가 가장 확정적인 결과 하나만 선택한다."""
+    rows = [row for row in results or () if isinstance(row, dict)]
+
+    exact = [row for row in rows if row.get('kind') == 'exact']
+    if exact:
+        return _merge_unique_matches('exact', exact)
+    exact_multiple = [
+        row for row in rows
+        if row.get('kind') == 'multiple' and row.get('match_type') == 'exact'
+    ]
+    if exact_multiple:
+        return exact_multiple[-1]
+
+    partial = [row for row in rows if row.get('kind') == 'partial']
+    if partial:
+        return _merge_unique_matches('partial', partial)
+    partial_multiple = [
+        row for row in rows
+        if row.get('kind') == 'multiple' and row.get('match_type') in (None, 'partial')
+    ]
+    if partial_multiple:
+        return partial_multiple[-1]
+
+    fuzzy_multiple = [
+        row for row in rows
+        if row.get('kind') == 'multiple' and row.get('match_type') == 'fuzzy'
+    ]
+    if fuzzy_multiple:
+        return fuzzy_multiple[-1]
+    fuzzy = [row for row in rows if row.get('kind') == 'fuzzy']
+    if fuzzy:
+        return _merge_unique_matches('fuzzy', fuzzy, needs_confirmation=True)
+    return rows[-1] if rows else None
+
+
+def _merge_unique_matches(kind, rows, *, needs_confirmation=False):
+    matches = {}
+    for row in rows:
+        for child in row.get('matches') or ():
+            child_id = child.get('id') if isinstance(child, dict) else None
+            if child_id is not None:
+                matches[child_id] = child
+    if len(matches) == 1:
+        return {
+            'ok': True,
+            'kind': kind,
+            'match_type': kind,
+            'matches': list(matches.values()),
+            'count': 1,
+            'needs_confirmation': bool(needs_confirmation),
+        }
+    return {
+        'ok': True,
+        'kind': 'multiple',
+        'match_type': kind,
+        'matches': list(matches.values())[:SEARCH_LIMIT],
+        'count': len(matches),
+        'needs_confirmation': False,
+    }
+
+
+def _result(kind, children, *, needs_confirmation=False, match_type=None):
     matches = [child_public(child) for child in children if child is not None]
     return {
         'ok': True,
         'kind': kind,
+        'match_type': match_type or kind,
         'matches': matches,
         'count': len(matches),
         'needs_confirmation': bool(needs_confirmation and kind == 'fuzzy' and len(matches) == 1),

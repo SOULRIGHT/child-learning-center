@@ -23,7 +23,8 @@ BLOCKED_VALUE_MARKERS = (
     'sk-', 'OPENAI_API_KEY', 'review_text', 'SYSTEM_PROMPT', 'Bearer ',
 )
 SAFE_ARG_KEYS = frozenset({
-    'destination', 'child_id', 'query', 'as_of', 'subject_key',
+    'destination', 'child_id', 'query', 'child_query', 'continuation', 'requested_metric',
+    'as_of', 'subject_key',
 })
 MAX_TEXT = 2000
 
@@ -114,6 +115,8 @@ def safe_state_summary(state):
                 if isinstance(item, str)
             ][:4],
             'candidate_child_id': pending.get('candidate_child_id'),
+            'candidate_count': len(pending.get('candidates') or ()),
+            'match_type': str(pending.get('match_type') or '')[:20] or None,
         }
     return summary
 
@@ -169,7 +172,7 @@ def record_tool(recorder, *, name, arguments, allowed, success, error=None, late
 
 
 def record_request_end(recorder):
-    append_event({
+    event = {
         'event': 'response',
         'request_id': recorder.get('request_id'),
         'resolved_child_id': recorder.get('resolved_child_id'),
@@ -185,7 +188,21 @@ def record_request_end(recorder):
         'feedback_enabled': bool(recorder.get('feedback_enabled')),
         'conversation_state': safe_state_summary(recorder.get('conversation_state')),
         'last_user_kind': recorder.get('last_user_kind'),
-    })
+    }
+    if recorder.get('candidate_count') is not None:
+        try:
+            event['candidate_count'] = int(recorder.get('candidate_count'))
+        except (TypeError, ValueError):
+            pass
+    match_type = recorder.get('match_type')
+    if match_type in {'exact', 'partial', 'fuzzy'}:
+        event['match_type'] = match_type
+    if recorder.get('selected_candidate_index') is not None:
+        try:
+            event['selected_candidate_index'] = int(recorder.get('selected_candidate_index'))
+        except (TypeError, ValueError):
+            pass
+    append_event(event)
 
 
 def record_feedback(*, request_id, user_id, rating):

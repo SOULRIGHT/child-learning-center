@@ -1,14 +1,24 @@
 """교사 대상 짧은 조교 문구. 유아틱/장문 essay 금지."""
 
-GREETING = '무엇을 도와드릴까요?'
-GREETING_REPLY = '안녕하세요. 학습·포인트·독서 기록이나 화면 이동을 도와드릴게요.'
+from features.assistant.persona import (
+    MUON_CAPABILITY_REPLY,
+    MUON_CONTEXT_REPAIR_FALLBACK,
+    MUON_GREETING_REPLY,
+    MUON_POINT_AVERAGE_UNSUPPORTED,
+)
+
+GREETING = '뮤온에게 무엇을 물어볼까요?'
+GREETING_REPLY = MUON_GREETING_REPLY
 HELP_SCOPE = '지금은 화면 이동, 센터 설정 안내, 학습·포인트·독서 기록 확인을 도와드릴 수 있어요.'
 SETUP_CONTINUE = '센터 설정을 순서대로 확인할 수 있어요.'
 SETUP_FORBIDDEN = '이 설정은 현재 계정에서 열 수 없습니다.'
 NAV_UNKNOWN = '그 화면은 열 수 있는 목록에 없습니다.'
 NAV_NEED_CHILD = '이동하려면 아동을 먼저 지정해 주세요.'
 NAV_INVALID_CHILD = '해당 아동을 찾을 수 없습니다.'
-NAV_NEED_CHOICE = '같은 이름의 아동이 여러 명입니다. 아래에서 선택해 주세요.'
+NAV_NEED_CHOICE = '같은 이름의 아동이 여러 명 있습니다. 아래에서 선택해 주세요.'
+NAV_NEED_CHOICE_PARTIAL = '{query}와 일치하는 아동이 여러 명 있어요. 아래에서 선택해 주세요.'
+NAV_NEED_CHOICE_GENERIC = '이름과 일치하는 아동이 여러 명 있어요. 아래에서 선택해 주세요.'
+NAV_CHOICE_INVALID = '목록에 있는 번호로 선택해 주세요.'
 NAV_NO_MATCH = '이름에 해당하는 아동을 찾지 못했습니다.'
 NAV_NEED_NAME = '어느 아동의 화면을 열까요? 이름을 알려 주세요.'
 PAGE_GENERIC = '현재 화면의 내용을 확인하고, 필요한 설정이나 아동 화면으로 이동할 수 있어요.'
@@ -20,7 +30,9 @@ FALLBACK = '확인하고 싶은 아동 기록이나 화면을 짧게 말씀해 �
 ASK_RETRY = '응답을 가져오지 못했습니다.'
 OPENING_GROWTH = '성장 리포트로 이동할게요.'
 OPENING_READING = '독서 기록으로 이동할게요.'
+OPENING_POINTS = '포인트 상세 화면으로 이동할게요.'
 OPENING_GENERIC = '해당 화면으로 이동할게요.'
+MSG_FOCUS_UNAVAILABLE = '현재 기록에서는 요청하신 항목의 값을 확인하기 어렵습니다.'
 
 QUICK_CONTINUE_SETUP = '센터 설정 이어서 하기'
 QUICK_EXPLAIN_PAGE = '현재 화면 설명'
@@ -30,25 +42,23 @@ QUICK_CHILD_SUMMARY = '현재 아동 학습 요약'
 MSG_UNAVAILABLE = '지금 확인할 수 있는 기록이 없습니다.'
 MSG_NO_HELP = '관련 안내 문서를 찾지 못했습니다.'
 MSG_NEED_CHILD_FACTS = '어느 아동의 기록을 볼까요? 이름을 알려 주세요.'
-FUZZY_CONFIRM = '{grade}학년 {name}을 말씀하시는 건가요?'
+FUZZY_CONFIRM = '{grade}학년 {name} 아동을 말씀하시는 건가요?'
 CONFIRM_YES = '네, {name}이에요'
 CONFIRM_OTHER = '다른 아동 찾기'
 NO_RANK_REPLY = '순위나 백분위는 제공하지 않습니다. 같은 기준의 또래 중앙값만 참고할 수 있어요.'
 NO_RAW_READING_REPLY = '감상문 원문은 조교가 보여 드릴 수 없어요. 필요하면 독서 기록 화면에서 확인해 주세요.'
 POLICY_SCOPE_REPLY = '조교는 허용된 조회 및 화면 이동 기능만 사용할 수 있습니다.'
 DRAWER_NOTICE = (
-    '아동의 학습·포인트·독서 기록을 확인하고, '
+    '뮤온은 아동의 학습·포인트·독서 기록을 확인하고, '
     '센터 설정을 안내하거나 필요한 화면으로 이동할 수 있어요. '
     '한 대화에서는 최대 10번 질문할 수 있습니다.'
 )
 QUESTION_LIMIT_REPLY = '이번 대화의 질문을 모두 사용했습니다.'
 NEW_CONVERSATION = '새 대화 시작'
 TOOL_ROUND_LIMIT_NOTE = '지금은 여기까지 확인한 내용만 말씀드릴게요. 더 필요하면 이어서 질문해 주세요.'
-CAPABILITY_REPLY = (
-    '아동 찾기, 성장·학습 진도·수행률·완료예상 조회, 또래 중앙값 참고, '
-    '포인트·독서 공개 요약, 센터 설정 상태, 화면 이동, 운영 안내, 근거 표시를 도와드릴 수 있어요. '
-    '데이터 수정, 순위, 감상문 원문, 자유 DB 조회, Growth/Reading AI 자동 실행은 할 수 없습니다.'
-)
+CAPABILITY_REPLY = MUON_CAPABILITY_REPLY
+POINT_AVERAGE_UNSUPPORTED = MUON_POINT_AVERAGE_UNSUPPORTED
+CONTEXT_REPAIR_FALLBACK = MUON_CONTEXT_REPAIR_FALLBACK
 
 PAGE_DESCRIPTIONS = {
     'dashboard': '센터의 오늘 현황을 한눈에 보는 화면입니다.',
@@ -103,9 +113,20 @@ def page_title(endpoint):
     return PAGE_TITLES.get(endpoint, '')
 
 
+def choice_need_text(query=None, match_type=None):
+    if match_type == 'exact':
+        return NAV_NEED_CHOICE
+    nickname = str(query or '').strip()[:40]
+    if nickname:
+        return NAV_NEED_CHOICE_PARTIAL.format(query=nickname)
+    return NAV_NEED_CHOICE_GENERIC
+
+
 def opening_text(destination_key):
     if destination_key == 'growth':
         return OPENING_GROWTH
     if destination_key == 'reading_history':
         return OPENING_READING
+    if destination_key == 'points_detail':
+        return OPENING_POINTS
     return OPENING_GENERIC

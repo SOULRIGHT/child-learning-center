@@ -28,7 +28,7 @@ from features.assistant.conversation import (
     tool_page_context,
     update_state_from_tools,
 )
-from features.assistant.copy import FALLBACK, PROVIDER_ERROR, QUESTION_LIMIT_REPLY
+from features.assistant.copy import FALLBACK, PROVIDER_ERROR, QUESTION_LIMIT_REPLY, opening_text
 from features.assistant.intents import (
     bootstrap_payload,
     explain_page_payload,
@@ -39,6 +39,7 @@ from features.assistant.intents import (
 )
 from features.assistant.policy import gated_execute
 from features.assistant.provider import AssistantProviderError, compose_from_tools, get_assistant_provider
+from features.assistant.resolve import select_child_resolution
 from features.assistant.safety import sanitize_output, safety_override_payload
 
 MAX_MESSAGES = 48
@@ -367,6 +368,9 @@ def _dispatch(*, messages, page_context, intent, destination, params, state, las
         text = sanitize_output(pending_done.get('text') or '', user_text=last)
         pending_done = dict(pending_done)
         pending_done['text'] = text
+        for key in ('selected_candidate_index', 'candidate_count', 'match_type'):
+            if pending_done.get(key) is not None:
+                audit[key] = pending_done[key]
         return _result(
             page_context=page_context, **pending_done, conversation_state=state, kind='confirm',
         ), {'kind': 'confirm', 'conversation_state': state}
@@ -473,7 +477,7 @@ def _complete_live(*, messages, page_context, state, pending_before, last, role,
             kind='confirm',
         ), state, False, False
     state = _prepare_resolution_pending(state, last, tool_results)
-    state = update_state_from_tools(state, tool_results, page_context=page_context)
+    state = update_state_from_tools(state, tool_results, page_context=page_context, user_text=last)
     slot_completion = _is_pending_slot_completion(
         pending_before,
         last,
@@ -481,6 +485,9 @@ def _complete_live(*, messages, page_context, state, pending_before, last, role,
     )
     resolution = child_resolution_payload(state, tool_results)
     if resolution:
+        for key in ('selected_candidate_index', 'candidate_count', 'match_type'):
+            if resolution.get(key) is not None:
+                audit[key] = resolution[key]
         return _result(
             page_context=page_context,
             **resolution,
@@ -493,7 +500,27 @@ def _complete_live(*, messages, page_context, state, pending_before, last, role,
         tool_results=tool_results,
         system_prompt=_live_prompt_marker(),
     )
+    from features.assistant.facts import infer_metric_focus
+    names = {item.get('name') for item in tool_results or ()}
+    should_compose = infer_metric_focus(last) or any(
+        str(name).endswith('_facts') or name in {'search_child', 'get_subject_peer_reference'}
+        for name in names
+    )
+    if should_compose and tool_results:
+        composed = compose_from_tools(tool_results, user_text=last, role=role)
+        if composed.text and composed.text != FALLBACK:
+            text = sanitize_output(
+                composed.text,
+                user_text=last,
+                tool_results=tool_results,
+                system_prompt=_live_prompt_marker(),
+            )
+            if composed.sources:
+                completion.sources = composed.sources
+            if composed.actions:
+                completion.actions = composed.actions
     actions = list(completion.actions or [])
+    text = _align_navigate_text(text, actions)
     sources = getattr(completion, 'sources', None) or []
     from features.assistant.navigation import is_explicit_go, match_destination_from_text
     clear_nav = is_explicit_go(last) and match_destination_from_text(last)
@@ -504,7 +531,11 @@ def _complete_live(*, messages, page_context, state, pending_before, last, role,
         )
         and (not sources or clear_nav)
     ):
-        interpreted = interpret_user_text(last, page_context, role=role)
+        interpreted = interpret_user_text(
+            last,
+            tool_page_context(page_context, state),
+            role=role,
+        )
         if interpreted.get('handled'):
             state = _apply_payload_hint(state, interpreted)
             text = sanitize_output(interpreted.get('text') or '', user_text=last)
@@ -584,10 +615,15 @@ def _complete_fake(*, messages, page_context, state, last, role, audit):
             state,
             [{'name': name, 'arguments': arguments, 'result': result}],
             page_context=page_context,
+            user_text=last,
         )
         return _completion_result(completion, page_context, state, last, kind='chat'), state, 'chat', True
 
-    interpreted = interpret_user_text(last, page_context, role=role)
+    interpreted = interpret_user_text(
+        last,
+        tool_page_context(page_context, state),
+        role=role,
+    )
     if interpreted.get('handled'):
         state = _apply_payload_hint(state, interpreted)
         text = sanitize_output(interpreted.get('text') or '', user_text=last)
@@ -608,10 +644,20 @@ def _complete_fake(*, messages, page_context, state, last, role, audit):
     except AssistantProviderError as exc:
         raise AssistantProviderError(PROVIDER_ERROR) from exc
     tool_results = getattr(completion, 'tool_results', None) or []
-    state = update_state_from_tools(state, tool_results, page_context=page_context)
+    state = update_state_from_tools(state, tool_results, page_context=page_context, user_text=last)
     if getattr(completion, 'status', None) and completion.status.get('pending_need_child'):
         state['pending_action'] = pending_need_child(tool='get_growth_facts')
     return _completion_result(completion, page_context, state, last, kind='chat'), state, 'chat', True
+
+
+def _align_navigate_text(text, actions):
+    nav = next((item for item in actions or () if item.get('url')), None)
+    if not nav:
+        return text
+    if not text or str(text).strip() == FALLBACK:
+        dest = nav.get('destination')
+        return opening_text(dest) if dest else '해당 화면으로 이동할게요.'
+    return text
 
 
 def _completion_result(completion, page_context, state, last, *, kind='chat'):
@@ -620,6 +666,7 @@ def _completion_result(completion, page_context, state, last, *, kind='chat'):
         user_text=last,
         tool_results=getattr(completion, 'tool_results', None),
     )
+    text = _align_navigate_text(text, completion.actions)
     return _result(
         text=text,
         page_context=page_context,
@@ -694,6 +741,12 @@ def _decorate_result(
     audit['last_user_kind'] = payload.get('last_user_kind')
     audit['error'] = payload.get('error')
     audit['final_status'] = 'ok' if payload.get('ok') else (payload.get('error') or 'error')
+    if payload.get('selected_candidate_index') is not None:
+        audit['selected_candidate_index'] = payload.get('selected_candidate_index')
+    if payload.get('candidate_count') is not None:
+        audit['candidate_count'] = payload.get('candidate_count')
+    if payload.get('match_type'):
+        audit['match_type'] = payload.get('match_type')
     record_request_end(audit)
     return payload
 
@@ -715,15 +768,8 @@ def _is_pending_slot_completion(pending, user_text, tool_results):
 
 def _prepare_resolution_pending(state, user_text, tool_results):
     """LLM이 child resolver를 선택한 뒤 새 명시적 navigation 목적지만 보존."""
-    unresolved = False
-    for item in tool_results or ():
-        if item.get('name') != 'search_child':
-            continue
-        result = item.get('result') or {}
-        if result.get('kind') in {'multiple', 'fuzzy'}:
-            unresolved = True
-            break
-    if not unresolved:
+    selected = _selected_search_result(tool_results)
+    if not selected or selected.get('kind') not in {'multiple', 'fuzzy'}:
         return state
     from features.assistant.navigation import match_destination_from_text, spec_for
     destination = match_destination_from_text(user_text)
@@ -786,17 +832,24 @@ def _llm_selected_pending_completion(
         return None
     if any(item.get('name') != 'search_child' for item in tool_results or ()):
         return None
-    for item in tool_results or ():
-        result = item.get('result') or {}
-        matches = result.get('matches') or []
-        if result.get('kind') in {'exact', 'partial'} and len(matches) == 1:
-            return apply_pending_turn(
-                user_text,
-                state=state,
-                page_context=page_context,
-                role=role,
-            )
+    result = _selected_search_result(tool_results)
+    matches = (result or {}).get('matches') or []
+    if (result or {}).get('kind') in {'exact', 'partial'} and len(matches) == 1:
+        return apply_pending_turn(
+            user_text,
+            state=state,
+            page_context=page_context,
+            role=role,
+        )
     return None
+
+
+def _selected_search_result(tool_results):
+    return select_child_resolution([
+        item.get('result') or {}
+        for item in tool_results or ()
+        if item.get('name') == 'search_child'
+    ])
 
 
 def _apply_payload_hint(state, payload):

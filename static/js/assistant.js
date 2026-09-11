@@ -2,6 +2,7 @@
     const STORAGE_KEY = 'clc.teacherAssistant.v2';
     const STAGE_EL = '[data-assistant-role="character-stage"]';
     const QUESTION_LIMIT_DEFAULT = 10;
+    const MIN_VISIBLE_MS = 2000;
 
     function boot() {
         const node = document.getElementById('assistant-page-context');
@@ -53,6 +54,18 @@
                 pending.candidate_nickname = String(raw.pending_action.candidate_nickname).slice(0, 40);
             }
             if (raw.pending_action.subject_key) pending.subject_key = String(raw.pending_action.subject_key).slice(0, 20);
+            if (raw.pending_action.query) pending.query = String(raw.pending_action.query).slice(0, 40);
+            if (raw.pending_action.match_type) pending.match_type = String(raw.pending_action.match_type).slice(0, 20);
+            if (Array.isArray(raw.pending_action.candidates)) {
+                pending.candidates = raw.pending_action.candidates.slice(0, 8).map(function (child) {
+                    if (!child || typeof child !== 'object') return null;
+                    const id = Number(child.id != null ? child.id : child.child_id);
+                    if (Number.isNaN(id) || id <= 0) return null;
+                    const row = { id: id, name: String(child.name || '').slice(0, 40) };
+                    if (child.grade != null && child.grade !== '') row.grade = child.grade;
+                    return row;
+                }).filter(function (child) { return child && child.name; });
+            }
             out.pending_action = pending;
         }
         return out;
@@ -291,7 +304,11 @@
         visibleMessages(state).forEach(function (message) {
             const wrap = document.createElement('div');
             wrap.className = 'assistant-bubble is-' + (message.role === 'user' ? 'user' : 'assistant');
-            wrap.textContent = message.content || '';
+            if (message.role === 'user') {
+                wrap.textContent = message.content || '';
+            } else {
+                wrap.appendChild(renderFormattedContent(message.content || ''));
+            }
             if (message.actions && message.actions.length) {
                 const row = document.createElement('div');
                 row.className = 'assistant-bubble-actions';
@@ -382,6 +399,39 @@
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+    }
+
+    function renderFormattedContent(text) {
+        const fragment = document.createDocumentFragment();
+        const escaped = escapeHtml(text || '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        const lines = escaped.split('\n');
+        let list = null;
+        lines.forEach(function (line) {
+            const bullet = line.match(/^\s*[-•]\s+(.*)$/);
+            if (bullet) {
+                if (!list) {
+                    list = document.createElement('ul');
+                    list.className = 'assistant-fact-list';
+                    fragment.appendChild(list);
+                }
+                const item = document.createElement('li');
+                item.innerHTML = bullet[1];
+                list.appendChild(item);
+                return;
+            }
+            list = null;
+            if (!line) {
+                return;
+            }
+            const paragraph = document.createElement('p');
+            paragraph.className = 'assistant-fact-p';
+            paragraph.innerHTML = line;
+            fragment.appendChild(paragraph);
+        });
+        if (!fragment.childNodes.length) {
+            fragment.appendChild(document.createTextNode(''));
+        }
+        return fragment;
     }
 
     function escapeAttr(value) {
@@ -487,6 +537,7 @@
         fillCharacter(config.character);
         let state = isolateChild(bindScope(loadState(), config.storage_scope || ''), page);
         let lastRequest = null;
+        let inFlight = false;
         saveState(state);
         renderMessages(state);
         renderQuick(null, visibleMessages(state).length > 0);
@@ -532,8 +583,61 @@
             });
         }
 
+        function setComposerBusy(busy) {
+            inFlight = !!busy;
+            const atLimit = (Number(state.questionCount) || 0) >= questionLimit(config);
+            const sendBtn = qs('send');
+            if (sendBtn) sendBtn.disabled = inFlight || atLimit;
+        }
+
+        function appendLoadingBubble() {
+            const root = qs('conversation');
+            if (!root) return;
+            const existing = root.querySelector('[data-assistant-loading]');
+            if (existing) existing.remove();
+            const wrap = document.createElement('div');
+            wrap.className = 'assistant-bubble is-assistant';
+            wrap.setAttribute('data-assistant-loading', '1');
+            wrap.textContent = '...';
+            root.appendChild(wrap);
+            root.scrollTop = root.scrollHeight;
+        }
+
+        function waitForMinVisible(startedAt) {
+            const remaining = Math.max(0, MIN_VISIBLE_MS - (performance.now() - startedAt));
+            return new Promise(function (resolve) {
+                window.setTimeout(resolve, remaining);
+            });
+        }
+
+        function applyErrorMessage(text) {
+            storeMessage(state, {
+                role: 'assistant',
+                content: text,
+                kind: 'system',
+            });
+            saveState(state);
+            renderMessages(state);
+            showError(text);
+        }
+
+        function finalizeRequest(startedAt, apply) {
+            return waitForMinVisible(startedAt).then(function () {
+                apply();
+            }).then(function () {
+                setComposerBusy(false);
+                renderLimit(state, config);
+                const input = qs('input');
+                if (input && !input.disabled) input.focus();
+            }, function () {
+                setComposerBusy(false);
+                renderLimit(state, config);
+            });
+        }
+
         function resetConversation() {
             lastRequest = null;
+            inFlight = false;
             state.generalMessages = [];
             state.childMessages = [];
             state.questionCount = 0;
@@ -555,16 +659,25 @@
                 resetConversation();
                 return;
             }
+            if (inFlight) return;
+            const startedAt = performance.now();
+            setComposerBusy(true);
             setStage('thinking');
             showError('');
+            renderMessages(state);
+            appendLoadingBubble();
             post(config.message_url, lastRequest).then(function (response) {
-                if (response._httpStatus >= 500) {
-                    showError(errorText(response.message));
-                    return;
-                }
-                applyResponse(state, response, page, config);
+                return finalizeRequest(startedAt, function () {
+                    if (response._httpStatus >= 500) {
+                        applyErrorMessage(errorText(response.message));
+                        return;
+                    }
+                    applyResponse(state, response, page, config);
+                });
             }).catch(function () {
-                showError('응답을 가져오지 못했습니다.');
+                return finalizeRequest(startedAt, function () {
+                    applyErrorMessage('응답을 가져오지 못했습니다.');
+                });
             });
         }
 
@@ -600,7 +713,6 @@
                 const childId = Number(nav.getAttribute('data-assistant-child-id'));
                 if (!Number.isNaN(childId) && childId > 0) {
                     state.conversation.active_child_id = childId;
-                    state.conversation.pending_action = null;
                     const destination = nav.getAttribute('data-assistant-destination');
                     if (destination) state.conversation.active_topic = 'nav';
                     saveState(state);
@@ -626,12 +738,14 @@
             }
             const reply = event.target.closest('[data-assistant-reply]');
             if (reply) {
+                if (inFlight) return;
                 const text = (reply.getAttribute('data-assistant-reply') || '').trim();
                 if (text) sendChat(text, 'confirm');
                 return;
             }
             const quick = event.target.closest('[data-assistant-quick]');
             if (!quick) return;
+            if (inFlight) return;
             let action = null;
             try {
                 action = JSON.parse(quick.getAttribute('data-assistant-quick') || '{}');
@@ -646,7 +760,9 @@
         const sendBtn = qs('send');
 
         function sendIntent(action) {
+            if (inFlight) return Promise.resolve();
             const kind = intentKind(action.intent);
+            const startedAt = performance.now();
             const payload = {
                 intent: action.intent || 'chat',
                 destination: action.destination || null,
@@ -661,28 +777,36 @@
                 conversation_state: compactConversation(state.conversation),
             };
             lastRequest = payload;
+            setComposerBusy(true);
             storeMessage(state, payload.messages[payload.messages.length - 1]);
             saveState(state);
             renderMessages(state);
+            appendLoadingBubble();
             renderQuick(null, true);
             setStage('thinking');
-            post(config.message_url, payload).then(function (response) {
-                if (response._httpStatus >= 500 || response.ok === false && !response.message) {
-                    showError(errorText(response && response.message));
-                    return;
-                }
-                applyResponse(state, response, page, config);
+            return post(config.message_url, payload).then(function (response) {
+                return finalizeRequest(startedAt, function () {
+                    if (response._httpStatus >= 500 || response.ok === false && !response.message) {
+                        applyErrorMessage(errorText(response && response.message));
+                        return;
+                    }
+                    applyResponse(state, response, page, config);
+                });
             }).catch(function () {
-                showError('응답을 가져오지 못했습니다.');
+                return finalizeRequest(startedAt, function () {
+                    applyErrorMessage('응답을 가져오지 못했습니다.');
+                });
             });
         }
 
         function sendChat(text, kind) {
             kind = kind || 'chat';
+            if (inFlight) return Promise.resolve();
             if (kind === 'chat' && (Number(state.questionCount) || 0) >= questionLimit(config)) {
                 renderLimit(state, config);
                 return Promise.resolve();
             }
+            const startedAt = performance.now();
             const userMessage = {
                 role: 'user',
                 content: text,
@@ -696,37 +820,37 @@
                 conversation_state: compactConversation(state.conversation),
             };
             lastRequest = payload;
+            setComposerBusy(true);
             storeMessage(state, userMessage);
             saveState(state);
             renderMessages(state);
+            appendLoadingBubble();
             renderQuick(null, true);
             setStage('thinking');
             return post(config.message_url, payload).then(function (response) {
-                if (response._httpStatus >= 500) {
-                    showError(errorText(response && response.message));
-                    return;
-                }
-                applyResponse(state, response, page, config);
+                return finalizeRequest(startedAt, function () {
+                    if (response._httpStatus >= 500) {
+                        applyErrorMessage(errorText(response && response.message));
+                        return;
+                    }
+                    applyResponse(state, response, page, config);
+                });
             }).catch(function () {
-                showError('응답을 가져오지 못했습니다.');
+                return finalizeRequest(startedAt, function () {
+                    applyErrorMessage('응답을 가져오지 못했습니다.');
+                });
             });
         }
 
         if (form) {
             form.addEventListener('submit', function (event) {
                 event.preventDefault();
+                if (inFlight) return;
                 if (!input || input.disabled) return;
                 const text = (input.value || '').trim();
                 if (!text) return;
                 input.value = '';
-                if (sendBtn) sendBtn.disabled = true;
-                sendChat(text, 'chat').then(function () {
-                    renderLimit(state, config);
-                    if (sendBtn && (Number(state.questionCount) || 0) < questionLimit(config)) {
-                        sendBtn.disabled = false;
-                    }
-                    if (input && !input.disabled) input.focus();
-                });
+                sendChat(text, 'chat');
             });
         }
     }

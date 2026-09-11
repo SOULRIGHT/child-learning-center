@@ -7,15 +7,26 @@ from features.assistant.config import assistant_provider_name, current_role
 from features.assistant.copy import (
     FALLBACK,
     GREETING_REPLY,
+    MSG_FOCUS_UNAVAILABLE,
     MSG_NEED_CHILD_FACTS,
     MSG_NO_HELP,
     MSG_UNAVAILABLE,
-    NAV_NEED_CHOICE,
     NAV_NO_MATCH,
+    POINT_AVERAGE_UNSUPPORTED,
     SETUP_FORBIDDEN,
+    opening_text,
 )
 from features.assistant.intents import is_greeting
+from features.assistant.persona import child_record_clarification
+from features.assistant.facts import (
+    facts_matching_focus,
+    format_all_domain_facts,
+    format_tool_facts,
+    infer_metric_focus,
+)
+from features.assistant.navigation import classify_remainder_domain, request_remainder
 from features.assistant.policy import gated_execute
+from features.assistant.resolve import select_child_resolution
 from features.assistant.tools import (
     collect_actions,
     collect_sources,
@@ -54,7 +65,7 @@ class FakeAssistantProvider(AssistantProvider):
         role = current_role()
         if is_greeting(last):
             return AssistantCompletion(text=GREETING_REPLY, character_state='idle')
-        planned = plan_deterministic_tools(last, page_context or {})
+        planned = plan_deterministic_tools(last, page_context or {}, conversation_state)
         if not planned:
             return AssistantCompletion(
                 text=FALLBACK,
@@ -84,29 +95,94 @@ def compose_from_tools(results, *, user_text='', role=None):
     lines = []
     character_state = 'idle'
     candidates = None
+    selected_search = select_child_resolution([
+        item.get('result') or {}
+        for item in results or ()
+        if item.get('name') == 'search_child'
+    ])
+    if selected_search:
+        matches = selected_search.get('matches') or []
+        if selected_search.get('needs_confirmation') and matches:
+            from features.assistant.conversation import confirmation_actions, confirmation_text
+            child = matches[0]
+            return AssistantCompletion(
+                text=confirmation_text(child),
+                actions=confirmation_actions(child.get('name')),
+                character_state='help',
+                tool_results=results,
+            )
+        if not matches:
+            return AssistantCompletion(text=NAV_NO_MATCH, character_state='help', tool_results=results)
+        if selected_search.get('kind') == 'multiple' or len(matches) > 1:
+            from features.assistant.copy import choice_need_text
+            query = ''
+            for item in results or ():
+                if item.get('name') != 'search_child':
+                    continue
+                arguments = item.get('arguments') if isinstance(item.get('arguments'), dict) else {}
+                result = item.get('result') if isinstance(item.get('result'), dict) else {}
+                query = arguments.get('child_query') or arguments.get('query') or result.get('child_query') or ''
+                if query:
+                    break
+            return AssistantCompletion(
+                text=choice_need_text(query, selected_search.get('match_type')),
+                character_state='help',
+                status={'candidates': matches},
+                tool_results=results,
+            )
+        if selected_search.get('kind') in {'exact', 'partial'} and len(matches) == 1:
+            child_name = matches[0].get('name')
+            query = ''
+            for item in results or ():
+                if item.get('name') != 'search_child':
+                    continue
+                arguments = item.get('arguments') if isinstance(item.get('arguments'), dict) else {}
+                result = item.get('result') if isinstance(item.get('result'), dict) else {}
+                query = arguments.get('child_query') or arguments.get('query') or result.get('child_query') or ''
+                if query:
+                    break
+            remainder = request_remainder(user_text, child_name, query)
+            only_search = not any(
+                item.get('name') not in {None, 'search_child'}
+                and not (item.get('result') or {}).get('skipped_unspecified_domain')
+                for item in results or ()
+            )
+            unspecified = (
+                (user_text and classify_remainder_domain(remainder) is None)
+                or (not user_text and only_search)
+            )
+            if unspecified and only_search:
+                return AssistantCompletion(
+                    text=child_record_clarification(child_name),
+                    character_state='help',
+                    tool_results=results,
+                )
+    used_facts = []
+    fact_composed = False
+    fact_items = [
+        item for item in results or ()
+        if (
+            str(item.get('name') or '').endswith('_facts')
+            or item.get('name') == 'get_subject_peer_reference'
+        ) and not (item.get('result') or {}).get('skipped_unspecified_domain')
+    ]
+    if len(fact_items) >= 2 and all(
+        item.get('name') in {'get_learning_facts', 'get_points_facts', 'get_reading_facts'}
+        for item in fact_items
+    ):
+        formatted = format_all_domain_facts(fact_items)
+        if formatted.get('text'):
+            lines.append(formatted['text'])
+            used_facts.extend(formatted.get('used_facts') or ())
+            character_state = 'working'
+            fact_composed = True
+            fact_items = []
     for item in results:
         name = item.get('name')
         result = item.get('result') or {}
         if name == 'search_child':
-            matches = result.get('matches') or []
-            if result.get('needs_confirmation') and matches:
-                from features.assistant.conversation import confirmation_actions, confirmation_text
-                child = matches[0]
-                return AssistantCompletion(
-                    text=confirmation_text(child),
-                    actions=confirmation_actions(child.get('name')),
-                    character_state='help',
-                    tool_results=results,
-                )
-            if not matches:
-                return AssistantCompletion(text=NAV_NO_MATCH, character_state='help', tool_results=results)
-            if len(matches) > 1:
-                return AssistantCompletion(
-                    text=NAV_NEED_CHOICE,
-                    character_state='help',
-                    status={'candidates': matches},
-                    tool_results=results,
-                )
+            continue
+        if result.get('skipped_unspecified_domain'):
             continue
         if name == 'search_help':
             hits = result.get('hits') or []
@@ -123,6 +199,8 @@ def compose_from_tools(results, *, user_text='', role=None):
                 continue
             if result.get('ok'):
                 character_state = 'working'
+                dest = result.get('destination')
+                lines.append(opening_text(dest) if dest else '해당 화면으로 이동할게요.')
             elif result.get('message'):
                 lines.append(result['message'])
             continue
@@ -140,31 +218,43 @@ def compose_from_tools(results, *, user_text='', role=None):
                 lines.append('필요한 센터 설정은 확인된 상태입니다.')
             continue
         if str(name or '').endswith('_facts') or name == 'get_subject_peer_reference':
+            if name not in {item.get('name') for item in fact_items}:
+                continue
             if not result.get('ok'):
                 if result.get('error') == 'invalid_child':
                     lines.append(NAV_NO_MATCH)
                 continue
-            child = result.get('child') or {}
-            name_label = child.get('name')
-            prefix = f"{name_label} " if name_label else ''
-            available_rows = []
-            missing_rows = []
-            for fact in result.get('facts') or ():
-                if fact.get('available'):
-                    available_rows.append(f"{fact.get('label')}: {fact.get('value')}")
-                else:
-                    missing_rows.append(fact.get('label') or fact.get('evidence_id') or '기록')
-            if available_rows:
-                if prefix:
-                    lines.append(f'{prefix}확인된 기록입니다.')
-                lines.extend(available_rows[:8])
-            if missing_rows and not available_rows:
+            if name == 'get_points_facts' and result.get('metric_supported') is False:
+                lines.append(POINT_AVERAGE_UNSUPPORTED)
+                character_state = 'help'
+                continue
+            focus = result.get('focus') or infer_metric_focus(user_text)
+            facts = list(result.get('facts') or ())
+            if focus:
+                focused = facts_matching_focus(facts, focus)
+                if not focused:
+                    lines.append(MSG_FOCUS_UNAVAILABLE)
+                    character_state = 'help'
+                    continue
+                result = dict(result)
+                result['facts'] = focused
+            formatted = format_tool_facts(name, result, user_text=user_text, focus=focus)
+            if formatted.get('text'):
+                lines.append(formatted['text'])
+                used_facts.extend(formatted.get('used_facts') or ())
+                character_state = 'working'
+                fact_composed = True
+            elif focus:
+                lines.append(MSG_FOCUS_UNAVAILABLE)
+                character_state = 'help'
+            else:
                 lines.append(MSG_UNAVAILABLE)
-            elif missing_rows:
-                lines.append('확인되지 않은 항목은 숫자로 채우지 않았습니다.')
-            character_state = 'working'
     actions = collect_actions(results, user_text=user_text)
-    sources = collect_sources(results, role=role)
+    sources = collect_sources(
+        results,
+        role=role,
+        used_facts=used_facts if fact_composed else None,
+    )
     text = '\n'.join(line for line in lines if line).strip()
     if not text:
         text = FALLBACK
