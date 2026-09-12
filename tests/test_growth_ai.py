@@ -14,8 +14,11 @@ from unittest.mock import patch
 
 from features.growth.ai.openai_provider import (
     DEFAULT_GROWTH_AI_MODEL,
+    DEFAULT_REASONING_EFFORT,
+    GROWTH_AI_REASONING_ENV,
     OpenAIGrowthInterpretationProvider,
     REASONING_EFFORT,
+    growth_reasoning_effort,
 )
 from features.growth.ai.prompt import GROWTH_TEACHER_PROMPT_VERSION, GROWTH_TEACHER_SYSTEM_PROMPT
 from features.growth.ai.provider import (
@@ -255,8 +258,9 @@ class GrowthAIOpenAIProviderTests(unittest.TestCase):
         kwargs = client.calls[0]
         self.assertEqual(kwargs['model'], DEFAULT_GROWTH_AI_MODEL)
         self.assertIs(kwargs['store'], False)
-        self.assertEqual(kwargs['reasoning'], {'effort': REASONING_EFFORT})
-        self.assertEqual(REASONING_EFFORT, 'low')
+        self.assertEqual(kwargs['reasoning'], {'effort': growth_reasoning_effort()})
+        self.assertEqual(REASONING_EFFORT, 'high')
+        self.assertEqual(DEFAULT_REASONING_EFFORT, 'high')
         self.assertNotIn('tools', kwargs)
         self.assertNotIn('previous_response_id', kwargs)
         self.assertNotIn('conversation', kwargs)
@@ -287,6 +291,15 @@ class GrowthAIOpenAIProviderTests(unittest.TestCase):
             self.assertEqual(provider.model, 'gpt-5.6-luna')
         provider = OpenAIGrowthInterpretationProvider(client=client, model='gpt-5.6-luna')
         self.assertEqual(provider.model, 'gpt-5.6-luna')
+
+    def test_reasoning_effort_env_override_and_invalid(self):
+        client = _FakeClient()
+        with patch.dict(os.environ, {GROWTH_AI_REASONING_ENV: 'low'}):
+            self._generate(client=client)
+            self.assertEqual(client.calls[-1]['reasoning'], {'effort': 'low'})
+        with patch.dict(os.environ, {GROWTH_AI_REASONING_ENV: 'turbo'}):
+            with self.assertRaises(GrowthInterpretationConfigError):
+                self._generate(client=_FakeClient())
 
     def test_missing_api_key(self):
         env = {key: value for key, value in os.environ.items() if key != 'OPENAI_API_KEY'}

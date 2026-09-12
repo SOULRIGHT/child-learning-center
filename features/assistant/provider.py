@@ -37,9 +37,27 @@ from features.assistant.tools import (
 class AssistantProviderError(Exception):
     """생성 실패. 본문 페이지로 전파하지 않는다."""
 
+    failure_class = None
+
 
 class AssistantProviderConfigError(AssistantProviderError):
-    """설정 오류."""
+    """설정/인증 오류. cross-provider fallback 금지."""
+
+    failure_class = 'provider_auth_config'
+
+
+class AssistantProviderBadRequestError(AssistantProviderError):
+    """malformed provider request. fallback 금지."""
+
+    failure_class = 'provider_bad_request'
+
+
+class AssistantProviderRetryableError(AssistantProviderError):
+    """timeout / 429 / 5xx / connection. audited cross-provider failover 1회만 허용."""
+
+    def __init__(self, message, failure_class):
+        super().__init__(message)
+        self.failure_class = failure_class
 
 
 @dataclass
@@ -53,16 +71,36 @@ class AssistantCompletion:
 
 
 class AssistantProvider:
-    def complete(self, *, messages, page_context, conversation_state=None, audit=None) -> AssistantCompletion:
+    def complete(
+        self,
+        *,
+        messages,
+        page_context,
+        conversation_state=None,
+        role=None,
+        audit=None,
+        deadline=None,
+        timeout_s=None,
+    ) -> AssistantCompletion:
         raise NotImplementedError
 
 
 class FakeAssistantProvider(AssistantProvider):
     """live AI 없이 결정적 응답. hidden retry 없음. 숫자는 tool result만 사용."""
 
-    def complete(self, *, messages, page_context, conversation_state=None, audit=None) -> AssistantCompletion:
+    def complete(
+        self,
+        *,
+        messages,
+        page_context,
+        conversation_state=None,
+        role=None,
+        audit=None,
+        deadline=None,
+        timeout_s=None,
+    ) -> AssistantCompletion:
         last = _last_user_text(messages)
-        role = current_role()
+        role = current_role() if role is None else role
         if is_greeting(last):
             return AssistantCompletion(text=GREETING_REPLY, character_state='idle')
         planned = plan_deterministic_tools(last, page_context or {}, conversation_state)

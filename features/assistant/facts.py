@@ -13,10 +13,6 @@ from features.growth.ai.presenter import _format_row as _present_fact_row
 from features.subjects import subject_name
 
 MAX_FACTS = 24
-BLOCKED_EVIDENCE_PREFIXES = (
-    'reading.analysis.observation',
-    'reading.analysis.limitation',
-)
 BLOCKED_KEYS = frozenset({
     'review_text', 'review', 'raw_output', 'packet', 'observations',
 })
@@ -45,9 +41,9 @@ _ASSISTANT_LABELS = {
     'points.period_total.delta': '포인트 변화',
     'points.cumulative_as_of': '현재 누적 포인트',
     'points.peer.child_value': '최근 기간 포인트',
-    'points.peer.peer_median': '같은 학년 중앙값',
+    'points.peer.peer_median': '같은 학년 최근 기간 중앙값',
     'points.peer.n': '비교 인원',
-    'points.peer.difference': '중앙값과 차이',
+    'points.peer.difference': '최근 기간 중앙값과 차이',
     'reading.activity_days.current': '최근 기간 독서 활동',
     'reading.activity_days.previous': '이전 기간 독서 활동',
     'reading.activity_days.delta': '독서 활동 변화',
@@ -91,6 +87,54 @@ _ASSISTANT_UNITS = {
 }
 
 
+def _period_evidence_ids(stem):
+    return (
+        f'{stem}.current',
+        f'{stem}.previous',
+        f'{stem}.delta',
+        f'{stem}.delta_pp',
+    )
+
+
+# Teacher Assistant Reading projection copies only these derived fields.
+# observation/limitation/recent_records/review_text are not in this set.
+READING_ALLOWED_EVIDENCE_IDS = frozenset(
+    _period_evidence_ids('reading.activity_days')
+    + _period_evidence_ids('reading.completions')
+    + _period_evidence_ids('reading.recommended.activity_days')
+    + _period_evidence_ids('reading.recommended.completions')
+    + _period_evidence_ids('reading.experience.difficulty')
+    + _period_evidence_ids('reading.experience.fun')
+    + (
+        'reading.experience.n.current',
+        'reading.experience.n.previous',
+        'reading.analysis.recent_count',
+        'reading.analysis.previous_count',
+        'reading.analysis.text_record_count',
+        'reading.analysis.completed_count',
+        'reading.analysis.completion_duration_median',
+        'reading.analysis.character_count.recent_median',
+        'reading.analysis.character_count.previous_median',
+        'reading.analysis.character_count.recent_sample_count',
+        'reading.analysis.character_count.previous_sample_count',
+        'reading.analysis.sentence_count.recent_median',
+        'reading.analysis.sentence_count.previous_median',
+        'reading.analysis.sentence_count.recent_sample_count',
+        'reading.analysis.sentence_count.previous_sample_count',
+        'reading.analysis.ai_status',
+        'reading.analysis.sufficiency',
+    )
+)
+READING_ENUM_IDS = frozenset({
+    'reading.analysis.ai_status',
+    'reading.analysis.sufficiency',
+})
+READING_ENUM_VALUES = frozenset({
+    'current', 'unavailable', 'stale', 'error', 'limited',
+    'major', 'no_change_conclusion',
+})
+
+
 _FOCUS_CUES = (
     '변화', '수행률', '확인률', '완독', '평균', '이전 기간', '최근 포인트',
     '비교 인원', '활동일', '최근 기간', '이전 포인트',
@@ -113,6 +157,38 @@ _FOCUS_KEYS = (
     ('비교', ('peer', '비교')),
     ('인원', ('.n', '인원')),
 )
+
+
+def fact_family_for_evidence(evidence_id):
+    raw = str(evidence_id or '')
+    if raw.startswith('learning.'):
+        return 'learning'
+    if raw.startswith('attendance.'):
+        return 'attendance'
+    if raw.startswith('points.') or raw.startswith('rewards.'):
+        return 'points'
+    if raw.startswith('reading.'):
+        return 'reading'
+    if 'peer' in raw:
+        return 'peer'
+    return 'growth'
+
+
+def metric_family_for_evidence(evidence_id):
+    raw = str(evidence_id or '')
+    if raw == 'points.cumulative_as_of':
+        return 'cumulative'
+    if raw.endswith('.current') or raw.endswith('.child_value'):
+        return 'current'
+    if raw.endswith('.previous'):
+        return 'previous'
+    if raw.endswith('.delta') or raw.endswith('.delta_pp') or raw.endswith('.difference'):
+        return 'delta'
+    if raw.endswith('.n') or raw.endswith('peer.n'):
+        return 'peer_n'
+    if 'peer' in raw:
+        return 'peer'
+    return None
 
 
 def infer_metric_focus(text):
@@ -189,44 +265,124 @@ def compact_facts(packet, *, topic='growth', subject_key=None, focus=None):
         evidence_id = node.get('evidence_id')
         if not isinstance(evidence_id, str) or not evidence_id:
             continue
-        if any(evidence_id.startswith(prefix) for prefix in BLOCKED_EVIDENCE_PREFIXES):
-            continue
         if not _topic_match(evidence_id, topic, subject_key):
             continue
-        available = node.get('available') is True
-        value = node.get('value') if available else None
-        if _looks_like_review(value):
-            continue
-        presentation = _presentation(
-            evidence_id,
-            node,
-            presentation_catalog,
-            available=available,
-        )
-        row = {
-            'evidence_id': evidence_id,
-            'label': presentation['label'],
-            'available': available,
-            'value': _public_value(value) if available else None,
-            'status': None if available else (node.get('status') or 'unavailable'),
-        }
-        if available:
-            row['display_value'] = presentation['value']
+        if evidence_id.startswith('reading.'):
+            row = _copy_reading_fact(evidence_id, node, presentation_catalog)
         else:
-            row['unavailable_reason'] = presentation['value']
-        if presentation.get('note'):
-            row['note'] = presentation['note']
-        if node.get('unit'):
-            row['unit'] = str(node.get('unit'))[:20]
-        period = _period(evidence_id)
-        if period:
-            row['period'] = period
+            row = _copy_generic_fact(evidence_id, node, presentation_catalog)
+        if not row:
+            continue
         rows.append(row)
         if len(rows) >= MAX_FACTS:
             break
     if focus:
         return facts_matching_focus(rows, focus)
     return rows
+
+
+def _copy_reading_fact(evidence_id, node, catalog):
+    """Allowlisted derived Reading fields only. Do not copy packet strings."""
+    if evidence_id not in READING_ALLOWED_EVIDENCE_IDS:
+        return None
+    available = node.get('available') is True
+    scalar = _reading_scalar(evidence_id, node.get('value') if available else None)
+    if available and scalar is None:
+        return None
+    projected = {
+        'evidence_id': evidence_id,
+        'available': available,
+        'value': scalar,
+        'status': None if available else (node.get('status') or 'unavailable'),
+        'unit': node.get('unit') if isinstance(node.get('unit'), str) else None,
+    }
+    presentation = _presentation(
+        evidence_id,
+        projected,
+        catalog,
+        available=available,
+    )
+    display = presentation['value']
+    if _looks_like_review(display) or (isinstance(display, str) and len(display) > 80):
+        if available:
+            display = _reading_display(evidence_id, scalar)
+        else:
+            display = '자료 없음'
+    return _fact_row(
+        evidence_id,
+        projected,
+        presentation={'label': presentation['label'], 'value': display, 'note': None},
+        available=available,
+        value=scalar,
+    )
+
+
+def _copy_generic_fact(evidence_id, node, catalog):
+    if 'review' in evidence_id.casefold():
+        return None
+    available = node.get('available') is True
+    value = node.get('value') if available else None
+    if _looks_like_review(value):
+        return None
+    presentation = _presentation(
+        evidence_id,
+        node,
+        catalog,
+        available=available,
+    )
+    return _fact_row(
+        evidence_id,
+        node,
+        presentation=presentation,
+        available=available,
+        value=_public_value(value) if available else None,
+    )
+
+
+def _fact_row(evidence_id, node, *, presentation, available, value):
+    row = {
+        'evidence_id': evidence_id,
+        'label': presentation['label'],
+        'available': available,
+        'value': value,
+        'status': None if available else (node.get('status') or 'unavailable'),
+        'fact_family': fact_family_for_evidence(evidence_id),
+        'metric_family': metric_family_for_evidence(evidence_id),
+    }
+    if available:
+        row['display_value'] = presentation['value']
+    else:
+        row['unavailable_reason'] = presentation['value']
+    if presentation.get('note'):
+        row['note'] = presentation['note']
+    if node.get('unit'):
+        row['unit'] = str(node.get('unit'))[:20]
+    period = _period(evidence_id)
+    if period:
+        row['period'] = period
+    return row
+
+
+def _reading_scalar(evidence_id, value):
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value
+    if evidence_id in READING_ENUM_IDS and isinstance(value, str):
+        token = value.strip()
+        if token in READING_ENUM_VALUES and len(token) <= 40:
+            return token
+    return None
+
+
+def _reading_display(evidence_id, value):
+    if evidence_id in _ASSISTANT_UNITS:
+        return _with_display_unit(value, _ASSISTANT_UNITS[evidence_id])
+    if _is_delta(evidence_id):
+        return _directional_delta(value, str(value))
+    return str(value)
 
 
 def _topic_match(evidence_id, topic, subject_key):
@@ -342,6 +498,8 @@ def _assistant_label(evidence_id, fallback):
         return f'{subject} 기간 비교 기준 충족 여부' if subject else '기간 비교 기준 충족 여부'
     if '.performance.expected_days.' in evidence_id:
         return ' '.join(part for part in (period, subject, '예정 학습일') if part)
+    if '.performance.studied_days.' in evidence_id:
+        return ' '.join(part for part in (period, subject, '학습 기록일') if part)
     if '.performance.rate.' in evidence_id:
         return ' '.join(part for part in (period, subject, '학습 수행률') if part)
     if '.performance.confirmation.' in evidence_id:
@@ -513,7 +671,10 @@ def format_all_domain_facts(items):
 
 
 def _format_points_facts(facts, *, child_name=''):
-    current = _fact_by_id(facts, 'points.period_total.current')
+    current = (
+        _fact_by_id(facts, 'points.period_total.current')
+        or _fact_by_id(facts, 'points.peer.child_value')
+    )
     previous = _fact_by_id(facts, 'points.period_total.previous')
     delta = _fact_by_id(facts, 'points.period_total.delta')
     cumulative = _fact_by_id(facts, 'points.cumulative_as_of')
@@ -535,6 +696,18 @@ def _format_points_facts(facts, *, child_name=''):
         bullets.append(f'- 최근 기간: **{current_display}**')
         if current not in used:
             used.append(current)
+    median_display = _fact_display(median)
+    sample_display = _fact_display(sample)
+    if median_display:
+        extra = f' (비교 인원 {sample_display})' if sample_display else ''
+        bullets.append(f'- 같은 학년 최근 기간 중앙값: **{median_display}**{extra}')
+        used.append(median)
+        if sample:
+            used.append(sample)
+    peer_delta = _points_peer_delta_phrase(difference)
+    if peer_delta:
+        bullets.append(f'- 차이: **{peer_delta}**')
+        used.append(difference)
     previous_display = _fact_display(previous)
     if previous_display:
         bullets.append(f'- 이전 기간: **{previous_display}**')
@@ -547,40 +720,36 @@ def _format_points_facts(facts, *, child_name=''):
     if cumulative_display:
         bullets.append(f'- 현재 누적: **{cumulative_display}**')
         used.append(cumulative)
-    median_display = _fact_display(median)
-    sample_display = _fact_display(sample)
-    if median_display:
-        extra = f' (비교 인원 {sample_display})' if sample_display else ''
-        bullets.append(f'- 같은 학년 중앙값: **{median_display}**{extra}')
-        used.append(median)
-        if sample:
-            used.append(sample)
-    lines.extend(bullets[:5])
-    note = _points_peer_note(difference, median)
-    if note:
-        lines.append(note)
-        used.append(difference)
+    lines.extend(bullets)
+    if peer_delta:
+        lines.append('최근 기간 포인트 기준의 같은 학년 비교이며 학습 능력을 의미하지 않습니다.')
     return {'text': '\n'.join(lines).strip(), 'used_facts': used}
 
 
-def _points_peer_note(difference, median):
-    if not difference or not median:
+def _points_peer_delta_phrase(difference):
+    if not difference:
         return None
     try:
         number = float(difference.get('value'))
     except (TypeError, ValueError):
         return None
-    shown = _fact_display(difference)
+    shown = _unsigned_fact_display(difference)
     if not shown:
         return None
-    shown = str(shown).lstrip('+')
     if number == 0:
-        return '현재 자료에서는 같은 학년 중앙값과 같게 관측됩니다.'
-    direction = '낮게' if number < 0 else '높게'
-    return (
-        f'현재 자료에서는 같은 학년 중앙값보다 {shown} {direction} 관측됩니다.\n'
-        '이는 기록된 포인트 기준의 비교이며 학습 능력을 의미하지 않습니다.'
-    )
+        return '같음'
+    direction = '낮음' if number < 0 else '높음'
+    return f'{shown} {direction}'
+
+
+def _unsigned_fact_display(fact):
+    shown = _fact_display(fact)
+    if not shown:
+        return None
+    text = str(shown).lstrip('+')
+    if text.startswith('-'):
+        text = text[1:]
+    return text or None
 
 
 def _format_reading_facts(facts, *, child_name=''):
@@ -629,7 +798,7 @@ def _format_learning_facts(facts, *, child_name='', user_text=''):
     if prefix:
         picks = [
             (f'{prefix}.expected_days.current', '예정 학습일'),
-            (f'{prefix}.studied_days.current', '실제 학습일'),
+            (f'{prefix}.studied_days.current', '학습 기록일'),
             (f'{prefix}.unknown_days.current', '기록 미확인 예정일'),
             (f'{prefix}.rate.current', '학습 수행률'),
             (f'{prefix}.confirmation.current', '확인률'),
@@ -740,7 +909,7 @@ def _fact_by_id(facts, evidence_id):
 
 
 def _fact_display(fact):
-    if not fact:
+    if not fact or fact.get('available') is False:
         return None
     display = fact.get('display_value')
     if display in (None, ''):

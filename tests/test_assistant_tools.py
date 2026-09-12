@@ -1,6 +1,7 @@
 """Step 8C3: assistant tools, compact facts, help RAG, fake provider."""
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import unittest
@@ -35,15 +36,22 @@ from features.assistant.copy import (
     POINT_AVERAGE_UNSUPPORTED,
     SETUP_FORBIDDEN,
 )
-from features.assistant.facts import compact_facts, facts_matching_focus, growth_facts_for_child
+from features.assistant.facts import (
+    READING_ALLOWED_EVIDENCE_IDS,
+    compact_facts,
+    facts_matching_focus,
+    growth_facts_for_child,
+)
 from features.assistant.help import search_help
 from features.assistant.navigation import (
     classify_remainder_domain,
     extract_child_query,
     split_child_request,
 )
+from features.assistant.navigation import lookup_child
 from features.assistant.openai_provider import OpenAIAssistantProvider, SYSTEM_PROMPT
 from features.assistant.persona import MUON_NAME, MUON_NAME_EN
+from features.assistant.policy import gated_execute
 from features.assistant.provider import FakeAssistantProvider, compose_from_tools, get_assistant_provider
 from features.assistant.safety import sanitize_output
 from features.assistant.tools import ALLOWED_TOOLS, TOOL_SCHEMAS, dump_tool_result, execute_tool
@@ -219,11 +227,17 @@ class FactsToolTests(AssistantToolsCase):
 
     def test_reading_facts_exclude_review_text(self):
         self._reading(date(2026, 9, 3))
+        raw = ReadingDay.query.filter_by(review_text=SENTINEL_REVIEW).one()
+        self.assertEqual(raw.review_text, SENTINEL_REVIEW)
         payload = growth_facts_for_child(self.child.id, as_of=AS_OF, topic='reading')
         dumped = json.dumps(payload, ensure_ascii=False)
+        provider_payload = dump_tool_result(payload)
         self.assertNotIn(SENTINEL_REVIEW, dumped)
+        self.assertNotIn(SENTINEL_REVIEW, provider_payload)
         self.assertNotIn('review_text', dumped)
+        self.assertNotIn('review_text', provider_payload)
         for fact in payload['facts']:
+            self.assertIn(fact['evidence_id'], READING_ALLOWED_EVIDENCE_IDS)
             self.assertFalse(str(fact.get('evidence_id') or '').startswith('reading.analysis.observation'))
 
     def test_peer_facts_come_from_existing_packet(self):
@@ -363,6 +377,127 @@ class FactsToolTests(AssistantToolsCase):
         labels = [item.get('label') for item in completion.sources]
         self.assertEqual(len(labels), len(set(labels)))
 
+    def _peer_point_facts(self, *, current, previous, delta, cumulative, median, sample, difference):
+        return [
+            {
+                'evidence_id': 'points.period_total.current',
+                'label': '최근 기간 포인트',
+                'value': current,
+                'display_value': f'{current:,}점',
+                'available': True,
+            },
+            {
+                'evidence_id': 'points.period_total.previous',
+                'label': '이전 기간 포인트',
+                'value': previous,
+                'display_value': f'{previous:,}점',
+                'available': True,
+            },
+            {
+                'evidence_id': 'points.period_total.delta',
+                'label': '포인트 변화',
+                'value': delta,
+                'display_value': f'{abs(delta):,}점 {"증가" if delta > 0 else "감소"}' if delta else '변화 없음',
+                'available': True,
+            },
+            {
+                'evidence_id': 'points.cumulative_as_of',
+                'label': '현재 누적 포인트',
+                'value': cumulative,
+                'display_value': f'{cumulative:,}점',
+                'available': True,
+            },
+            {
+                'evidence_id': 'points.peer.peer_median',
+                'label': '같은 학년 최근 기간 중앙값',
+                'value': median,
+                'display_value': f'{median:,}점',
+                'available': True,
+            },
+            {
+                'evidence_id': 'points.peer.n',
+                'label': '비교 인원',
+                'value': sample,
+                'display_value': f'{sample}명',
+                'available': True,
+            },
+            {
+                'evidence_id': 'points.peer.difference',
+                'label': '최근 기간 중앙값과 차이',
+                'value': difference,
+                'display_value': f'{difference:,}점',
+                'available': True,
+            },
+        ]
+
+    def _compose_points(self, child_name, facts):
+        with app.test_request_context('/'):
+            return compose_from_tools([{
+                'name': 'get_points_facts',
+                'arguments': {'child_id': self.child.id},
+                'result': {
+                    'ok': True,
+                    'child': {'id': self.child.id, 'name': child_name},
+                    'facts': facts,
+                },
+            }])
+
+    def test_point_peer_comparison_uses_recent_period_not_cumulative(self):
+        completion = self._compose_points(
+            '시드-포인트하위',
+            self._peer_point_facts(
+                current=1700, previous=300, delta=1400,
+                cumulative=2500, median=3050, sample=4, difference=-1350,
+            ),
+        )
+        text = completion.text
+        self.assertIn('최근 기간: **1,700점**', text)
+        self.assertIn('같은 학년 최근 기간 중앙값: **3,050점**', text)
+        self.assertIn('차이: **1,350점 낮음**', text)
+        self.assertIn('현재 누적: **2,500점**', text)
+        self.assertNotIn('-1,350점 낮', text)
+        self.assertLess(text.find('1,700점'), text.find('3,050점'))
+        self.assertLess(text.find('3,050점'), text.find('2,500점'))
+        self.assertNotRegex(text, r'2,500점[\s\S]{0,80}3,050점[\s\S]{0,80}1,350점 낮')
+
+    def test_point_peer_comparison_seed_reading_decrease(self):
+        completion = self._compose_points(
+            '시드-독서감소',
+            self._peer_point_facts(
+                current=5000, previous=5050, delta=-50,
+                cumulative=13200, median=5050, sample=4, difference=-50,
+            ),
+        )
+        text = completion.text
+        self.assertIn('최근 기간: **5,000점**', text)
+        self.assertIn('같은 학년 최근 기간 중앙값: **5,050점**', text)
+        self.assertIn('차이: **50점 낮음**', text)
+        self.assertIn('현재 누적: **13,200점**', text)
+        self.assertNotIn('-50점 낮', text)
+        self.assertLess(text.find('5,000점'), text.find('5,050점'))
+        self.assertLess(text.find('5,050점'), text.find('13,200점'))
+
+    def test_point_peer_positive_and_zero_delta_copy(self):
+        higher = self._compose_points(
+            '시드-포인트하위',
+            self._peer_point_facts(
+                current=3100, previous=3000, delta=100,
+                cumulative=4000, median=3050, sample=4, difference=50,
+            ),
+        )
+        self.assertIn('차이: **50점 높음**', higher.text)
+        self.assertNotIn('+50점 높', higher.text)
+        same = self._compose_points(
+            '시드-포인트하위',
+            self._peer_point_facts(
+                current=3050, previous=3000, delta=50,
+                cumulative=4000, median=3050, sample=4, difference=0,
+            ),
+        )
+        self.assertIn('차이: **같음**', same.text)
+        self.assertNotIn('0점 낮', same.text)
+        self.assertNotIn('0점 높', same.text)
+
     def test_focused_metric_does_not_dump_unrelated_facts(self):
         facts = [
             {
@@ -466,7 +601,7 @@ class FactsToolTests(AssistantToolsCase):
         self.assertFalse(any(fact.get('label') == '성장 자료' for fact in learning))
         by_id = {fact['evidence_id']: fact for fact in learning}
         self.assertEqual(by_id['learning.math.performance.expected_days.current']['label'], '최근 수학 예정 학습일')
-        self.assertEqual(by_id['learning.math.performance.studied_days.current']['label'], '최근 수학 학습일')
+        self.assertEqual(by_id['learning.math.performance.studied_days.current']['label'], '최근 수학 학습 기록일')
 
         points = compact_facts(packet, topic='points')
         point_ids = [fact['evidence_id'] for fact in points]
@@ -655,6 +790,62 @@ class HelpAndRoutingTests(AssistantToolsCase):
         self.assertEqual(search_help('존재하지않는정책문서쿼리xyz'), [])
 
 
+class ChildLookupRegistryTests(AssistantToolsCase):
+    def test_child_lookup_survives_unmapped_mapper_registry(self):
+        from sqlalchemy.orm.exc import UnmappedClassError
+        from extensions import db as ext_db
+
+        class BoomRegistry:
+            @property
+            def mappers(self):
+                raise UnmappedClassError("Class 'app.User' is not mapped")
+
+        with patch.object(ext_db.Model, 'registry', BoomRegistry()):
+            found = lookup_child(self.child.id)
+        self.assertEqual(found.id, self.child.id)
+        self.assertEqual(found.name, '민수')
+
+    def test_tool_result_binds_correct_child(self):
+        self._daily(date(2026, 9, 3), korean=80)
+        payload = self._post({
+            'intent': 'chat',
+            'messages': [{'role': 'user', 'content': '민수 포인트 알려줘'}],
+            'page_context': {'endpoint': 'dashboard'},
+        }, user=self.teacher).get_json()
+        self.assertTrue(payload.get('ok'))
+        self.assertEqual(
+            payload['status']['conversation_state']['active_child_id'],
+            self.child.id,
+        )
+        self.assertEqual(
+            payload['status']['conversation_state']['active_child_nickname'],
+            '민수',
+        )
+
+    def test_metrics_does_not_reimport_app_module(self):
+        from features.growth.metrics import _canonical_daily_point_records
+        source = inspect.getsource(_canonical_daily_point_records)
+        self.assertNotIn('from app import fetch_child_daily_point_records', source)
+        from features.points import routes as points_routes
+        self.assertNotIn(
+            'from app import db, fetch_child_daily_point_records',
+            inspect.getsource(points_routes._collect_canonical_records),
+        )
+
+    def test_invalid_child_id_is_denied_without_rebind(self):
+        self._login(self.teacher)
+        with app.test_request_context('/'):
+            result = gated_execute(
+                'get_points_facts',
+                {'child_id': 999999},
+                page_context={},
+                role='돌봄선생님',
+                conversation_state={'active_child_id': self.child.id},
+            )
+        self.assertEqual(result.get('error'), 'invalid_child')
+        self.assertNotEqual((result.get('child') or {}).get('id'), self.child.id)
+
+
 class PermissionAndSafetyTests(AssistantToolsCase):
     def test_unknown_tool_rejected(self):
         self._login(self.teacher)
@@ -756,6 +947,7 @@ class ProviderBoundaryTests(AssistantToolsCase):
             completion = OpenAIAssistantProvider(client=client).complete(
                 messages=[{'role': 'user', 'content': '기본 학습요일이 무슨 뜻이야?'}],
                 page_context={'endpoint': 'dashboard'},
+                role='돌봄선생님',
             )
         self.assertIn('월~금', completion.text)
         self.assertTrue(any(item['kind'] == 'help' for item in completion.sources))
@@ -807,6 +999,7 @@ class ProviderBoundaryTests(AssistantToolsCase):
             completion = provider.complete(
                 messages=[{'role': 'user', 'content': '민수 수학 진도 알려줘'}],
                 page_context={'endpoint': 'dashboard'},
+                role='돌봄선생님',
             )
         self.assertEqual(
             [item['name'] for item in completion.tool_results],
@@ -864,6 +1057,7 @@ class ProviderBoundaryTests(AssistantToolsCase):
                     'content': '시드-난이도재미유지 아동 포인트기록 평균보여줘',
                 }],
                 page_context={'endpoint': 'dashboard'},
+                role='돌봄선생님',
             )
         self.assertEqual(
             [item['name'] for item in completion.tool_results],
@@ -925,6 +1119,7 @@ class ProviderBoundaryTests(AssistantToolsCase):
                 {'role': 'user', 'content': '말했잖아이미'},
             ],
             page_context={'endpoint': 'dashboard'},
+            role='돌봄선생님',
         )
         self.assertEqual(completion.text, CONTEXT_REPAIR_FALLBACK)
         self.assertNotIn('확인하고 싶은 아동 기록', completion.text)
@@ -1047,7 +1242,7 @@ class RuntimeFixTests(AssistantToolsCase):
                 'messages': [{'role': 'user', 'content': '안녕'}],
             })
         self.assertEqual(failed.status_code, 500)
-        self.assertIn('조교 응답을 가져오지 못했습니다', failed.get_json()['message'])
+        self.assertIn('지금은 답변을 준비하지 못했어요', failed.get_json()['message'])
         page = self.client.get('/dashboard')
         self.assertEqual(page.status_code, 200)
         self.assertIn('data-testid="assistant-reset"', page.get_data(as_text=True))

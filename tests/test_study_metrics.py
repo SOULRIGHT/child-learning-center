@@ -15,6 +15,7 @@ from feature_models import (  # noqa: E402
     LearningSubject,
     RECORD_VERIFICATION_OBSERVED,
     RECORD_VERIFICATION_VERIFIED,
+    STUDY_STATUS_EXPLICIT_NOT_STUDIED,
     STUDY_STATUS_STUDIED,
     STUDY_STATUS_UNKNOWN,
 )
@@ -114,7 +115,7 @@ class StudyMetricsTests(unittest.TestCase):
         self.assertEqual(result['explicit_not_studied_days'], 0)
         self.assertEqual(result['unknown_days'], 1)
         self.assertEqual(result['missing_days'], 1)
-        self.assertEqual(result['performance_rate'], 0.0)
+        self.assertIsNone(result['performance_rate'])
         self.assertEqual(result['confirmation_rate'], 0.0)
 
     def test_explicit_unknown_is_unknown(self):
@@ -122,7 +123,16 @@ class StudyMetricsTests(unittest.TestCase):
         result = subject_period(self.child.id, self.korean.id, WED, WED)
         self.assertEqual(result['unknown_days'], 1)
         self.assertEqual(result['explicit_unknown_days'], 1)
+        self.assertIsNone(result['performance_rate'])
         self.assertEqual(result['confirmation_rate'], 0.0)
+
+    def test_confirmed_not_studied_is_genuine_zero_performance(self):
+        self._session(self.korean, WED, STUDY_STATUS_EXPLICIT_NOT_STUDIED)
+        result = subject_period(self.child.id, self.korean.id, WED, WED)
+        self.assertEqual(result['explicit_not_studied_days'], 1)
+        self.assertEqual(result['unknown_days'], 0)
+        self.assertEqual(result['performance_rate'], 0.0)
+        self.assertEqual(result['confirmation_rate'], 1.0)
 
     def test_observed_studied_counts_as_performance(self):
         self._session(

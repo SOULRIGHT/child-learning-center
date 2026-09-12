@@ -12,6 +12,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from features.assistant.failures import safe_failure_class
+
 AUDIT_ENV = 'TEACHER_ASSISTANT_AUDIT_PATH'
 BLOCKED_KEYS = frozenset({
     'api_key', 'authorization', 'cookie', 'token', 'password', 'secret',
@@ -85,7 +87,9 @@ def safe_error(code):
     allowed = {
         'unknown_tool', 'forbidden', 'invalid_child', 'unknown_destination',
         'missing_child', 'provider_error', 'invalid_request', 'question_limit',
-        'tool_round_limit', 'disabled',
+        'tool_round_limit', 'disabled', 'request_deadline', 'grounding_failure',
+        'tool_failure', 'data_read_failure', 'guardrail_error', 'guardrail_block',
+        'unexpected_argument', 'malformed_argument',
     }
     raw = str(code or '')
     if raw in allowed:
@@ -202,7 +206,75 @@ def record_request_end(recorder):
             event['selected_candidate_index'] = int(recorder.get('selected_candidate_index'))
         except (TypeError, ValueError):
             pass
+    _put_safe_audit_fields(event, recorder)
     append_event(event)
+
+
+def _put_safe_audit_fields(event, recorder):
+    source = recorder.get('answer_source')
+    if source in {'compose', 'llm', 'pending', 'safety', 'navigation', 'fallback', 'guardrail'}:
+        event['answer_source'] = source
+    grounding = recorder.get('grounding_status')
+    if grounding in {'pass', 'fail', 'skipped'}:
+        event['grounding_status'] = grounding
+    codes = recorder.get('grounding_violation_codes')
+    if isinstance(codes, (list, tuple)):
+        event['grounding_violation_codes'] = [
+            str(item)[:40] for item in codes if isinstance(item, str)
+        ][:12]
+    primary = recorder.get('primary_provider')
+    if primary in {'openai', 'fake', 'anthropic'}:
+        event['primary_provider'] = primary
+    fallback = recorder.get('fallback_provider')
+    if isinstance(fallback, str) and fallback:
+        event['fallback_provider'] = fallback[:40]
+    if recorder.get('fallback_attempted') is True:
+        event['fallback_attempted'] = True
+    if recorder.get('fallback_succeeded') is True:
+        event['fallback_succeeded'] = True
+    failure = safe_failure_class(recorder.get('failure_class'))
+    if failure:
+        event['failure_class'] = failure
+    if recorder.get('elapsed_ms') is not None:
+        try:
+            event['elapsed_ms'] = int(recorder.get('elapsed_ms'))
+        except (TypeError, ValueError):
+            pass
+    if recorder.get('deadline_ms') is not None:
+        try:
+            event['deadline_ms'] = int(recorder.get('deadline_ms'))
+        except (TypeError, ValueError):
+            pass
+    if recorder.get('provider_latency_ms') is not None:
+        try:
+            event['provider_latency_ms'] = int(recorder.get('provider_latency_ms'))
+        except (TypeError, ValueError):
+            pass
+    names = recorder.get('tool_names')
+    if isinstance(names, (list, tuple)):
+        event['tool_names'] = [str(item)[:40] for item in names if item][:12]
+    evidence = recorder.get('used_evidence_ids')
+    if isinstance(evidence, (list, tuple)):
+        event['used_evidence_ids'] = [str(item)[:120] for item in evidence if item][:12]
+    status = recorder.get('guardrail_status')
+    if status in {'ok', 'blocked', 'error'}:
+        event['guardrail_status'] = status
+    gsource = recorder.get('guardrail_source')
+    if gsource in {'input', 'output'}:
+        event['guardrail_source'] = gsource
+    provider = recorder.get('guardrail_provider')
+    if isinstance(provider, str) and provider:
+        event['guardrail_provider'] = provider[:40]
+    if recorder.get('conversation_closed') is True:
+        event['conversation_closed'] = True
+    categories = recorder.get('guardrail_categories')
+    if isinstance(categories, (list, tuple)):
+        event['guardrail_categories'] = [str(item)[:40] for item in categories if item][:8]
+    if recorder.get('guardrail_latency_ms') is not None:
+        try:
+            event['guardrail_latency_ms'] = int(recorder.get('guardrail_latency_ms'))
+        except (TypeError, ValueError):
+            pass
 
 
 def record_feedback(*, request_id, user_id, rating):

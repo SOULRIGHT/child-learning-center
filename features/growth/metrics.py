@@ -44,7 +44,7 @@ from features.growth.windows import (
     previous_window,
     resolve_as_of,
 )
-from features.reading.access import get_child
+from features.reading.access import get_child, loaded_app_attr
 from features.subjects import CURRENT_SUBJECTS
 
 PROGRAM_TYPES = (
@@ -93,7 +93,7 @@ def _snapshot_meta(as_of, window_days, previous, available_from):
 
 
 def _canonical_daily_point_records(child_id):
-    from app import fetch_child_daily_point_records
+    fetch_child_daily_point_records = loaded_app_attr('fetch_child_daily_point_records')
     return fetch_child_daily_point_records(child_id)
 
 

@@ -1,4 +1,4 @@
-"""교사 대상 짧은 조교 문구. 유아틱/장문 essay 금지."""
+"""교사 대상 짧은 뮤온 문구. 유아틱/장문 essay 금지."""
 
 from features.assistant.persona import (
     MUON_CAPABILITY_REPLY,
@@ -24,8 +24,32 @@ NAV_NEED_NAME = '어느 아동의 화면을 열까요? 이름을 알려 주세�
 PAGE_GENERIC = '현재 화면의 내용을 확인하고, 필요한 설정이나 아동 화면으로 이동할 수 있어요.'
 ONBOARDING_UNAVAILABLE = '지금은 센터 설정 안내를 불러오지 못했습니다.'
 ONBOARDING_DONE = '필요한 센터 설정은 확인된 상태입니다. 설정 화면에서 한 번 더 살펴볼 수 있어요.'
-PROVIDER_ERROR = '조교 응답을 가져오지 못했습니다. 기존 화면은 그대로 사용할 수 있어요.'
-DISABLED = '조교를 사용할 수 없습니다.'
+MSG_PROVIDER_UNAVAILABLE = (
+    '지금은 답변을 준비하지 못했어요. 잠시 후 다시 시도해 주세요. '
+    '이전 대화 내용은 그대로 유지되어 있어요.'
+)
+MSG_REQUEST_TIMEOUT = (
+    '답변을 준비하는 데 예상보다 오래 걸렸어요. 잠시 후 다시 시도해 주세요. '
+    '이전 대화 내용은 그대로 유지되어 있어요.'
+)
+MSG_RECORD_UNAVAILABLE = '지금은 기록을 불러오지 못했어요. 잠시 후 다시 확인해 주세요.'
+MSG_AUTH_REQUIRED = '로그인 확인이 필요해요. 다시 로그인한 뒤 이어서 확인해 주세요.'
+MSG_NETWORK_ERROR = (
+    '연결이 원활하지 않아 답변을 받지 못했어요. '
+    '인터넷 연결을 확인한 뒤 다시 시도해 주세요.'
+)
+MSG_GROUNDING_UNSAFE = '기록을 정확히 확인하지 못했어요. 잠시 후 다시 확인해 주세요.'
+MSG_GUARDRAIL_BLOCK = (
+    '이 대화에서는 제가 안내하기 어려운 내용이 확인됐어요. '
+    '새 대화를 시작하면 센터의 학습·독서·포인트·성장 기록을 다시 도와드릴게요.'
+)
+MSG_GUARDRAIL_UNAVAILABLE = (
+    '지금은 답변의 안전성을 확인하지 못했어요. '
+    '잠시 후 다시 시도해 주세요. '
+    '이전 대화 내용은 그대로 유지되어 있어요.'
+)
+PROVIDER_ERROR = MSG_PROVIDER_UNAVAILABLE
+DISABLED = '지금은 뮤온을 사용할 수 없어요.'
 FALLBACK = '확인하고 싶은 아동 기록이나 화면을 짧게 말씀해 주세요.'
 ASK_RETRY = '응답을 가져오지 못했습니다.'
 OPENING_GROWTH = '성장 리포트로 이동할게요.'
@@ -46,8 +70,17 @@ FUZZY_CONFIRM = '{grade}학년 {name} 아동을 말씀하시는 건가요?'
 CONFIRM_YES = '네, {name}이에요'
 CONFIRM_OTHER = '다른 아동 찾기'
 NO_RANK_REPLY = '순위나 백분위는 제공하지 않습니다. 같은 기준의 또래 중앙값만 참고할 수 있어요.'
-NO_RAW_READING_REPLY = '감상문 원문은 조교가 보여 드릴 수 없어요. 필요하면 독서 기록 화면에서 확인해 주세요.'
-POLICY_SCOPE_REPLY = '조교는 허용된 조회 및 화면 이동 기능만 사용할 수 있습니다.'
+NO_RAW_READING_REPLY = '감상문 원문은 제가 보여 드릴 수 없어요. 필요하면 독서 기록 화면에서 확인해 주세요.'
+NO_IMPUTATION_REPLY = (
+    '기록이 없는 날의 값을 임의로 채워 계산할 수는 없어요. '
+    '확인된 기록만 기준으로 살펴볼 수 있습니다.'
+)
+NO_ATTENDANCE_FROM_LEARNING_REPLY = (
+    '학습 기록과 출석 기록은 같은 의미가 아니에요. '
+    '센터에서 학습한 기록만으로 출석 여부를 판단할 수 없습니다.'
+)
+ASK_RECORD_DOMAIN = '학습, 포인트, 독서, 성장 기록 중 어떤 기록을 볼까요?'
+POLICY_SCOPE_REPLY = '저는 허용된 조회와 화면 이동만 도와드릴 수 있어요.'
 DRAWER_NOTICE = (
     '뮤온은 아동의 학습·포인트·독서 기록을 확인하고, '
     '센터 설정을 안내하거나 필요한 화면으로 이동할 수 있어요. '

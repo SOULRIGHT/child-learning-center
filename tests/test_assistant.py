@@ -119,6 +119,8 @@ class VisibilityTests(AssistantCase):
         html = self.client.get('/dashboard').get_data(as_text=True)
         self.assertIn('data-testid="teacher-assistant-launcher"', html)
         self.assertIn('data-testid="teacher-assistant-drawer"', html)
+        self.assertIn('id="teacherAssistantTitle">뮤온</h2>', html)
+        self.assertNotIn('id="teacherAssistantTitle">조교</h2>', html)
         self.assertIn('assistant-character-stage', html)
         self.assertIn('id="assistant-page-context"', html)
         boot = _boot_json(html)
@@ -166,10 +168,12 @@ class ApiTests(AssistantCase):
         first = provider.complete(
             messages=[{'role': 'user', 'content': '안녕하세요'}],
             page_context={'endpoint': 'dashboard'},
+            role='돌봄선생님',
         )
         second = provider.complete(
             messages=[{'role': 'user', 'content': '안녕하세요'}],
             page_context={'endpoint': 'dashboard'},
+            role='돌봄선생님',
         )
         self.assertEqual(first.text, second.text)
         self.assertIn('안녕하세요', first.text)
@@ -320,8 +324,10 @@ class ChildSearchTests(AssistantCase):
         }, user=self.teacher).get_json()
         self.assertIn('여러 명', payload['message']['content'])
         self.assertFalse(any(action.get('auto') for action in payload['actions']))
-        ids = {action['params']['child_id'] for action in payload['actions']}
-        self.assertEqual(ids, {self.child.id, twin.id})
+        self.assertTrue(all(action.get('type') == 'reply' for action in payload['actions']))
+        labels = ' '.join(action.get('label') or '' for action in payload['actions'])
+        self.assertIn('2학년', labels)
+        self.assertIn('5학년', labels)
 
     def test_no_fake_child_id(self):
         payload = self._post({

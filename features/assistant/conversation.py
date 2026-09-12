@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 
 from features.assistant.copy import (
+    ASK_RECORD_DOMAIN,
     CAPABILITY_REPLY,
     CONFIRM_OTHER,
     CONFIRM_YES,
@@ -76,6 +77,7 @@ def empty_state():
         'active_subject': None,
         'active_topic': None,
         'pending_action': None,
+        'segment_closed': False,
     }
 
 
@@ -94,6 +96,10 @@ def sanitize_conversation_state(raw, *, page_context=None):
     if topic in TOPICS:
         state['active_topic'] = topic
     state['pending_action'] = _sanitize_pending(data.get('pending_action'))
+    if data.get('segment_closed') is True:
+        closed = empty_state()
+        closed['segment_closed'] = True
+        return closed
     return apply_page_priority(state, page_context)
 
 
@@ -131,6 +137,8 @@ def public_conversation_state(state):
     pending = _sanitize_pending(state.get('pending_action'))
     if pending:
         out['pending_action'] = pending
+    if state.get('segment_closed'):
+        out['segment_closed'] = True
     return out
 
 
@@ -180,6 +188,9 @@ def should_skip_pending_fill(text):
     if wants_help(raw) and ('뭐야' in raw or '뜻' in raw or '의미' in raw):
         return True
     if any(token in raw for token in ('원문', '몇 등', '등수', '백분위', '시스템 프롬프트', '이전 지시')):
+        return True
+    from features.assistant.safety import safety_override_payload
+    if safety_override_payload(raw):
         return True
     if len(raw) > 48:
         return True
@@ -507,7 +518,8 @@ def update_state_from_tools(state, tool_results, *, page_context=None, user_text
         if name == 'get_center_setup_status' and result.get('ok'):
             state['active_topic'] = 'setup'
             pending = None
-    if fuzzy_match:
+    domain_locked = (previous_pending or {}).get('awaiting') == 'domain'
+    if fuzzy_match and not domain_locked:
         pending = pending or _pending_from_nav_or_facts(tool_results, state) or pending_need_child(
             destination=_destination_from_tools(tool_results),
         )
@@ -517,7 +529,7 @@ def update_state_from_tools(state, tool_results, *, page_context=None, user_text
         pending['candidate_nickname'] = fuzzy_match.get('name')
         pending.pop('missing', None)
         state['pending_action'] = pending
-    elif multiple_matches:
+    elif multiple_matches and not domain_locked:
         pending = (
             _pending_from_nav_or_facts(tool_results, state)
             or previous_pending
@@ -568,8 +580,10 @@ def _selected_search_resolution(tool_results):
 
 def child_resolution_payload(state, tool_results):
     """LLM이 선택한 search_child 결과를 안전한 후보 UI로 정규화한다."""
-    fuzzy = _fuzzy_match_from_tools(tool_results)
     pending = _sanitize_pending((state or {}).get('pending_action'))
+    if pending and pending.get('awaiting') == 'domain':
+        return None
+    fuzzy = _fuzzy_match_from_tools(tool_results)
     if fuzzy and pending:
         return confirmation_payload(state, fuzzy, pending=pending)
     multiple = _multiple_matches_from_tools(tool_results)
@@ -880,6 +894,17 @@ def _bind_child(state, child):
     state['active_child_nickname'] = found.name
 
 
+def _domain_reprompt_payload(state):
+    state['pending_action'] = pending_need_domain()
+    return {
+        'text': ASK_RECORD_DOMAIN,
+        'actions': [],
+        'status': None,
+        'character_state': 'help',
+        'handled': True,
+    }
+
+
 def _bind_confirmed_child_for_domain(state, child):
     from features.assistant.persona import child_record_clarification
 
@@ -919,6 +944,9 @@ def _apply_domain_selection(text, *, state, pending, page_context, role):
     from features.assistant.navigation import classify_remainder_domain
     classified = classify_remainder_domain(text)
     if classified is None:
+        rejected, remainder = reject_remainder(text)
+        if is_affirmation(text) or (rejected and not remainder):
+            return _domain_reprompt_payload(state)
         return None
     if classified.get('kind') == 'navigate':
         next_pending = dict(pending or {})
@@ -1125,15 +1153,7 @@ def _sanitize_candidates(raw):
 
 
 def _choice_message(query, match_type, candidates):
-    lines = [choice_need_text(query, match_type)]
-    for index, child in enumerate(candidates or (), start=1):
-        name = child.get('name') or ''
-        grade = child.get('grade')
-        if grade not in (None, ''):
-            lines.append(f"{index}. {name} ({grade}학년)")
-        else:
-            lines.append(f"{index}. {name}")
-    return '\n'.join(lines)
+    return choice_need_text(query, match_type)
 
 
 def _choice_actions_from_candidates(candidates):

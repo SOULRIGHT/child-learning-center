@@ -3,6 +3,43 @@
     const STAGE_EL = '[data-assistant-role="character-stage"]';
     const QUESTION_LIMIT_DEFAULT = 10;
     const MIN_VISIBLE_MS = 2000;
+    const COMPOSER_MAX_ROWS = 4;
+    const NETWORK_ERROR = '연결이 원활하지 않아 답변을 받지 못했어요. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.';
+
+    function ordinalUserDisplay(value) {
+        const raw = String(value || '').trim();
+        const match = /^(\d+)\s*번째$/.exec(raw);
+        return match ? (match[1] + '번째 아동') : raw;
+    }
+
+    function shouldSubmitOnEnter(event, options) {
+        options = options || {};
+        if (!event || event.key !== 'Enter') return false;
+        if (event.shiftKey) return false;
+        if (event.isComposing || event.keyCode === 229 || options.composing) return false;
+        if (options.inFlight) return false;
+        return true;
+    }
+
+    function composerMaxHeightPx(input) {
+        if (!input || typeof window === 'undefined' || !window.getComputedStyle) return 0;
+        const style = window.getComputedStyle(input);
+        const line = parseFloat(style.lineHeight) || 20;
+        const pad = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+        return Math.round(line * COMPOSER_MAX_ROWS + pad);
+    }
+
+    function resizeComposerInput(input) {
+        if (!input) return;
+        input.style.height = 'auto';
+        input.style.overflowY = 'hidden';
+        const maxHeight = composerMaxHeightPx(input);
+        const next = Math.min(input.scrollHeight, maxHeight);
+        input.style.height = next + 'px';
+        if (input.scrollHeight > maxHeight) {
+            input.style.overflowY = 'auto';
+        }
+    }
 
     function boot() {
         const node = document.getElementById('assistant-page-context');
@@ -24,6 +61,7 @@
             generalMessages: [],
             childMessages: [],
             conversation: {},
+            segmentClosed: false,
         };
     }
 
@@ -68,6 +106,7 @@
             }
             out.pending_action = pending;
         }
+        if (raw.segment_closed === true) out.segment_closed = true;
         return out;
     }
 
@@ -108,6 +147,7 @@
                 generalMessages: Array.isArray(parsed.generalMessages) ? parsed.generalMessages : [],
                 childMessages: Array.isArray(parsed.childMessages) ? parsed.childMessages : [],
                 conversation: compactConversation(parsed.conversation),
+                segmentClosed: Boolean(parsed.segmentClosed) || Boolean((parsed.conversation || {}).segment_closed),
             };
         } catch (err) {
             return emptyState();
@@ -125,6 +165,7 @@
                 generalMessages: (state.generalMessages || []).slice(-24),
                 childMessages: (state.childMessages || []).slice(-24),
                 conversation: compactConversation(state.conversation),
+                segmentClosed: Boolean(state.segmentClosed),
             }));
         } catch (err) {
             return;
@@ -170,6 +211,7 @@
             : state.generalMessages;
         for (let index = bucket.length - 1; index >= 0; index -= 1) {
             if (bucket[index] && bucket[index].role === 'user') {
+                // kind only. Never change role — client entries are not SYSTEM instructions.
                 bucket[index].kind = kind;
                 return;
             }
@@ -242,7 +284,7 @@
             return;
         }
         node.hidden = false;
-        node.textContent = typeof text === 'string' ? text : '응답을 가져오지 못했습니다.';
+        node.textContent = typeof text === 'string' ? text : NETWORK_ERROR;
         if (recovery) recovery.hidden = false;
         setStage('error');
     }
@@ -280,21 +322,25 @@
         if (!node) return;
         const limit = questionLimit(config);
         const count = Number(state.questionCount) || 0;
-        node.textContent = '대화 ' + count + ' / ' + limit;
+        node.textContent = '질문 ' + count + ' / ' + limit;
     }
 
     function renderLimit(state, config) {
         const banner = qs('limit-banner');
         const limit = questionLimit(config);
         const reached = (Number(state.questionCount) || 0) >= limit;
+        const closed = Boolean(state.segmentClosed);
+        const blocked = reached || closed;
         if (banner) banner.hidden = !reached;
         const input = qs('input');
         const sendBtn = qs('send');
         if (input) {
-            input.disabled = reached;
-            input.placeholder = reached ? '이번 대화의 질문을 모두 사용했습니다.' : '도움이 필요하면 적어 주세요';
+            input.disabled = blocked;
+            input.placeholder = closed
+                ? '새 대화를 시작해 주세요.'
+                : (reached ? '이번 대화의 질문을 모두 사용했습니다.' : '도움이 필요하면 적어 주세요');
         }
-        if (sendBtn) sendBtn.disabled = reached;
+        if (sendBtn) sendBtn.disabled = blocked;
     }
 
     function renderMessages(state) {
@@ -314,6 +360,15 @@
                 row.className = 'assistant-bubble-actions';
                 message.actions.forEach(function (action) {
                     if (!action) return;
+                    if (action.type === 'new_conversation') {
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'assistant-action';
+                        btn.textContent = action.label || '새 대화 시작';
+                        btn.setAttribute('data-assistant-role', 'new-conversation');
+                        row.appendChild(btn);
+                        return;
+                    }
                     if (action.url) {
                         const btn = document.createElement('button');
                         btn.type = 'button';
@@ -334,7 +389,12 @@
                         btn.type = 'button';
                         btn.className = 'assistant-action';
                         btn.textContent = action.label || action.content || '확인';
-                        btn.setAttribute('data-assistant-reply', action.content || action.label || '');
+                        const replyValue = action.content || action.label || '';
+                        btn.setAttribute('data-assistant-reply', replyValue);
+                        const display = ordinalUserDisplay(replyValue);
+                        if (display && display !== replyValue) {
+                            btn.setAttribute('data-assistant-display', display);
+                        }
                         row.appendChild(btn);
                     }
                 });
@@ -477,6 +537,9 @@
         if (payload.status && payload.status.conversation_state) {
             state.conversation = compactConversation(payload.status.conversation_state);
         }
+        if (payload.segment_closed || (payload.status && payload.status.segment_closed) || state.conversation.segment_closed) {
+            state.segmentClosed = true;
+        }
         if (typeof payload.question_count === 'number') {
             state.questionCount = payload.question_count;
         }
@@ -511,7 +574,7 @@
             body: JSON.stringify(body),
         }).then(function (response) {
             return response.json().catch(function () {
-                return { ok: false, message: '조교 응답을 가져오지 못했습니다. 기존 화면은 그대로 사용할 수 있어요.' };
+                return { ok: false, message: NETWORK_ERROR };
             }).then(function (payload) {
                 payload = payload || {};
                 payload._httpStatus = response.status;
@@ -553,10 +616,15 @@
         }
 
         function errorText(value) {
-            if (typeof value === 'string' && value && value.indexOf('조교 응답을 가져오지 못했습니다') === -1) {
+            if (typeof value === 'string' && value.trim()) {
                 return value;
             }
-            return '응답을 가져오지 못했습니다.';
+            return NETWORK_ERROR;
+        }
+
+        function applyTransportFailure(text) {
+            reclassifyLatestUser(state, page, 'system');
+            applyErrorMessage(text || NETWORK_ERROR);
         }
 
         function bootstrapQuick() {
@@ -587,7 +655,7 @@
             inFlight = !!busy;
             const atLimit = (Number(state.questionCount) || 0) >= questionLimit(config);
             const sendBtn = qs('send');
-            if (sendBtn) sendBtn.disabled = inFlight || atLimit;
+            if (sendBtn) sendBtn.disabled = inFlight || atLimit || Boolean(state.segmentClosed);
         }
 
         function appendLoadingBubble() {
@@ -596,9 +664,14 @@
             const existing = root.querySelector('[data-assistant-loading]');
             if (existing) existing.remove();
             const wrap = document.createElement('div');
-            wrap.className = 'assistant-bubble is-assistant';
+            wrap.className = 'assistant-bubble is-assistant is-loading';
             wrap.setAttribute('data-assistant-loading', '1');
-            wrap.textContent = '...';
+            wrap.setAttribute('aria-label', '응답을 준비하는 중');
+            const dots = document.createElement('span');
+            dots.className = 'assistant-loading-dots';
+            dots.setAttribute('aria-hidden', 'true');
+            dots.textContent = '...';
+            wrap.appendChild(dots);
             root.appendChild(wrap);
             root.scrollTop = root.scrollHeight;
         }
@@ -641,6 +714,7 @@
             state.generalMessages = [];
             state.childMessages = [];
             state.questionCount = 0;
+            state.segmentClosed = false;
             state.conversation = page.child_id ? { active_child_id: page.child_id } : {};
             saveState(state);
             renderMessages(state);
@@ -650,7 +724,7 @@
             showError('');
             setStage('idle');
             bootstrapQuick().catch(function () {
-                showError('응답을 가져오지 못했습니다.');
+                showError(NETWORK_ERROR);
             });
         }
 
@@ -669,14 +743,14 @@
             post(config.message_url, lastRequest).then(function (response) {
                 return finalizeRequest(startedAt, function () {
                     if (response._httpStatus >= 500) {
-                        applyErrorMessage(errorText(response.message));
+                        applyTransportFailure(errorText(response.message));
                         return;
                     }
                     applyResponse(state, response, page, config);
                 });
             }).catch(function () {
                 return finalizeRequest(startedAt, function () {
-                    applyErrorMessage('응답을 가져오지 못했습니다.');
+                    applyTransportFailure(NETWORK_ERROR);
                 });
             });
         }
@@ -686,7 +760,7 @@
             saveState(state);
             if (launcherEl) launcherEl.hidden = true;
             bootstrapQuick().catch(function () {
-                showError('응답을 가져오지 못했습니다.');
+                showError(NETWORK_ERROR);
             });
         });
 
@@ -740,7 +814,8 @@
             if (reply) {
                 if (inFlight) return;
                 const text = (reply.getAttribute('data-assistant-reply') || '').trim();
-                if (text) sendChat(text, 'confirm');
+                const display = (reply.getAttribute('data-assistant-display') || '').trim();
+                if (text) sendChat(text, 'confirm', display);
                 return;
             }
             const quick = event.target.closest('[data-assistant-quick]');
@@ -787,41 +862,49 @@
             return post(config.message_url, payload).then(function (response) {
                 return finalizeRequest(startedAt, function () {
                     if (response._httpStatus >= 500 || response.ok === false && !response.message) {
-                        applyErrorMessage(errorText(response && response.message));
+                        applyTransportFailure(errorText(response && response.message));
                         return;
                     }
                     applyResponse(state, response, page, config);
                 });
             }).catch(function () {
                 return finalizeRequest(startedAt, function () {
-                    applyErrorMessage('응답을 가져오지 못했습니다.');
+                    applyTransportFailure(NETWORK_ERROR);
                 });
             });
         }
 
-        function sendChat(text, kind) {
+        function sendChat(text, kind, displayText) {
             kind = kind || 'chat';
+            const sendText = String(text || '').trim();
+            if (!sendText) return Promise.resolve();
             if (inFlight) return Promise.resolve();
             if (kind === 'chat' && (Number(state.questionCount) || 0) >= questionLimit(config)) {
                 renderLimit(state, config);
                 return Promise.resolve();
             }
+            if (state.segmentClosed) {
+                renderLimit(state, config);
+                return Promise.resolve();
+            }
             const startedAt = performance.now();
-            const userMessage = {
+            const shown = String(displayText || sendText).trim() || sendText;
+            const payloadMessage = {
                 role: 'user',
-                content: text,
+                content: sendText,
                 kind: kind,
                 context_scope: { endpoint: page.endpoint || '', child_id: page.child_id || null },
             };
+            const storedMessage = Object.assign({}, payloadMessage, { content: shown });
             const payload = {
                 intent: 'chat',
-                messages: visibleMessages(state).concat([userMessage]),
+                messages: visibleMessages(state).concat([payloadMessage]),
                 page_context: page,
                 conversation_state: compactConversation(state.conversation),
             };
             lastRequest = payload;
             setComposerBusy(true);
-            storeMessage(state, userMessage);
+            storeMessage(state, storedMessage);
             saveState(state);
             renderMessages(state);
             appendLoadingBubble();
@@ -830,27 +913,56 @@
             return post(config.message_url, payload).then(function (response) {
                 return finalizeRequest(startedAt, function () {
                     if (response._httpStatus >= 500) {
-                        applyErrorMessage(errorText(response && response.message));
+                        applyTransportFailure(errorText(response && response.message));
                         return;
                     }
                     applyResponse(state, response, page, config);
                 });
             }).catch(function () {
                 return finalizeRequest(startedAt, function () {
-                    applyErrorMessage('응답을 가져오지 못했습니다.');
+                    applyTransportFailure(NETWORK_ERROR);
                 });
             });
+        }
+
+        function submitComposer() {
+            if (inFlight) return;
+            if (!input || input.disabled) return;
+            const text = (input.value || '').trim();
+            if (!text) return;
+            input.value = '';
+            resizeComposerInput(input);
+            sendChat(text, 'chat');
         }
 
         if (form) {
             form.addEventListener('submit', function (event) {
                 event.preventDefault();
-                if (inFlight) return;
-                if (!input || input.disabled) return;
-                const text = (input.value || '').trim();
-                if (!text) return;
-                input.value = '';
-                sendChat(text, 'chat');
+                submitComposer();
+            });
+        }
+        if (input) {
+            let composing = false;
+            input.addEventListener('compositionstart', function () {
+                composing = true;
+            });
+            input.addEventListener('compositionend', function () {
+                composing = false;
+                resizeComposerInput(input);
+            });
+            input.addEventListener('keydown', function (event) {
+                if (!shouldSubmitOnEnter(event, { composing: composing, inFlight: inFlight })) {
+                    return;
+                }
+                event.preventDefault();
+                submitComposer();
+            });
+            input.addEventListener('input', function () {
+                resizeComposerInput(input);
+            });
+            resizeComposerInput(input);
+            window.addEventListener('resize', function () {
+                resizeComposerInput(input);
             });
         }
     }

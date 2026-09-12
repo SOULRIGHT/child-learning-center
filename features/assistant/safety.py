@@ -5,12 +5,17 @@ import re
 
 from features.assistant.copy import (
     CAPABILITY_REPLY,
+    NO_ATTENDANCE_FROM_LEARNING_REPLY,
+    NO_IMPUTATION_REPLY,
     NO_RANK_REPLY,
     NO_RAW_READING_REPLY,
     POLICY_SCOPE_REPLY,
 )
 
-RANK_MARKERS = ('몇 등', '등수', '백분위', '상위 몇', '하위 몇', '1등', '꼴등', '제일 잘')
+RANK_MARKERS = (
+    '몇 등', '등수', '백분위', '상위 몇', '하위 몇', '1등', '꼴등',
+    '제일 잘', '제일 못해', '꼴찌', '하위권', '상위권', '최하위', '최상위', 'percentile',
+)
 RAW_READING_MARKERS = ('원문', '감상문 전부', '감상문 원문', 'review_text', 'select_text')
 LEAK_MARKERS = (
     'SYSTEM_PROMPT',
@@ -34,7 +39,9 @@ ZERO_CLAIM = re.compile(r'0으로 계산')
 
 def is_rank_request(text):
     raw = text or ''
-    return any(marker in raw for marker in RANK_MARKERS)
+    if any(marker in raw for marker in RANK_MARKERS):
+        return True
+    return bool(re.search(r'제일.{0,8}못해', raw))
 
 
 def is_raw_reading_request(text):
@@ -45,6 +52,31 @@ def is_raw_reading_request(text):
 def is_injection_request(text):
     raw = (text or '').casefold()
     return any(marker.casefold() in raw for marker in INJECTION_MARKERS)
+
+
+def is_imputation_request(text):
+    raw = text or ''
+    missing = any(token in raw for token in (
+        '없는 날', '기록 없는', '빠진 날', '비어 있는', '없는 값', '빠진 값',
+    ))
+    fill = any(token in raw for token in (
+        '채우', '추정', '적당히', '평균값', '0으로',
+    ))
+    if missing and fill:
+        return True
+    return any(token in raw for token in (
+        '채워 계산', '채워서 계산', '적당히 채', '추정해서 계산',
+        '0으로 넣어서', '0으로 넣', '평균값으로 채',
+    ))
+
+
+def is_attendance_equivalence_request(text):
+    raw = text or ''
+    study = any(token in raw for token in ('공부', '학습'))
+    attend = any(token in raw for token in (
+        '출석', '온 거', '온거', '온 거잖아',
+    ))
+    return study and attend
 
 
 def sanitize_output(text, *, user_text='', tool_results=None, system_prompt=''):
@@ -78,6 +110,24 @@ def safety_override_payload(user_text):
     if is_raw_reading_request(user_text):
         return {
             'text': NO_RAW_READING_REPLY,
+            'actions': [],
+            'character_state': 'help',
+        }
+    if is_injection_request(user_text):
+        return {
+            'text': POLICY_SCOPE_REPLY,
+            'actions': [],
+            'character_state': 'help',
+        }
+    if is_imputation_request(user_text):
+        return {
+            'text': NO_IMPUTATION_REPLY,
+            'actions': [],
+            'character_state': 'help',
+        }
+    if is_attendance_equivalence_request(user_text):
+        return {
+            'text': NO_ATTENDANCE_FROM_LEARNING_REPLY,
             'actions': [],
             'character_state': 'help',
         }

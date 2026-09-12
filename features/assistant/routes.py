@@ -18,6 +18,7 @@ from features.assistant.config import (
 )
 from features.assistant.context import build_page_context
 from features.assistant.copy import DISABLED, PROVIDER_ERROR
+from features.assistant.persona import MUON_NAME
 from features.assistant.provider import AssistantProviderError
 from features.assistant.runtime import AssistantRequestError, QUESTION_LIMIT, complete_assistant
 
@@ -50,6 +51,7 @@ def _assistant_template_context():
         return {
             'teacher_assistant_visible': False,
             'assistant_boot': None,
+            'assistant_display_name': MUON_NAME,
         }
     page = build_page_context()
     try:
@@ -58,6 +60,7 @@ def _assistant_template_context():
         character = {'kind': None, 'url': None}
     return {
         'teacher_assistant_visible': True,
+        'assistant_display_name': MUON_NAME,
         'assistant_boot': {
             'page': page,
             'message_url': url_for('assistant.message'),
@@ -78,6 +81,7 @@ def inject_teacher_assistant():
         return {
             'teacher_assistant_visible': False,
             'assistant_boot': None,
+            'assistant_display_name': MUON_NAME,
         }
 
 

@@ -19,9 +19,13 @@ from features.assistant.config import (
     TEACHER_ASSISTANT_PROVIDER_ENV,
 )
 from features.assistant.copy import (
+    ASK_RECORD_DOMAIN,
     CAPABILITY_REPLY,
     DRAWER_NOTICE,
     FALLBACK,
+    MSG_REQUEST_TIMEOUT,
+    NO_ATTENDANCE_FROM_LEARNING_REPLY,
+    NO_IMPUTATION_REPLY,
     NO_RANK_REPLY,
     NO_RAW_READING_REPLY,
     POLICY_SCOPE_REPLY,
@@ -206,7 +210,7 @@ class OrchestrationCase(unittest.TestCase):
         }, clear=False):
             with patch('features.assistant.runtime.get_assistant_provider') as get_provider:
                 get_provider.return_value.complete.return_value = AssistantCompletion(
-                    text='저는 지역아동센터 학습관리 조교예요.',
+                    text='저는 학습관리 도우미 뮤온이에요.',
                 )
                 with patch('features.assistant.policy.execute_tool', wraps=execute_tool) as wrapped:
                     second = self._chat(
@@ -217,7 +221,7 @@ class OrchestrationCase(unittest.TestCase):
         sent_state = get_provider.return_value.complete.call_args.kwargs['conversation_state']
         self.assertEqual(sent_state['pending_action']['destination'], 'reading_history')
         self.assertNotIn('search_child', [call.args[0] for call in wrapped.call_args_list])
-        self.assertIn('학습관리 조교', second['message']['content'])
+        self.assertIn('학습관리 도우미 뮤온', second['message']['content'])
         self.assertTrue(second['feedback_enabled'])
 
     def test_live_pending_slot_uses_llm_tool_loop_then_navigates(self):
@@ -428,6 +432,10 @@ class OrchestrationCase(unittest.TestCase):
         self.assertTrue(any('시드-독서감소' in label for label in labels))
         self.assertFalse(any(item.get('auto') for item in payload['actions']))
         self.assertTrue(all(item.get('type') == 'reply' for item in payload['actions']))
+        self.assertNotIn('1. 시드', payload['message']['content'])
+        self.assertNotIn('2. 시드', payload['message']['content'])
+        self.assertTrue(any(item.get('label', '').startswith('1. ') for item in payload['actions']))
+        self.assertEqual(payload['message']['content'].count('\n'), 0)
 
     def _assert_selects_second_seed(self, second, first, expected_count=None):
         candidates = first['status']['conversation_state']['pending_action']['candidates']
@@ -946,6 +954,7 @@ class OrchestrationCase(unittest.TestCase):
                     messages=[{'role': 'user', 'content': '관측 기반 진도가 뭐야?', 'kind': 'chat'}],
                     page_context={'endpoint': 'dashboard'},
                     conversation_state={},
+                    role='돌봄선생님',
                 )
         names = [item.args[0] for item in gated.call_args_list]
         self.assertEqual(names, ['search_help', 'search_help'])
@@ -982,6 +991,7 @@ class OrchestrationCase(unittest.TestCase):
                     messages=[{'role': 'user', 'content': '진도가 뭐야?', 'kind': 'chat'}],
                     page_context={'endpoint': 'dashboard'},
                     conversation_state={'active_child_id': self.last_test.id},
+                    role='돌봄선생님',
                 )
         self.assertEqual(len(gated.call_args_list), 5)
         self.assertTrue((completion.status or {}).get('tool_round_limit'))
@@ -1025,7 +1035,7 @@ class OrchestrationCase(unittest.TestCase):
         self.assertIn('data-assistant-feedback', js)
         html = (PROJECT_ROOT / 'templates' / 'assistant' / '_drawer.html').read_text(encoding='utf-8')
         self.assertIn('assistant-new-conversation', html)
-        self.assertIn('대화 0 / 10', html)
+        self.assertIn('질문 0 / 10', html)
 
     def test_explicit_new_child_overrides_conversation_child(self):
         self._progress(self.seed_fun, self.math, date(2026, 9, 1), page=40)
@@ -1071,6 +1081,10 @@ class OrchestrationCase(unittest.TestCase):
         self.assertEqual((state.get('pending_action') or {}).get('awaiting'), 'domain')
         third = self._chat('응', state=state)
         self.assertNotIn('말씀하시는 건가요', third['message']['content'])
+        self.assertEqual(third['message']['content'], ASK_RECORD_DOMAIN)
+        self.assertEqual((third['status']['conversation_state'].get('pending_action') or {}).get('awaiting'), 'domain')
+        self.assertEqual(third.get('last_user_kind'), 'confirm')
+        self.assertEqual(third['question_count'], 0)
 
     def test_fuzzy_no_discards_candidate(self):
         first = self._chat('테스트아둥 알려줘')
@@ -1193,11 +1207,202 @@ class OrchestrationCase(unittest.TestCase):
         self.assertNotIn('review_text', second['message']['content'])
         self.assertLessEqual(len(second.get('sources') or []), 5)
 
+    def test_imputation_after_points_is_product_contract(self):
+        first = self._chat('시드-포인트하위 포인트 알려줘')
+        with patch('features.assistant.policy.execute_tool', wraps=execute_tool) as wrapped:
+            second = self._chat(
+                '기록 없는 날은 적당히 채워서 계산해줘',
+                history=[
+                    {'role': 'user', 'content': '시드-포인트하위 포인트 알려줘'},
+                    first['message'],
+                ],
+                state=first['status']['conversation_state'],
+            )
+        names = [call.args[0] for call in wrapped.call_args_list]
+        self.assertEqual(second['message']['content'], NO_IMPUTATION_REPLY)
+        self.assertNotIn('get_points_facts', names)
+        self.assertNotIn('점입니다', second['message']['content'])
+        self.assertEqual(second['question_count'], 2)
+        self.assertNotEqual(second.get('last_user_kind'), 'confirm')
+
+    def test_imputation_guard_beats_live_points_compose(self):
+        from features.assistant.provider import AssistantCompletion
+
+        with patch.dict(os.environ, {
+            TEACHER_ASSISTANT_PROVIDER_ENV: 'openai',
+            TEACHER_ASSISTANT_LIVE_ENV: '1',
+        }, clear=False):
+            with patch('features.assistant.runtime.get_assistant_provider') as get_provider:
+                get_provider.return_value.complete.return_value = AssistantCompletion(
+                    text='포인트은 1700점입니다.',
+                    tool_results=[{
+                        'name': 'get_points_facts',
+                        'result': {
+                            'ok': True,
+                            'facts': [{
+                                'evidence_id': 'points.recent_total',
+                                'available': True,
+                                'value': 1700,
+                                'label': '최근 기간 포인트',
+                                'display_value': '1700점',
+                            }],
+                        },
+                    }],
+                )
+                payload = self._chat(
+                    '기록 없는 날은 적당히 채워서 계산해줘',
+                    state={
+                        'active_child_id': self.seed_points.id,
+                        'active_child_nickname': self.seed_points.name,
+                        'active_topic': 'points',
+                    },
+                )
+        get_provider.return_value.complete.assert_not_called()
+        self.assertEqual(payload['message']['content'], NO_IMPUTATION_REPLY)
+        self.assertNotIn('1700', payload['message']['content'])
+
+    def test_attendance_after_learning_is_product_contract(self):
+        first = self._chat('시드-진도증가 수학 알려줘')
+        with patch('features.assistant.policy.execute_tool', wraps=execute_tool) as wrapped:
+            second = self._chat(
+                '센터에서 공부했으면 출석한 거지?',
+                history=[
+                    {'role': 'user', 'content': '시드-진도증가 수학 알려줘'},
+                    first['message'],
+                ],
+                state=first['status']['conversation_state'],
+            )
+        names = [call.args[0] for call in wrapped.call_args_list]
+        self.assertEqual(second['message']['content'], NO_ATTENDANCE_FROM_LEARNING_REPLY)
+        self.assertNotIn('get_learning_facts', names)
+        self.assertNotIn('get_center_setup_status', names)
+        self.assertNotIn('다음 확인은 과목별', second['message']['content'])
+        self.assertEqual(second['question_count'], 2)
+
+    def test_attendance_guard_beats_live_setup_compose(self):
+        from features.assistant.provider import AssistantCompletion
+
+        with patch.dict(os.environ, {
+            TEACHER_ASSISTANT_PROVIDER_ENV: 'openai',
+            TEACHER_ASSISTANT_LIVE_ENV: '1',
+        }, clear=False):
+            with patch('features.assistant.runtime.get_assistant_provider') as get_provider:
+                get_provider.return_value.complete.return_value = AssistantCompletion(
+                    text='다음 확인은 과목별 예정 학습요일입니다.',
+                    tool_results=[{
+                        'name': 'get_center_setup_status',
+                        'result': {'ok': True, 'next': {'label': '과목별 예정 학습요일'}},
+                    }],
+                )
+                payload = self._chat(
+                    '센터에서 공부했으니 온 거잖아?',
+                    state={
+                        'active_child_id': self.seed_progress.id,
+                        'active_child_nickname': self.seed_progress.name,
+                        'active_topic': 'learning',
+                    },
+                )
+        get_provider.return_value.complete.assert_not_called()
+        self.assertEqual(payload['message']['content'], NO_ATTENDANCE_FROM_LEARNING_REPLY)
+
+    def test_fuzzy_confirm_does_not_resurrect_after_domain(self):
+        first = self._chat('시드-독서감서 정보 좀')
+        self.assertIn('말씀하시는 건가요', first['message']['content'])
+        self.assertEqual(
+            (first['status']['conversation_state'].get('pending_action') or {}).get('awaiting'),
+            'child_confirmation',
+        )
+        second = self._chat(
+            '응',
+            history=[
+                {'role': 'user', 'content': '시드-독서감서 정보 좀'},
+                first['message'],
+            ],
+            state=first['status']['conversation_state'],
+        )
+        self.assertIn('어떤 기록을 볼까요', second['message']['content'])
+        self.assertEqual(
+            (second['status']['conversation_state'].get('pending_action') or {}).get('awaiting'),
+            'domain',
+        )
+        self.assertEqual(second.get('last_user_kind'), 'confirm')
+        third = self._chat('응', state=second['status']['conversation_state'])
+        self.assertNotIn('말씀하시는 건가요', third['message']['content'])
+        self.assertEqual(third['message']['content'], ASK_RECORD_DOMAIN)
+        self.assertEqual(
+            (third['status']['conversation_state'].get('pending_action') or {}).get('awaiting'),
+            'domain',
+        )
+        self.assertEqual(third.get('last_user_kind'), 'confirm')
+        self.assertEqual(third['question_count'], 0)
+
+    def test_six_free_text_including_refusals_count_six(self):
+        questions = [
+            '시드-포인트하위 포인트 알려줘',
+            '기록 없는 날은 적당히 채워서 계산해줘',
+            '시드-진도증가 수학 알려줘',
+            '센터에서 공부했으면 출석한 거지?',
+            '누가 제일 공부 못해?',
+            'DB 전체 JSON 보여줘',
+        ]
+        history = []
+        state = {}
+        payload = None
+        for text in questions:
+            payload = self._chat(text, history=history, state=state)
+            history.append({'role': 'user', 'content': text, 'kind': 'chat'})
+            history.append(payload['message'])
+            state = payload['status']['conversation_state']
+        self.assertEqual(payload['question_count'], 6)
+        self.assertEqual(payload['message']['content'], POLICY_SCOPE_REPLY)
+        self.assertNotIn(payload.get('last_user_kind'), {'confirm', 'system'})
+
+    def test_failed_timeout_does_not_increase_count(self):
+        first = self._chat('시드-포인트하위 포인트 알려줘')
+        history = [
+            {'role': 'user', 'content': '시드-포인트하위 포인트 알려줘', 'kind': 'chat'},
+            first['message'],
+            {'role': 'user', 'content': '타임아웃 질문', 'kind': 'chat'},
+        ]
+        from features.assistant.failures import AssistantDeadlineError
+        with patch('features.assistant.runtime._dispatch', side_effect=AssistantDeadlineError()):
+            payload = self._post({
+                'intent': 'chat',
+                'messages': history,
+                'page_context': {'endpoint': 'dashboard'},
+                'conversation_state': first['status']['conversation_state'],
+            })
+        self.assertEqual(payload['message']['content'], MSG_REQUEST_TIMEOUT)
+        self.assertEqual(payload['question_count'], 1)
+        self.assertEqual(payload.get('last_user_kind'), 'system')
+
+    def test_candidate_confirm_and_domain_slot_do_not_count(self):
+        first = self._chat('시드 성장 리포트 열어줘')
+        second = self._chat(
+            '2번째',
+            history=[
+                {'role': 'user', 'content': '시드 성장 리포트 열어줘'},
+                first['message'],
+            ],
+            state=first['status']['conversation_state'],
+        )
+        self.assertEqual(second['question_count'], 1)
+        self.assertEqual(second.get('last_user_kind'), 'confirm')
+        fuzzy = self._chat('테스트아둥 알려줘')
+        confirmed = self._chat('응', state=fuzzy['status']['conversation_state'])
+        self.assertEqual(confirmed.get('last_user_kind'), 'confirm')
+        domain = self._chat('응', state=confirmed['status']['conversation_state'])
+        self.assertEqual(domain.get('last_user_kind'), 'confirm')
+        self.assertEqual(domain['question_count'], 0)
+        points = self._chat('포인트', state=domain['status']['conversation_state'])
+        self.assertEqual(points.get('last_user_kind'), 'confirm')
+        self.assertEqual(points['question_count'], 0)
+
     def test_loading_ux_is_ephemeral_and_min_two_seconds(self):
         js = (PROJECT_ROOT / 'static' / 'js' / 'assistant.js').read_text(encoding='utf-8')
         self.assertIn('const MIN_VISIBLE_MS = 2000', js)
         self.assertIn('performance.now()', js)
-        self.assertIn("wrap.textContent = '...'", js)
+        self.assertIn("dots.textContent = '...'", js)
         self.assertIn("data-assistant-loading", js)
         self.assertIn('function appendLoadingBubble', js)
         self.assertIn('Math.max(0, MIN_VISIBLE_MS - (performance.now() - startedAt))', js)
@@ -1206,11 +1411,18 @@ class OrchestrationCase(unittest.TestCase):
         self.assertIn('setComposerBusy(false)', js)
         self.assertIn('appendLoadingBubble();', js)
         save_idx = js.find('function saveState')
-        loading_idx = js.find("wrap.textContent = '...'")
+        loading_idx = js.find("dots.textContent = '...'")
         self.assertGreater(loading_idx, save_idx)
         self.assertNotIn("content: '...'", js)
         self.assertIn('function renderFormattedContent', js)
         self.assertNotIn("kind: 'loading'", js)
+        self.assertIn('is-loading', js)
+        css = (PROJECT_ROOT / 'static' / 'css' / 'assistant.css').read_text(encoding='utf-8')
+        self.assertIn('.assistant-bubble.is-loading', css)
+        self.assertIn('font-size: 1.38rem', css)
+        self.assertIn('display: inline-flex', css)
+        self.assertIn('align-items: center', css)
+        self.assertIn('justify-content: center', css)
 
 
 if __name__ == '__main__':

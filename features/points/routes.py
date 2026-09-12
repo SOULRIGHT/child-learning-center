@@ -51,7 +51,9 @@ def _auth_failure_response():
 
 
 def _collect_canonical_records():
-    from app import db, fetch_child_daily_point_records
+    from extensions import db
+    from features.reading.access import loaded_app_attr
+    fetch_child_daily_point_records = loaded_app_attr('fetch_child_daily_point_records')
     rows = db.session.execute(
         db.text('SELECT DISTINCT child_id FROM daily_points ORDER BY child_id')
     ).fetchall()

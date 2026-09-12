@@ -63,10 +63,18 @@ body:has(.assistant-drawer.showing) .sidebar-toggle {
 
 .assistant-question-count {
     margin-left: 0.35rem;
-    color: #6b7280;
+    display: inline-flex;
+    align-items: center;
+    color: #4b5563;
     font-size: 0.72rem;
-    font-weight: 500;
+    font-weight: 600;
+    line-height: 1.2;
     white-space: nowrap;
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    padding: 0.12rem 0.45rem;
+    pointer-events: none;
 }
 
 .assistant-header-actions {
@@ -236,6 +244,30 @@ body:has(.assistant-drawer.showing) .sidebar-toggle {
     color: #1f2937;
 }
 
+.assistant-bubble.is-loading {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: fit-content;
+    max-width: 4.75rem;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 1.38rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.12em;
+}
+
+.assistant-loading-dots {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
 .assistant-fact-p {
     margin: 0 0 0.45rem;
 }
@@ -308,6 +340,7 @@ body:has(.assistant-drawer.showing) .sidebar-toggle {
 .assistant-composer {
     flex: 0 0 auto;
     display: flex;
+    align-items: flex-end;
     gap: 0.5rem;
     padding: 0.75rem 1rem 1rem;
     border-top: 1px solid #e5e7eb;
@@ -319,16 +352,33 @@ body:has(.assistant-drawer.showing) .sidebar-toggle {
     flex: 1 1 auto;
     min-width: 0;
     resize: none;
+    overflow-y: hidden;
     border: 1px solid #d1d5db;
     border-radius: 10px;
     padding: 0.55rem 0.7rem;
     font-size: 0.9rem;
     line-height: 1.4;
-    max-height: 6rem;
+    max-height: calc(1.4em * 4 + 1.1rem);
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+
+.assistant-input::-webkit-scrollbar {
+    width: 6px;
+}
+
+.assistant-input::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.assistant-input::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
 }
 
 .assistant-send {
     flex: 0 0 auto;
+    align-self: flex-end;
     border: 0;
     border-radius: 10px;
     background: #2563eb;

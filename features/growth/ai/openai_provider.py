@@ -19,9 +19,19 @@ from features.growth.evidence_packet import AUDIENCE_TEACHER, SCHEMA_VERSION
 
 DEFAULT_GROWTH_AI_MODEL = 'gpt-5.6-luna'
 DEFAULT_PROVIDER_NAME = 'openai'
-REASONING_EFFORT = 'low'
+GROWTH_AI_REASONING_ENV = 'GROWTH_AI_REASONING_EFFORT'
+DEFAULT_REASONING_EFFORT = 'high'
+REASONING_EFFORT = DEFAULT_REASONING_EFFORT
+ALLOWED_REASONING_EFFORTS = frozenset({'none', 'low', 'medium', 'high', 'xhigh'})
 API_KEY_ENV = 'OPENAI_API_KEY'
 MODEL_ENV = 'GROWTH_AI_MODEL'
+
+
+def growth_reasoning_effort():
+    raw = (os.environ.get(GROWTH_AI_REASONING_ENV) or DEFAULT_REASONING_EFFORT).strip().lower()
+    if raw not in ALLOWED_REASONING_EFFORTS:
+        raise GrowthInterpretationConfigError('invalid GROWTH_AI_REASONING_EFFORT')
+    return raw
 
 
 class OpenAIGrowthInterpretationProvider(GrowthInterpretationProvider):
@@ -44,7 +54,7 @@ class OpenAIGrowthInterpretationProvider(GrowthInterpretationProvider):
                 instructions=GROWTH_TEACHER_SYSTEM_PROMPT,
                 input=payload,
                 store=False,
-                reasoning={'effort': REASONING_EFFORT},
+                reasoning={'effort': growth_reasoning_effort()},
                 text={'format': structured_output_format()},
             )
         except GrowthInterpretationError:

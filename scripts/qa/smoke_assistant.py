@@ -56,8 +56,8 @@ def run_authenticated_steps(page: Page, *, base_url: str, state: dict) -> list[t
     _open_drawer(page)
     if not drawer.is_visible():
         raise StepFailure('dashboard_drawer', 'drawer did not open')
-    if page.locator('#teacherAssistantTitle').inner_text().strip() != '조교':
-        raise StepFailure('dashboard_drawer', 'drawer header is not 조교')
+    if page.locator('#teacherAssistantTitle').inner_text().strip() != '뮤온':
+        raise StepFailure('dashboard_drawer', 'drawer header is not 뮤온')
     page.get_by_text('센터 설정 이어서 하기').wait_for(timeout=8000)
     _shot(page, 'assistant-drawer.png')
     mark('dashboard_drawer')

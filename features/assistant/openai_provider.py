@@ -1,13 +1,24 @@
 """OpenAI tool-calling provider. Growth AI runtime을 재사용하지 않는다.
 
-hidden retry 없음(max_retries=0). API key / raw response / 아동 PII를 로그에 남기지 않는다.
+same-provider hidden retry 금지(max_retries=0).
+retryable infrastructure failure는 runtime에서 최대 1회 audited cross-provider failover만 허용한다.
+API key / raw response / 아동 PII를 로그에 남기지 않는다.
 """
 from __future__ import annotations
 
 import json
 import os
 
-from features.assistant.config import TEACHER_ASSISTANT_MODEL_ENV
+from features.assistant.config import TEACHER_ASSISTANT_MODEL_ENV, assistant_reasoning_effort
+from features.assistant.deadline import MIN_CALL_S
+from features.assistant.failures import (
+    FAILURE_PROVIDER_5XX,
+    FAILURE_PROVIDER_CONNECTION,
+    FAILURE_PROVIDER_RATE_LIMIT,
+    FAILURE_PROVIDER_TIMEOUT,
+    AssistantDeadlineError,
+    AssistantToolFailure,
+)
 from features.assistant.conversation import public_conversation_state
 from features.assistant.copy import (
     CONTEXT_REPAIR_FALLBACK,
@@ -22,8 +33,10 @@ from features.assistant.policy import gated_execute
 from features.assistant.provider import (
     AssistantCompletion,
     AssistantProvider,
+    AssistantProviderBadRequestError,
     AssistantProviderConfigError,
     AssistantProviderError,
+    AssistantProviderRetryableError,
     compose_from_tools,
 )
 from features.assistant.tools import TOOL_SCHEMAS, dump_tool_result
@@ -33,7 +46,7 @@ GROWTH_MODEL_ENV = 'GROWTH_AI_MODEL'
 DEFAULT_MODEL = 'gpt-5.6-luna'
 MAX_TOOL_ROUNDS = 5
 MAX_HISTORY_MESSAGES = 12
-TIMEOUT_S = 25.0
+TIMEOUT_S = 20.0
 SYSTEM_PROMPT = (
     MUON_TEACHER_CHAT_INSTRUCTION +
     '[필수 tool routing] 아동 nickname과 기록 조회 요청이 함께 있으면 일반 안내로 답하지 말고 먼저 search_child를 호출합니다. '
@@ -128,14 +141,22 @@ class OpenAIAssistantProvider(AssistantProvider):
             or DEFAULT_MODEL
         )
 
-    def complete(self, *, messages, page_context, conversation_state=None, audit=None) -> AssistantCompletion:
-        client = self._request_client()
-        role = None
-        try:
+    def complete(
+        self,
+        *,
+        messages,
+        page_context,
+        conversation_state=None,
+        role=None,
+        audit=None,
+        deadline=None,
+        timeout_s=None,
+    ) -> AssistantCompletion:
+        effort = assistant_reasoning_effort()
+        client = self._request_client(timeout_s=_client_timeout(deadline, timeout_s))
+        if role is None:
             from features.assistant.config import current_role
             role = current_role()
-        except Exception:
-            role = None
         input_items = _input_items(messages)
         if not input_items:
             last = _last_user(messages) or '안녕하세요'
@@ -146,13 +167,15 @@ class OpenAIAssistantProvider(AssistantProvider):
         hit_round_limit = False
         try:
             for _round in range(MAX_TOOL_ROUNDS):
+                _raise_if_deadline(deadline)
+                client = self._request_client(timeout_s=_client_timeout(deadline, timeout_s))
                 response = client.responses.create(
                     model=self.model,
                     instructions=instructions,
                     input=input_items,
                     tools=list(TOOL_SCHEMAS),
                     store=False,
-                    reasoning={'effort': 'low'},
+                    reasoning={'effort': effort},
                 )
                 output = list(getattr(response, 'output', None) or ())
                 calls = [item for item in output if _item_type(item) == 'function_call']
@@ -185,14 +208,17 @@ class OpenAIAssistantProvider(AssistantProvider):
                     if skip_unspecified:
                         result = {'ok': True, 'skipped_unspecified_domain': True}
                     else:
-                        result = gated_execute(
-                            name,
-                            arguments,
-                            page_context=page_context,
-                            role=role,
-                            conversation_state=conversation_state,
-                            audit=audit,
-                        )
+                        try:
+                            result = gated_execute(
+                                name,
+                                arguments,
+                                page_context=page_context,
+                                role=role,
+                                conversation_state=conversation_state,
+                                audit=audit,
+                            )
+                        except Exception as exc:
+                            raise AssistantToolFailure('canonical tool failed') from exc
                     tool_results.append({
                         'name': name,
                         'arguments': arguments,
@@ -230,7 +256,15 @@ class OpenAIAssistantProvider(AssistantProvider):
                 final_text = _synthesize_without_tools(
                     client, self.model, instructions, input_items, tool_results,
                     user_text=_last_user(messages), role=role,
+                    deadline=deadline, timeout_s=timeout_s, effort=effort,
+                    provider=self,
                 )
+        except (AssistantDeadlineError, AssistantToolFailure):
+            if tool_results:
+                composed = compose_from_tools(tool_results, user_text=_last_user(messages), role=role)
+                composed.tool_results = tool_results
+                return composed
+            raise
         except AssistantProviderError:
             if tool_results:
                 composed = compose_from_tools(tool_results, user_text=_last_user(messages), role=role)
@@ -282,10 +316,11 @@ class OpenAIAssistantProvider(AssistantProvider):
             status={'tool_round_limit': True} if hit_round_limit else None,
         )
 
-    def _request_client(self):
+    def _request_client(self, timeout_s=None):
+        timeout = TIMEOUT_S if timeout_s is None else float(timeout_s)
         if self._client is not None:
             if hasattr(self._client, 'with_options'):
-                return self._client.with_options(timeout=TIMEOUT_S, max_retries=0)
+                return self._client.with_options(timeout=timeout, max_retries=0)
             return self._client
         api_key = self._api_key or os.environ.get(API_KEY_ENV)
         if not api_key:
@@ -294,18 +329,24 @@ class OpenAIAssistantProvider(AssistantProvider):
             from openai import OpenAI
         except ImportError as exc:
             raise AssistantProviderConfigError('openai package missing') from exc
-        return OpenAI(api_key=api_key, timeout=TIMEOUT_S, max_retries=0)
+        return OpenAI(api_key=api_key, timeout=timeout, max_retries=0)
 
 
-def _synthesize_without_tools(client, model, instructions, input_items, tool_results, *, user_text, role):
-    """추가 tool execution 없이 현재 facts만으로 답한다. hidden retry 아님."""
+def _synthesize_without_tools(
+    client, model, instructions, input_items, tool_results, *, user_text, role,
+    deadline=None, timeout_s=None, effort=None, provider=None,
+):
+    """추가 tool execution 없이 현재 facts만으로 답한다. same-provider hidden retry 아님."""
     try:
+        _raise_if_deadline(deadline)
+        if provider is not None:
+            client = provider._request_client(timeout_s=_client_timeout(deadline, timeout_s))
         response = client.responses.create(
             model=model,
             instructions=instructions + ' 더 이상 tool을 호출하지 말고 지금까지 확인된 사실만 말하세요.',
             input=input_items,
             store=False,
-            reasoning={'effort': 'low'},
+            reasoning={'effort': effort or assistant_reasoning_effort()},
         )
         text = (getattr(response, 'output_text', None) or '').strip()
         if text:
@@ -367,16 +408,19 @@ def _execute_search_continuation(
         }
     ):
         arguments['subject_key'] = subject_key
-    if search_args.get('requested_metric'):
+    if continuation == 'get_points_facts' and search_args.get('requested_metric'):
         arguments['requested_metric'] = search_args['requested_metric']
-    result = gated_execute(
-        continuation,
-        arguments,
-        page_context=page_context,
-        role=role,
-        conversation_state=conversation_state,
-        audit=audit,
-    )
+    try:
+        result = gated_execute(
+            continuation,
+            arguments,
+            page_context=page_context,
+            role=role,
+            conversation_state=conversation_state,
+            audit=audit,
+        )
+    except Exception as exc:
+        raise AssistantToolFailure('canonical tool failed') from exc
     return {
         'name': continuation,
         'arguments': arguments,
@@ -512,15 +556,39 @@ def _fallback_for_messages(messages):
     return CONTEXT_REPAIR_FALLBACK if user_count > 1 else FALLBACK
 
 
+def _client_timeout(deadline, timeout_s):
+    if deadline is not None:
+        cap = TIMEOUT_S if timeout_s is None else float(timeout_s)
+        return deadline.provider_timeout(cap)
+    if timeout_s is not None:
+        return max(0.1, float(timeout_s))
+    return TIMEOUT_S
+
+
+def _raise_if_deadline(deadline):
+    if deadline is None:
+        return
+    deadline.raise_if_expired(min_needed=MIN_CALL_S)
+
+
 def _api_error(exc):
     try:
         from openai import APIConnectionError, APIStatusError, APITimeoutError
     except ImportError:
         return AssistantProviderError(PROVIDER_ERROR)
     if isinstance(exc, APITimeoutError):
-        return AssistantProviderError(PROVIDER_ERROR)
+        return AssistantProviderRetryableError(PROVIDER_ERROR, FAILURE_PROVIDER_TIMEOUT)
     if isinstance(exc, APIConnectionError):
-        return AssistantProviderError(PROVIDER_ERROR)
+        return AssistantProviderRetryableError(PROVIDER_ERROR, FAILURE_PROVIDER_CONNECTION)
     if isinstance(exc, APIStatusError):
+        status = getattr(exc, 'status_code', None)
+        if status == 429:
+            return AssistantProviderRetryableError(PROVIDER_ERROR, FAILURE_PROVIDER_RATE_LIMIT)
+        if status is not None and 500 <= int(status) <= 599:
+            return AssistantProviderRetryableError(PROVIDER_ERROR, FAILURE_PROVIDER_5XX)
+        if status in {401, 403}:
+            return AssistantProviderConfigError('openai auth configuration error')
+        if status == 400:
+            return AssistantProviderBadRequestError(PROVIDER_ERROR)
         return AssistantProviderError(PROVIDER_ERROR)
     return AssistantProviderError(PROVIDER_ERROR)

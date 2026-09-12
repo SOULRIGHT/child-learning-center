@@ -110,15 +110,21 @@ def _empty_counts():
 
 def _rates_from_counts(counts):
     expected = counts['expected_days']
+    confirmed_days = (
+        counts['studied_days'] + counts['explicit_not_studied_days']
+    )
     if expected == 0:
         performance_rate = None
         confirmation_rate = None
         interpretation = INTERPRETATION_UNAVAILABLE
     else:
-        performance_rate = counts['studied_days'] / expected
-        confirmation_rate = (
-            counts['studied_days'] + counts['explicit_not_studied_days']
-        ) / expected
+        confirmation_rate = confirmed_days / expected
+        # Unconfirmed scheduled days are not "not studied".
+        # With no confirmed outcome, performance is unavailable, not 0%.
+        if confirmed_days == 0:
+            performance_rate = None
+        else:
+            performance_rate = counts['studied_days'] / expected
         interpretation = confirmation_band(confirmation_rate, expected)
     return {
         **counts,

@@ -1,8 +1,14 @@
-"""Teacher assistant application service. hidden retry 없음. form write 없음.
+"""Teacher assistant application service. form write 없음.
+
+same-provider hidden retry 금지.
+retryable infrastructure failure에 한해 최대 1회 audited cross-provider failover만 허용한다.
 
 Browser conversation / LLM working context / server audit 를 섞지 않는다.
 """
 from __future__ import annotations
+
+import copy
+import time
 
 from features.assistant.audit import (
     elapsed_ms,
@@ -12,7 +18,14 @@ from features.assistant.audit import (
     record_request_start,
     start_timer,
 )
-from features.assistant.config import assistant_provider_name, current_role
+from features.assistant.config import (
+    assistant_fallback_model,
+    assistant_primary_timeout_s,
+    assistant_provider_name,
+    assistant_request_timeout_s,
+    current_role,
+    is_assistant_fallback_enabled,
+)
 from features.assistant.context import context_scope, sanitize_page_context
 from features.assistant.conversation import (
     apply_pending_confirmation,
@@ -28,7 +41,43 @@ from features.assistant.conversation import (
     tool_page_context,
     update_state_from_tools,
 )
-from features.assistant.copy import FALLBACK, PROVIDER_ERROR, QUESTION_LIMIT_REPLY, opening_text
+from features.assistant.copy import (
+    FALLBACK,
+    MSG_GROUNDING_UNSAFE,
+    MSG_GUARDRAIL_BLOCK,
+    MSG_GUARDRAIL_UNAVAILABLE,
+    MSG_RECORD_UNAVAILABLE,
+    MSG_REQUEST_TIMEOUT,
+    NEW_CONVERSATION,
+    PROVIDER_ERROR,
+    QUESTION_LIMIT_REPLY,
+    opening_text,
+)
+from features.assistant.deadline import RequestDeadline
+from features.assistant.failures import (
+    FAILURE_FALLBACK_FAILED,
+    FAILURE_GROUNDING,
+    FAILURE_GUARDRAIL_BLOCK,
+    FAILURE_GUARDRAIL_ERROR,
+    FAILURE_PROVIDER_TIMEOUT,
+    FAILURE_REQUEST_DEADLINE,
+    FAILURE_TOOL,
+    FAILURE_UNEXPECTED,
+    AssistantDeadlineError,
+    AssistantGroundingError,
+    AssistantGuardrailBlock,
+    AssistantGuardrailError,
+    AssistantToolFailure,
+)
+from features.assistant.grounding import (
+    SOURCE_COMPOSE,
+    SOURCE_GUARDRAIL,
+    SOURCE_LLM,
+    SOURCE_NAVIGATION,
+    SOURCE_PENDING,
+    SOURCE_SAFETY,
+    validate_grounding,
+)
 from features.assistant.intents import (
     bootstrap_payload,
     explain_page_payload,
@@ -38,9 +87,22 @@ from features.assistant.intents import (
     quick_actions,
 )
 from features.assistant.policy import gated_execute
-from features.assistant.provider import AssistantProviderError, compose_from_tools, get_assistant_provider
+from features.assistant.provider import (
+    AssistantProviderBadRequestError,
+    AssistantProviderConfigError,
+    AssistantProviderError,
+    AssistantProviderRetryableError,
+    compose_from_tools,
+    get_assistant_provider,
+)
 from features.assistant.resolve import select_child_resolution
 from features.assistant.safety import sanitize_output, safety_override_payload
+from features.assistant.guardrail import (
+    ACTION_ERROR,
+    ACTION_INTERVENED,
+    ACTION_NONE,
+    get_assistant_guardrail,
+)
 
 MAX_MESSAGES = 48
 MAX_CONTENT_LEN = 2000
@@ -48,6 +110,9 @@ MAX_LLM_MESSAGES = 12
 QUESTION_LIMIT = 10
 VALID_KINDS = frozenset({'chat', 'llm', 'system', 'confirm', 'quick', 'onboarding', 'nav'})
 LLM_CONTEXT_KINDS = frozenset({'chat', 'llm'})
+# Count = 정상 처리된 자유 질문. LLM 호출 횟수가 아니다.
+# 포함: LLM/facts/deterministic safety/policy/Product Contract refusal
+# 제외: 실패·timeout, candidate/confirm/domain slot, nav/onboarding/quick
 COUNTED_KINDS = frozenset({'chat', 'llm'})
 ALLOWED_INTENTS = frozenset({
     'bootstrap',
@@ -187,6 +252,8 @@ def _public_actions(actions):
             item['type'] = action.get('type') or item['type']
             if action.get('content'):
                 item['content'] = _as_text(action.get('content'), 80)
+        if action.get('type') == 'new_conversation':
+            item['type'] = 'new_conversation'
         public.append(item)
     return public
 
@@ -255,6 +322,7 @@ def complete_assistant(
     destination=None,
     params=None,
     conversation_state=None,
+    clock=None,
 ):
     started = start_timer()
     request_id = new_request_id()
@@ -264,7 +332,8 @@ def complete_assistant(
     intent = (intent or 'chat').strip()
     if intent not in ALLOWED_INTENTS:
         raise AssistantRequestError('invalid_intent')
-    state = sanitize_conversation_state(conversation_state, page_context=page_context)
+    original_state = sanitize_conversation_state(conversation_state, page_context=page_context)
+    working_state = copy.deepcopy(original_state)
     last = _last_user(messages)
     audit = {
         'request_id': request_id,
@@ -279,47 +348,112 @@ def complete_assistant(
         'model': _audit_model(),
         'intent': intent,
         'source_kind': INTENT_KIND.get(intent, 'chat'),
-        'conversation_state': public_conversation_state(state),
+        'conversation_state': public_conversation_state(original_state),
+        'primary_provider': assistant_provider_name(),
     }
     record_request_start(audit)
     try:
+        deadline = RequestDeadline(assistant_request_timeout_s(), clock=clock or time.monotonic)
+        audit['deadline_ms'] = int(deadline.seconds * 1000)
         payload, meta = _dispatch(
             messages=messages,
             page_context=page_context,
             intent=intent,
             destination=destination,
             params=params,
-            state=state,
+            state=working_state,
             last=last,
             role=role,
             audit=audit,
+            deadline=deadline,
         )
-    except AssistantProviderError:
+        _enforce_output_guardrail(payload, meta, intent=intent, deadline=deadline, audit=audit)
+    except AssistantGuardrailBlock as exc:
+        return _guardrail_block_result(
+            page_context=page_context,
+            original_state=original_state,
+            audit=audit,
+            started=started,
+            messages=messages,
+            source=getattr(exc, 'source', 'input'),
+        )
+    except AssistantGuardrailError:
+        return _safe_failure(
+            text=MSG_GUARDRAIL_UNAVAILABLE,
+            page_context=page_context,
+            original_state=original_state,
+            audit=audit,
+            started=started,
+            messages=messages,
+            failure_class=FAILURE_GUARDRAIL_ERROR,
+            error='guardrail_error',
+        )
+    except AssistantDeadlineError:
+        return _safe_failure(
+            text=MSG_REQUEST_TIMEOUT,
+            page_context=page_context,
+            original_state=original_state,
+            audit=audit,
+            started=started,
+            messages=messages,
+            failure_class=FAILURE_REQUEST_DEADLINE,
+            error='request_deadline',
+        )
+    except (AssistantToolFailure, AssistantGroundingError) as exc:
+        if isinstance(exc, AssistantGroundingError):
+            return _safe_failure(
+                text=MSG_GROUNDING_UNSAFE,
+                page_context=page_context,
+                original_state=original_state,
+                audit=audit,
+                started=started,
+                messages=messages,
+                failure_class=FAILURE_GROUNDING,
+                error='grounding_failure',
+            )
+        return _safe_failure(
+            text=MSG_RECORD_UNAVAILABLE,
+            page_context=page_context,
+            original_state=original_state,
+            audit=audit,
+            started=started,
+            messages=messages,
+            failure_class=getattr(exc, 'failure_class', FAILURE_TOOL),
+            error='tool_failure',
+        )
+    except AssistantProviderError as exc:
         audit['error'] = 'provider_error'
         audit['final_status'] = 'provider_error'
+        audit['failure_class'] = getattr(exc, 'failure_class', None) or audit.get('failure_class') or 'provider_error'
         audit['total_latency_ms'] = elapsed_ms(started)
+        audit['elapsed_ms'] = audit['total_latency_ms']
         record_request_end(audit)
-        raise
+        raise AssistantProviderError(PROVIDER_ERROR) from exc
     except Exception:
         audit['error'] = 'error'
         audit['final_status'] = 'error'
+        audit['failure_class'] = FAILURE_UNEXPECTED
         audit['total_latency_ms'] = elapsed_ms(started)
+        audit['elapsed_ms'] = audit['total_latency_ms']
         record_request_end(audit)
         raise
+    if meta.get('answer_source'):
+        audit['answer_source'] = meta['answer_source']
     return _decorate_result(
         payload,
         audit=audit,
         started=started,
         messages=messages,
-        conversation_state=meta.get('conversation_state') or state,
+        conversation_state=meta.get('conversation_state') or working_state,
         kind=meta.get('kind') or 'system',
         feedback_enabled=bool(meta.get('feedback_enabled')),
         counted=bool(meta.get('counted')),
         limit_reached=bool(meta.get('limit_reached')),
+        uncount_kind=meta.get('uncount_kind'),
     )
 
 
-def _dispatch(*, messages, page_context, intent, destination, params, state, last, role, audit):
+def _dispatch(*, messages, page_context, intent, destination, params, state, last, role, audit, deadline=None):
     if intent == 'bootstrap':
         data = bootstrap_payload(page_context, role)
         next_state = empty_state() if not (page_context or {}).get('child_id') else state
@@ -356,6 +490,9 @@ def _dispatch(*, messages, page_context, intent, destination, params, state, las
             page_context=page_context, **data, conversation_state=state, kind='nav',
         ), {'kind': 'nav', 'conversation_state': state}
 
+    if state.get('segment_closed') and intent == 'chat':
+        return _closed_segment_payload(page_context)
+
     pending_before = dict(state.get('pending_action') or {})
     pending_done = apply_pending_confirmation(
         last,
@@ -373,7 +510,7 @@ def _dispatch(*, messages, page_context, intent, destination, params, state, las
                 audit[key] = pending_done[key]
         return _result(
             page_context=page_context, **pending_done, conversation_state=state, kind='confirm',
-        ), {'kind': 'confirm', 'conversation_state': state}
+        ), {'kind': 'confirm', 'conversation_state': state, 'counted': False, 'answer_source': SOURCE_PENDING}
 
     counted = count_chat_questions(messages)
     if intent == 'chat' and counted > QUESTION_LIMIT:
@@ -388,20 +525,23 @@ def _dispatch(*, messages, page_context, intent, destination, params, state, las
             ok=True,
         ), {'kind': 'system', 'conversation_state': state, 'limit_reached': True}
 
-    raw_block = safety_override_payload(last)
-    if raw_block and '원문' in last:
+    if intent == 'chat' and last:
+        _enforce_input_guardrail(last, deadline=deadline, audit=audit)
+
+    contract = safety_override_payload(last)
+    if contract:
         return _result(
             page_context=page_context,
-            text=raw_block['text'],
+            text=contract['text'],
             actions=[],
-            character_state=raw_block.get('character_state') or 'help',
+            character_state=contract.get('character_state') or 'help',
             conversation_state=state,
             kind='system',
-        ), {'kind': 'system', 'conversation_state': state, 'counted': True}
+        ), {'kind': 'system', 'conversation_state': state, 'counted': True, 'answer_source': SOURCE_SAFETY}
 
     live = assistant_provider_name() == 'openai'
     if live:
-        payload, state, feedback_enabled, counted = _complete_live(
+        payload, state, feedback_enabled, counted, source = _complete_live(
             messages=messages,
             page_context=page_context,
             state=state,
@@ -409,39 +549,56 @@ def _dispatch(*, messages, page_context, intent, destination, params, state, las
             last=last,
             role=role,
             audit=audit,
+            deadline=deadline,
         )
         return payload, {
             'kind': 'llm' if feedback_enabled else payload['message'].get('kind') or 'system',
             'feedback_enabled': feedback_enabled,
             'counted': counted,
             'conversation_state': state,
+            'answer_source': source,
         }
-    payload, state, kind, counted = _complete_fake(
+    payload, state, kind, counted, source = _complete_fake(
         messages=messages,
         page_context=page_context,
         state=state,
         last=last,
         role=role,
         audit=audit,
+        deadline=deadline,
     )
     return payload, {
         'kind': kind,
         'counted': counted,
         'conversation_state': state,
+        'answer_source': source,
     }
 
 
-def _complete_live(*, messages, page_context, state, pending_before, last, role, audit):
+def _complete_live(*, messages, page_context, state, pending_before, last, role, audit, deadline=None):
+    if deadline is not None:
+        deadline.raise_if_expired()
     try:
-        completion = get_assistant_provider().complete(
-            messages=provider_messages(messages),
-            page_context=tool_page_context(page_context, state),
-            conversation_state=state,
+        completion = _run_live_provider(
+            messages=messages,
+            page_context=page_context,
+            state=state,
+            role=role,
             audit=audit,
+            deadline=deadline,
         )
+    except AssistantDeadlineError:
+        raise
+    except AssistantToolFailure:
+        raise
+    except (AssistantProviderConfigError, AssistantProviderBadRequestError):
+        raise
+    except AssistantProviderRetryableError:
+        raise
     except AssistantProviderError as exc:
         raise AssistantProviderError(PROVIDER_ERROR) from exc
     tool_results = getattr(completion, 'tool_results', None) or []
+    audit['tool_names'] = [item.get('name') for item in tool_results if item.get('name')]
     selected_pending = _llm_selected_pending_completion(
         pending_before,
         last,
@@ -457,7 +614,7 @@ def _complete_live(*, messages, page_context, state, pending_before, last, role,
             **selected_pending,
             conversation_state=state,
             kind='confirm',
-        ), state, False, False
+        ), state, False, False, SOURCE_PENDING
     pending_fallback = _llm_first_pending_fallback(
         pending_before,
         last,
@@ -475,7 +632,7 @@ def _complete_live(*, messages, page_context, state, pending_before, last, role,
             **pending_fallback,
             conversation_state=state,
             kind='confirm',
-        ), state, False, False
+        ), state, False, False, SOURCE_PENDING
     state = _prepare_resolution_pending(state, last, tool_results)
     state = update_state_from_tools(state, tool_results, page_context=page_context, user_text=last)
     slot_completion = _is_pending_slot_completion(
@@ -493,7 +650,17 @@ def _complete_live(*, messages, page_context, state, pending_before, last, role,
             **resolution,
             conversation_state=state,
             kind='confirm',
-        ), state, False, not slot_completion
+        ), state, False, not slot_completion, SOURCE_PENDING
+    contract = safety_override_payload(last)
+    if contract:
+        return _result(
+            page_context=page_context,
+            text=contract['text'],
+            actions=[],
+            character_state=contract.get('character_state') or 'help',
+            conversation_state=state,
+            kind='system',
+        ), state, False, True, SOURCE_SAFETY
     text = sanitize_output(
         completion.text,
         user_text=last,
@@ -506,6 +673,7 @@ def _complete_live(*, messages, page_context, state, pending_before, last, role,
         str(name).endswith('_facts') or name in {'search_child', 'get_subject_peer_reference'}
         for name in names
     )
+    answer_source = SOURCE_LLM
     if should_compose and tool_results:
         composed = compose_from_tools(tool_results, user_text=last, role=role)
         if composed.text and composed.text != FALLBACK:
@@ -515,6 +683,7 @@ def _complete_live(*, messages, page_context, state, pending_before, last, role,
                 tool_results=tool_results,
                 system_prompt=_live_prompt_marker(),
             )
+            answer_source = SOURCE_COMPOSE
             if composed.sources:
                 completion.sources = composed.sources
             if composed.actions:
@@ -544,9 +713,24 @@ def _complete_live(*, messages, page_context, state, pending_before, last, role,
             kind = 'nav' if interpreted.get('actions') else 'system'
             return _result(
                 page_context=page_context, **interpreted, conversation_state=state, kind=kind,
-            ), state, False, True
+            ), state, False, True, SOURCE_NAVIGATION
     if _should_auto_navigate(actions, tool_results, last, state):
         actions = [dict(item, auto=True) if item.get('url') else item for item in actions]
+    text, grounded_completion = _finalize_grounded_text(
+        text,
+        user_text=last,
+        tool_results=tool_results,
+        state=state,
+        page_context=page_context,
+        answer_source=answer_source,
+        role=role,
+        audit=audit,
+    )
+    if grounded_completion is not None:
+        if grounded_completion.sources:
+            completion.sources = grounded_completion.sources
+        if grounded_completion.actions:
+            actions = list(grounded_completion.actions)
     status = dict(completion.status or {})
     return _result(
         text=text,
@@ -557,15 +741,17 @@ def _complete_live(*, messages, page_context, state, pending_before, last, role,
         sources=getattr(completion, 'sources', None),
         conversation_state=state,
         kind='llm',
-    ), state, True, not slot_completion
+    ), state, True, not slot_completion, answer_source
 
 
-def _complete_fake(*, messages, page_context, state, last, role, audit):
+def _complete_fake(*, messages, page_context, state, last, role, audit, deadline=None):
+    if deadline is not None:
+        deadline.raise_if_expired()
     if is_capability_question(last):
         data = capability_payload()
         return _result(
             page_context=page_context, **data, conversation_state=state, kind='system',
-        ), state, 'system', True
+        ), state, 'system', True, SOURCE_SAFETY
     override = safety_override_payload(last)
     if override:
         return _result(
@@ -575,7 +761,7 @@ def _complete_fake(*, messages, page_context, state, last, role, audit):
             character_state=override.get('character_state') or 'help',
             conversation_state=state,
             kind='system',
-        ), state, 'system', True
+        ), state, 'system', True, SOURCE_SAFETY
     pending = state.get('pending_action') or {}
     if pending.get('awaiting') == 'child':
         from features.assistant.resolve import resolve_children
@@ -594,18 +780,21 @@ def _complete_fake(*, messages, page_context, state, last, role, audit):
                     **pending_done,
                     conversation_state=state,
                     kind='confirm',
-                ), state, 'confirm', False
+                ), state, 'confirm', False, SOURCE_PENDING
     follow = fake_follow_up_call(last, state)
     if follow:
         name, arguments = follow
-        result = gated_execute(
-            name,
-            arguments,
-            page_context=tool_page_context(page_context, state),
-            role=role,
-            conversation_state=state,
-            audit=audit,
-        )
+        try:
+            result = gated_execute(
+                name,
+                arguments,
+                page_context=tool_page_context(page_context, state),
+                role=role,
+                conversation_state=state,
+                audit=audit,
+            )
+        except Exception as exc:
+            raise AssistantToolFailure('canonical tool failed') from exc
         completion = compose_from_tools(
             [{'name': name, 'arguments': arguments, 'result': result}],
             user_text=last,
@@ -617,7 +806,9 @@ def _complete_fake(*, messages, page_context, state, last, role, audit):
             page_context=page_context,
             user_text=last,
         )
-        return _completion_result(completion, page_context, state, last, kind='chat'), state, 'chat', True
+        return _completion_result(
+            completion, page_context, state, last, kind='chat', role=role, audit=audit,
+        ), state, 'chat', True, SOURCE_COMPOSE
 
     interpreted = interpret_user_text(
         last,
@@ -632,14 +823,17 @@ def _complete_fake(*, messages, page_context, state, last, role, audit):
         kind = 'nav' if interpreted.get('actions') else 'system'
         return _result(
             page_context=page_context, **interpreted, conversation_state=state, kind=kind,
-        ), state, kind, False
+        ), state, kind, False, SOURCE_NAVIGATION if kind == 'nav' else SOURCE_LLM
 
     try:
         completion = get_assistant_provider().complete(
             messages=provider_messages(messages),
             page_context=tool_page_context(page_context, state),
             conversation_state=state,
+            role=role,
             audit=audit,
+            deadline=deadline,
+            timeout_s=deadline.provider_timeout(assistant_primary_timeout_s()) if deadline else None,
         )
     except AssistantProviderError as exc:
         raise AssistantProviderError(PROVIDER_ERROR) from exc
@@ -647,7 +841,294 @@ def _complete_fake(*, messages, page_context, state, last, role, audit):
     state = update_state_from_tools(state, tool_results, page_context=page_context, user_text=last)
     if getattr(completion, 'status', None) and completion.status.get('pending_need_child'):
         state['pending_action'] = pending_need_child(tool='get_growth_facts')
-    return _completion_result(completion, page_context, state, last, kind='chat'), state, 'chat', True
+    source = SOURCE_COMPOSE if tool_results else SOURCE_LLM
+    return _completion_result(
+        completion, page_context, state, last, kind='chat', role=role, audit=audit, answer_source=source,
+    ), state, 'chat', True, source
+
+
+def _run_live_provider(*, messages, page_context, state, audit, deadline, role=None):
+    primary = get_assistant_provider()
+    primary_deadline = None
+    primary_timeout = None
+    if deadline is not None:
+        primary_deadline = deadline.capped(assistant_primary_timeout_s())
+        primary_timeout = min(primary_deadline.remaining(), deadline.remaining())
+    provider_started = start_timer()
+    try:
+        if primary_timeout is not None and primary_timeout <= 0:
+            raise AssistantDeadlineError()
+        completion = primary.complete(
+            messages=provider_messages(messages),
+            page_context=tool_page_context(page_context, state),
+            conversation_state=state,
+            role=role,
+            audit=audit,
+            deadline=primary_deadline,
+            timeout_s=primary_timeout,
+        )
+        audit['provider_latency_ms'] = elapsed_ms(provider_started)
+        return completion
+    except (AssistantProviderRetryableError, AssistantDeadlineError) as exc:
+        audit['provider_latency_ms'] = elapsed_ms(provider_started)
+        if isinstance(exc, AssistantDeadlineError) and (deadline is None or deadline.expired()):
+            raise
+        audit['failure_class'] = getattr(exc, 'failure_class', None) or FAILURE_PROVIDER_TIMEOUT
+        if not _can_use_fallback(deadline, audit):
+            raise
+        audit['fallback_attempted'] = True
+        audit['fallback_provider'] = assistant_fallback_model()
+        if deadline is not None:
+            deadline.raise_if_expired()
+        from features.assistant.anthropic_provider import AnthropicAssistantProvider
+        fallback_started = start_timer()
+        try:
+            completion = AnthropicAssistantProvider().complete(
+                messages=provider_messages(messages),
+                page_context=tool_page_context(page_context, state),
+                conversation_state=state,
+                role=role,
+                audit=audit,
+                deadline=deadline,
+                timeout_s=deadline.remaining() if deadline else None,
+            )
+        except (AssistantDeadlineError, AssistantToolFailure):
+            audit['fallback_succeeded'] = False
+            audit['failure_class'] = FAILURE_FALLBACK_FAILED
+            raise
+        except Exception as fallback_exc:
+            audit['fallback_succeeded'] = False
+            audit['failure_class'] = FAILURE_FALLBACK_FAILED
+            raise AssistantProviderError(PROVIDER_ERROR) from fallback_exc
+        audit['provider_latency_ms'] = (audit.get('provider_latency_ms') or 0) + (elapsed_ms(fallback_started) or 0)
+        audit['fallback_succeeded'] = True
+        audit['answer_source'] = 'fallback'
+        return completion
+
+
+def _can_use_fallback(deadline, audit):
+    if not is_assistant_fallback_enabled():
+        return False
+    if audit.get('fallback_attempted'):
+        return False
+    if deadline is not None and deadline.expired():
+        return False
+    return True
+
+
+def _finalize_grounded_text(
+    text,
+    *,
+    user_text,
+    tool_results,
+    state,
+    page_context,
+    answer_source,
+    role,
+    audit,
+):
+    result = validate_grounding(
+        user_text=user_text,
+        draft_text=text,
+        tool_results=tool_results,
+        conversation_state=state,
+        page_context=page_context,
+        answer_source=answer_source,
+    )
+    _store_grounding(audit, result, answer_source)
+    if result.ok:
+        return text, None
+    names = {item.get('name') for item in tool_results or ()}
+    can_compose = any(
+        str(name).endswith('_facts') or name in {'search_child', 'get_subject_peer_reference'}
+        for name in names
+    )
+    if can_compose and answer_source != SOURCE_COMPOSE:
+        composed = compose_from_tools(tool_results, user_text=user_text, role=role)
+        composed_text = sanitize_output(
+            composed.text or '',
+            user_text=user_text,
+            tool_results=tool_results,
+        )
+        second = validate_grounding(
+            user_text=user_text,
+            draft_text=composed_text,
+            tool_results=tool_results,
+            conversation_state=state,
+            page_context=page_context,
+            answer_source=SOURCE_COMPOSE,
+        )
+        _store_grounding(audit, second, SOURCE_COMPOSE)
+        if second.ok:
+            return composed_text, composed
+    raise AssistantGroundingError()
+
+
+def _store_grounding(audit, result, answer_source):
+    if audit is None:
+        return
+    audit['answer_source'] = answer_source
+    audit['grounding_status'] = result.status
+    audit['grounding_violation_codes'] = result.codes()
+    audit['used_evidence_ids'] = list(result.used_evidence_ids)[:12]
+    if result.status == 'fail':
+        audit['failure_class'] = FAILURE_GROUNDING
+
+
+def _guardrail_timeout_s(deadline):
+    if deadline is None:
+        return 3.0
+    remaining = float(deadline.remaining())
+    if remaining <= 0:
+        return 0.0
+    return min(3.0, remaining)
+
+
+def _apply_guardrail_decision(decision, *, source, audit):
+    if decision is None:
+        raise AssistantGuardrailError()
+    audit['guardrail_provider'] = getattr(decision, 'provider', None)
+    if decision.latency_ms is not None:
+        audit['guardrail_latency_ms'] = decision.latency_ms
+    if decision.assessments:
+        audit['guardrail_categories'] = [
+            str(item)[:40] for item in decision.assessments if item
+        ][:8]
+    if decision.action == ACTION_INTERVENED:
+        audit['guardrail_status'] = 'blocked'
+        audit['guardrail_source'] = source
+        raise AssistantGuardrailBlock(source)
+    if decision.safe and decision.action in {ACTION_NONE, None}:
+        audit['guardrail_status'] = 'ok'
+        audit['guardrail_source'] = source
+        return
+    audit['guardrail_status'] = 'error'
+    audit['guardrail_source'] = source
+    if decision.action == ACTION_ERROR:
+        raise AssistantGuardrailError()
+    raise AssistantGuardrailError()
+
+
+def _enforce_input_guardrail(text, *, deadline, audit):
+    timeout_s = _guardrail_timeout_s(deadline)
+    if timeout_s <= 0:
+        raise AssistantGuardrailError()
+    try:
+        decision = get_assistant_guardrail().check_input(text, timeout_s=timeout_s)
+    except AssistantGuardrailBlock:
+        raise
+    except AssistantGuardrailError:
+        raise
+    except Exception:
+        raise AssistantGuardrailError()
+    _apply_guardrail_decision(decision, source='input', audit=audit)
+
+
+def _enforce_output_guardrail(payload, meta, *, intent, deadline, audit):
+    kind = (meta or {}).get('kind')
+    source = (meta or {}).get('answer_source')
+    if intent in QUICK_INTENTS or kind in {'confirm', 'nav', 'onboarding'}:
+        return
+    if source in {SOURCE_PENDING, SOURCE_NAVIGATION, SOURCE_SAFETY, SOURCE_GUARDRAIL}:
+        return
+    text = ((payload or {}).get('message') or {}).get('content') or ''
+    if not str(text).strip():
+        return
+    timeout_s = _guardrail_timeout_s(deadline)
+    if timeout_s <= 0:
+        raise AssistantGuardrailError()
+    try:
+        decision = get_assistant_guardrail().check_response(text, timeout_s=timeout_s)
+    except AssistantGuardrailBlock:
+        raise
+    except AssistantGuardrailError:
+        raise
+    except Exception:
+        raise AssistantGuardrailError()
+    _apply_guardrail_decision(decision, source='output', audit=audit)
+
+
+def _closed_state():
+    closed = empty_state()
+    closed['segment_closed'] = True
+    return closed
+
+
+def _closed_segment_payload(page_context):
+    closed = _closed_state()
+    payload = _result(
+        text=MSG_GUARDRAIL_BLOCK,
+        page_context=page_context,
+        actions=[{'type': 'new_conversation', 'label': NEW_CONVERSATION}],
+        character_state='help',
+        conversation_state=closed,
+        kind='system',
+    )
+    return payload, {
+        'kind': 'system',
+        'conversation_state': closed,
+        'counted': False,
+        'uncount_kind': 'system',
+        'answer_source': SOURCE_GUARDRAIL,
+        'segment_closed': True,
+    }
+
+
+def _guardrail_block_result(*, page_context, original_state, audit, started, messages, source):
+    closed = _closed_state()
+    audit['failure_class'] = FAILURE_GUARDRAIL_BLOCK
+    audit['guardrail_status'] = 'blocked'
+    audit['guardrail_source'] = source
+    audit['conversation_closed'] = True
+    payload = _result(
+        text=MSG_GUARDRAIL_BLOCK,
+        page_context=page_context,
+        actions=[{'type': 'new_conversation', 'label': NEW_CONVERSATION}],
+        character_state='help',
+        conversation_state=closed,
+        kind='system',
+        extras={'segment_closed': True},
+    )
+    return _decorate_result(
+        payload,
+        audit=audit,
+        started=started,
+        messages=messages,
+        conversation_state=closed,
+        kind='system',
+        feedback_enabled=False,
+        counted=False,
+        limit_reached=False,
+        uncount_kind='system',
+    )
+
+
+def _safe_failure(*, text, page_context, original_state, audit, started, messages, failure_class, error):
+    audit['error'] = error
+    audit['final_status'] = failure_class
+    audit['failure_class'] = failure_class
+    payload = _result(
+        text=text,
+        page_context=page_context,
+        actions=[],
+        character_state='help',
+        conversation_state=original_state,
+        kind='system',
+        error=error,
+        ok=True,
+    )
+    return _decorate_result(
+        payload,
+        audit=audit,
+        started=started,
+        messages=messages,
+        conversation_state=original_state,
+        kind='system',
+        feedback_enabled=False,
+        counted=False,
+        limit_reached=False,
+        uncount_kind='system',
+    )
 
 
 def _align_navigate_text(text, actions):
@@ -660,13 +1141,27 @@ def _align_navigate_text(text, actions):
     return text
 
 
-def _completion_result(completion, page_context, state, last, *, kind='chat'):
+def _completion_result(
+    completion, page_context, state, last, *, kind='chat', role=None, audit=None, answer_source=SOURCE_COMPOSE,
+):
     text = sanitize_output(
         completion.text,
         user_text=last,
         tool_results=getattr(completion, 'tool_results', None),
     )
     text = _align_navigate_text(text, completion.actions)
+    text, grounded = _finalize_grounded_text(
+        text,
+        user_text=last,
+        tool_results=getattr(completion, 'tool_results', None),
+        state=state,
+        page_context=page_context,
+        answer_source=answer_source,
+        role=role,
+        audit=audit,
+    )
+    if grounded is not None:
+        completion = grounded
     return _result(
         text=text,
         page_context=page_context,
@@ -681,7 +1176,7 @@ def _completion_result(completion, page_context, state, last, *, kind='chat'):
 
 def _decorate_result(
     payload, *, audit, started, messages, conversation_state, kind, feedback_enabled,
-    counted, limit_reached,
+    counted, limit_reached, uncount_kind=None,
 ):
     n = count_chat_questions(messages)
     if not counted:
@@ -700,7 +1195,9 @@ def _decorate_result(
             message['feedback_enabled'] = True
     payload['message'] = message
     payload['feedback_enabled'] = bool(feedback_enabled)
-    if (
+    if uncount_kind:
+        payload['last_user_kind'] = uncount_kind
+    elif (
         not counted
         and messages
         and messages[-1].get('role') == 'user'
@@ -714,6 +1211,9 @@ def _decorate_result(
     status['question_limit'] = QUESTION_LIMIT
     if limit_reached:
         status['limit_reached'] = True
+    if (conversation_state or {}).get('segment_closed'):
+        status['segment_closed'] = True
+        payload['segment_closed'] = True
     if conversation_state is not None:
         status['conversation_state'] = public_conversation_state(conversation_state)
     payload['status'] = status
@@ -735,6 +1235,7 @@ def _decorate_result(
     audit['rag_source_ids'] = rag_ids
     audit['navigation_destination'] = nav
     audit['total_latency_ms'] = elapsed_ms(started)
+    audit['elapsed_ms'] = audit['total_latency_ms']
     audit['feedback_enabled'] = bool(feedback_enabled)
     audit['tool_round_limit'] = bool((status or {}).get('tool_round_limit'))
     audit['conversation_state'] = public_conversation_state(conversation_state)
